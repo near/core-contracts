@@ -1,7 +1,8 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_bindgen::{AccountId, Balance, BlockHeight, env, near_bindgen as near_bindgen_macro, Promise, PublicKey};
-use near_bindgen::collections::Map as NearMap;
 use std::str::FromStr;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::{AccountId, Balance, env, near_bindgen, Promise, PublicKey, EpochHeight};
+use near_sdk::collections::Map as NearMap;
 
 #[cfg(test)]
 mod test_utils;
@@ -9,14 +10,12 @@ mod test_utils;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-const EPOCH_LENGTH: BlockHeight = 60;
-
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct User {
     pub account_id: AccountId,
     pub amount: Balance,
     pub stake: Balance,
-    pub stake_height: BlockHeight,
+    pub stake_epoch_height: EpochHeight,
 }
 
 impl User {
@@ -25,20 +24,20 @@ impl User {
             account_id: account_id.clone(),
             amount,
             stake: 0,
-            stake_height: 0,
+            stake_epoch_height: 0,
         }
     }
 
     pub fn stake(&mut self, amount: Balance) {
         self.amount -= amount;
         self.stake += amount;
-        self.stake_height = env::block_index();
+        self.stake_epoch_height = env::epoch_height();
     }
 
     pub fn unstake(&mut self, amount: Balance) {
         self.stake -= amount;
         self.amount += amount;
-        self.stake_height = env::block_index();
+        self.stake_epoch_height = env::epoch_height();
     }
 
     /// Checks if given user has enough non staked/locked balance and withdraws it.
@@ -48,7 +47,7 @@ impl User {
     }
 }
 
-#[near_bindgen_macro]
+#[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct StakingContract {
     pub owner: AccountId,
@@ -58,10 +57,17 @@ pub struct StakingContract {
     pub users: NearMap<AccountId, User>,
 }
 
-#[near_bindgen_macro(init => new)]
+impl Default for StakingContract {
+    fn default() -> Self {
+        env::panic(b"Staking token should be initialized before usage")
+    }
+}
+
+#[near_bindgen]
 impl StakingContract {
     /// Call to initialize the contract.
     /// Specify which account can change the staking key and the initial staking key.
+    #[init]
     pub fn new(owner: AccountId, stake_public_key: String) -> Self {
         let mut pk = vec![0];
         pk.extend(bs58::decode(stake_public_key).into_vec().unwrap());
@@ -84,8 +90,7 @@ impl StakingContract {
             // (reward / staked_amount) * amount
             let mut new_users = vec![];
             for (account_id, mut user) in self.users.iter() {
-                // TODO: replace with epoch id.
-                if user.stake_height + EPOCH_LENGTH < env::block_index() {
+                if user.stake_epoch_height < env::epoch_height() {
                     user.stake = user.stake + (user.stake * reward) / self.staked_amount;
                     new_users.push((account_id, user));
                 }
@@ -164,10 +169,11 @@ impl StakingContract {
 
 #[cfg(test)]
 mod tests {
-    use near_bindgen::{testing_env, MockedBlockchain};
+    use near_sdk::{MockedBlockchain, testing_env};
+
+    use crate::test_utils::*;
 
     use super::*;
-    use crate::test_utils::*;
 
     #[test]
     fn test_deposit_withdraw() {
@@ -192,7 +198,7 @@ mod tests {
         testing_env!(VMContextBuilder::new().current_account_id(staking()).predecessor_account_id(bob()).account_balance(deposit_amount).finish());
         contract.stake(deposit_amount.to_string());
         // 10 epochs later, unstake half of the money.
-        testing_env!(VMContextBuilder::new().current_account_id(staking()).predecessor_account_id(bob()).block_index(EPOCH_LENGTH * 10).account_locked_balance(deposit_amount + 10).finish());
+        testing_env!(VMContextBuilder::new().current_account_id(staking()).predecessor_account_id(bob()).epoch_height(10).account_locked_balance(deposit_amount + 10).finish());
         assert_eq!(contract.get_user_stake(bob()), deposit_amount.to_string());
         contract.unstake((deposit_amount / 2).to_string());
         assert_eq!(contract.get_user_stake(bob()), (deposit_amount / 2 + 10).to_string());

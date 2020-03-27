@@ -1,5 +1,5 @@
-use near_bindgen::{Balance, BlockHeight};
-use near_bindgen::{AccountId, VMContext};
+use near_sdk::{Balance, BlockHeight, EpochHeight};
+use near_sdk::{AccountId, VMContext};
 
 pub fn staking() -> AccountId {
     "staking".to_string()
@@ -22,7 +22,7 @@ impl VMContextBuilder {
                 signer_account_pk: vec![0, 1, 2],
                 predecessor_account_id: "".to_string(),
                 input: vec![],
-                epoch_id: [0u8; 32],
+                epoch_height: 0,
                 block_index: 0,
                 block_timestamp: 0,
                 account_balance: 0,
@@ -42,6 +42,7 @@ impl VMContextBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn signer_account_id(mut self, account_id: AccountId) -> Self {
         self.context.signer_account_id = account_id;
         self
@@ -52,8 +53,14 @@ impl VMContextBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn block_index(mut self, block_index: BlockHeight) -> Self {
         self.context.block_index = block_index;
+        self
+    }
+
+    pub fn epoch_height(mut self, epoch_height: EpochHeight) -> Self {
+        self.context.epoch_height = epoch_height;
         self
     }
 
