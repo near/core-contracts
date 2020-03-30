@@ -1,16 +1,19 @@
-use near_sdk::{Balance, BlockHeight, EpochHeight};
 use near_sdk::{AccountId, VMContext};
+use near_sdk::{Balance, BlockHeight, EpochHeight};
 
 pub fn staking() -> AccountId {
     "staking".to_string()
 }
 
+pub fn alice() -> AccountId {
+    "alice".to_string()
+}
 pub fn bob() -> AccountId {
     "bob".to_string()
 }
 
 pub struct VMContextBuilder {
-    context: VMContext
+    context: VMContext,
 }
 
 impl VMContextBuilder {
@@ -33,7 +36,7 @@ impl VMContextBuilder {
                 random_seed: vec![0, 1, 2],
                 is_view: false,
                 output_data_receivers: vec![],
-            }
+            },
         }
     }
 

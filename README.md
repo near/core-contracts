@@ -1,8 +1,8 @@
 # Example Staking / Delegation contract
 
-*This is experimental contract*
+*This is an experimental contract. Please use only on TestNet.*
 
-This contract provides a way for other users to delegate funds to existing staker.
+This contract provides a way for other users to delegate funds to a single staker.
 
 Implements the https://github.com/nearprotocol/NEPs/pull/27 standard.
 
