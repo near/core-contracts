@@ -166,13 +166,13 @@ impl StakingContract {
     }
 
     /// Returns given user's liquid balance.
-    pub fn get_user_balance(&mut self, account_id: AccountId) -> U128 {
+    pub fn get_user_balance(&self, account_id: AccountId) -> U128 {
         let user = self.users.get(&account_id).expect("User is missing");
         user.amount.into()
     }
 
     /// Returns given user's staked balance.
-    pub fn get_user_stake(&mut self, account_id: AccountId) -> U128 {
+    pub fn get_user_stake(&self, account_id: AccountId) -> U128 {
         let user = self.users.get(&account_id).expect("User is missing");
         user.stake.into()
     }
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(contract.get_user_balance(bob()), deposit_amount / 2);
     }
 
-    /// Test that two can deleegate and then undelegate their funds and rewards at different time.
+    /// Test that two can delegate and then undelegate their funds and rewards at different time.
     #[test]
     #[ignore]
     fn test_two_delegates() {
