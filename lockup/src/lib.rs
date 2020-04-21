@@ -1,9 +1,9 @@
 //! A smart contract that allows tokens lockup.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
 use near_sdk::json_types::{Base58PublicKey, U128, U64};
 use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseResult};
+use serde::{Deserialize, Serialize};
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -16,7 +16,7 @@ pub type VoteIndex = u64;
 
 /// Method names allowed for the owner's access keys.
 const OWNER_KEY_ALLOWED_METHODS: &[u8] =
-    b"vote,select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,transfer";
+    b"vote,select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake,check_transfers_vote,transfer";
 /// Method names allowed for the NEAR Foundation access key in case of vesting schedule that
 /// can be terminated by foundation.
 const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
@@ -26,6 +26,13 @@ const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
 const NO_DEPOSIT: u128 = 0;
 
 pub mod gas {
+    pub mod whitelist {
+        /// Gas attached to the promise to check whether the given staking pool Account ID is
+        /// whitelisted.
+        /// Requires 100e12 (no external calls).
+        pub const IS_WHITELISTED: u64 = 100_000_000_000_000;
+    }
+
     pub mod staking_pool {
         /// The amount of gas required for a voting through a staking pool.
         /// Requires 100e12 for execution + 200e12 for attaching to a call on the voting contract.
@@ -35,38 +42,63 @@ pub mod gas {
         /// Requires 100e12 for local processing.
         pub const GET_TOTAL_USER_BALANCE: u64 = 100_000_000_000_000;
 
-        /// Gas attached to the deposit on the staking pool contract.
+        /// Gas attached to deposit call on the staking pool contract.
         /// Requires 100e12 for local updates.
         pub const DEPOSIT: u64 = 100_000_000_000_000;
 
-        /// Gas attached to the deposit on the staking pool contract.
+        /// Gas attached to withdraw call on the staking pool contract.
+        /// Requires 100e12 for execution + 200e12 for transferring amount to us.
+        pub const WITHDRAW: u64 = 300_000_000_000_000;
+
+        /// Gas attached to stake call on the staking pool contract.
         /// Requires 100e12 for execution + 200e12 for staking call.
         pub const STAKE: u64 = 300_000_000_000_000;
+
+        /// Gas attached to unstake call on the staking pool contract.
+        /// Requires 100e12 for execution + 200e12 for staking call.
+        pub const UNSTAKE: u64 = 300_000_000_000_000;
     }
 
-    pub mod whitelist {
-        /// Gas attached to the promise to check whether the given staking pool Account ID is whitelisted.
+    pub mod voting {
+        /// Gas attached to the promise to check whether transfers were enabled on the voting
+        /// contract.
         /// Requires 100e12 (no external calls).
-        pub const IS_WHITELISTED: u64 = 100_000_000_000_000;
+        pub const GET_RESULT: u64 = 100_000_000_000_000;
     }
 
     pub mod callbacks {
         /// Gas attached to the inner callback for processing whitelist check results.
         /// Requires 100e12 for local execution.
-        pub const ON_IS_WHITELISTED: u64 = 100_000_000_000_000;
+        pub const ON_WHITELIST_IS_WHITELISTED: u64 = 100_000_000_000_000;
 
         /// Gas attached to the inner callback for processing result of the call to get balance on
         /// the staking pool balance.
         /// Requires 100e12 for local updates.
-        pub const ON_GET_TOTAL_USER_BALANCE: u64 = 100_000_000_000_000;
+        pub const ON_STAKING_POOL_GET_TOTAL_USER_BALANCE: u64 = 100_000_000_000_000;
 
-        /// Gas attached to the inner callback for processing result of the deposit call.
+        /// Gas attached to the inner callback for processing result of the deposit call to the
+        /// staking pool.
         /// Requires 100e12 for local updates.
-        pub const ON_DEPOSIT: u64 = 100_000_000_000_000;
+        pub const ON_STAKING_POOL_DEPOSIT: u64 = 100_000_000_000_000;
 
-        /// Gas attached to the inner callback for processing result of the stake call.
+        /// Gas attached to the inner callback for processing result of the withdraw call to the
+        /// staking pool.
         /// Requires 100e12 for local updates.
-        pub const ON_STAKE: u64 = 100_000_000_000_000;
+        pub const ON_STAKING_POOL_WITHDRAW: u64 = 100_000_000_000_000;
+
+        /// Gas attached to the inner callback for processing result of the stake call to the
+        /// staking pool.
+        pub const ON_STAKING_POOL_STAKE: u64 = 100_000_000_000_000;
+
+        /// Gas attached to the inner callback for processing result of the unstake call  to the
+        /// staking pool.
+        /// Requires 100e12 for local updates.
+        pub const ON_STAKING_POOL_UNSTAKE: u64 = 100_000_000_000_000;
+
+        /// Gas attached to the inner callback for processing result of the checking result for
+        /// transfer voting call to the voting contract.
+        /// Requires 100e12 for local updates.
+        pub const ON_VOTING_GET_RESULT: u64 = 100_000_000_000_000;
     }
 }
 
@@ -86,7 +118,10 @@ pub struct LockupInformation {
 
 impl LockupInformation {
     pub fn assert_valid(&self) {
-        assert!(self.lockup_amount.0 > 0, "Lockup amount has to be positive number");
+        assert!(
+            self.lockup_amount.0 > 0,
+            "Lockup amount has to be positive number"
+        );
         match &self.vesting_information {
             Some(VestingInformation::Vesting(vesting_schedule)) => vesting_schedule.assert_valid(),
             Some(VestingInformation::Terminating(_termination_information)) => {
@@ -217,7 +252,11 @@ fn assert_self() {
 }
 
 fn is_promise_success() -> bool {
-    assert_eq!(env::promise_results_count(), 1, "Contract expected a result on the callback");
+    assert_eq!(
+        env::promise_results_count(),
+        1,
+        "Contract expected a result on the callback"
+    );
     match env::promise_result(0) {
         PromiseResult::Successful(_) => true,
         _ => false,
@@ -232,7 +271,11 @@ pub trait ExtStakingPool {
 
     fn deposit(&mut self);
 
+    fn withdraw(&mut self, amount: U128);
+
     fn stake(&mut self, amount: U128);
+
+    fn unstake(&mut self, amount: U128);
 }
 
 #[ext_contract(ext_whitelist)]
@@ -240,19 +283,30 @@ pub trait ExtStakingPoolWhitelist {
     fn is_whitelisted(&self, staking_pool_account_id: AccountId) -> bool;
 }
 
+#[ext_contract(ext_voting)]
+pub trait ExtVotingContract {
+    fn get_result(&self, proposal_id: ProposalId) -> Option<VoteIndex>;
+}
+
 #[ext_contract(ext_self)]
 pub trait ExtLockupContract {
-    fn on_is_whitelisted(
+    fn on_whitelist_is_whitelisted(
         &mut self,
         #[callback] is_whitelisted: bool,
         staking_pool_account_id: AccountId,
     ) -> bool;
 
-    fn on_get_total_user_balance(&mut self, #[callback] total_balance: U128) -> bool;
+    fn on_staking_pool_get_total_user_balance(&mut self, #[callback] total_balance: U128) -> bool;
 
-    fn on_deposit(&mut self, extra_amount: U128) -> bool;
+    fn on_staking_pool_deposit(&mut self, amount: U128) -> bool;
 
-    fn on_stake(&mut self, extra_amount: U128) -> bool;
+    fn on_staking_pool_withdraw(&mut self, amount: U128) -> bool;
+
+    fn on_staking_pool_stake(&mut self, amount: U128) -> bool;
+
+    fn on_staking_pool_unstake(&mut self, amount: U128) -> bool;
+
+    fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool;
 }
 
 #[near_bindgen]
@@ -327,7 +381,11 @@ impl LockupContract {
         ext_staking_pool::vote(
             proposal_id,
             vote,
-            &self.staking_information.as_ref().unwrap().staking_pool_account_id,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
             NO_DEPOSIT,
             gas::staking_pool::VOTE,
         )
@@ -358,11 +416,11 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::whitelist::IS_WHITELISTED,
         )
-        .then(ext_self::on_is_whitelisted(
+        .then(ext_self::on_whitelist_is_whitelisted(
             staking_pool_account_id,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_IS_WHITELISTED,
+            gas::callbacks::ON_WHITELIST_IS_WHITELISTED,
         ))
     }
 
@@ -376,29 +434,36 @@ impl LockupContract {
         env::log(
             format!(
                 "Unselecting current staking pool @{}. Going to check current deposits first.",
-                self.staking_information.as_ref().unwrap().staking_pool_account_id
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             )
             .as_bytes(),
         );
 
-        self.set_status(StakingStatus::Busy);
+        self.set_staking_status(StakingStatus::Busy);
 
         ext_staking_pool::get_total_user_balance(
             env::current_account_id(),
-            &self.staking_information.as_ref().unwrap().staking_pool_account_id,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
             NO_DEPOSIT,
             gas::staking_pool::GET_TOTAL_USER_BALANCE,
         )
-        .then(ext_self::on_get_total_user_balance(
+        .then(ext_self::on_staking_pool_get_total_user_balance(
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_GET_TOTAL_USER_BALANCE,
+            gas::callbacks::ON_STAKING_POOL_GET_TOTAL_USER_BALANCE,
         ))
     }
 
     /// OWNER'S METHOD
-    /// Deposits extra amount to the staking pool
-    pub fn deposit_to_staking_pool(&mut self, extra_amount: U128) -> Promise {
+    /// Deposits the given extra amount to the staking pool
+    pub fn deposit_to_staking_pool(&mut self, amount: U128) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
         // TODO: Validate the extra amount
@@ -406,85 +471,228 @@ impl LockupContract {
         env::log(
             format!(
                 "Depositing {} to the staking pool @{}",
-                extra_amount.0,
-                self.staking_information.as_ref().unwrap().staking_pool_account_id
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             )
             .as_bytes(),
         );
 
-        self.set_status(StakingStatus::Busy);
+        self.set_staking_status(StakingStatus::Busy);
 
         ext_staking_pool::deposit(
-            &self.staking_information.as_ref().unwrap().staking_pool_account_id,
-            extra_amount.0,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            amount.0,
             gas::staking_pool::DEPOSIT,
         )
-        .then(ext_self::on_deposit(
-            extra_amount,
+        .then(ext_self::on_staking_pool_deposit(
+            amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_DEPOSIT,
+            gas::callbacks::ON_STAKING_POOL_DEPOSIT,
         ))
     }
 
     /// OWNER'S METHOD
-    /// Stakes extra amount on the staking pool
-    pub fn stake(&mut self, extra_amount: U128) -> Promise {
+    /// Withdraws the given amount from the staking pool
+    pub fn withdraw_from_staking_pool(&mut self, amount: U128) -> Promise {
+        assert_self();
+        self.assert_staking_pool_is_idle();
+
+        env::log(
+            format!(
+                "Withdrawing {} from the staking pool @{}",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
+            )
+            .as_bytes(),
+        );
+
+        self.set_staking_status(StakingStatus::Busy);
+
+        ext_staking_pool::withdraw(
+            amount,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            NO_DEPOSIT,
+            gas::staking_pool::WITHDRAW,
+        )
+        .then(ext_self::on_staking_pool_withdraw(
+            amount,
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            gas::callbacks::ON_STAKING_POOL_WITHDRAW,
+        ))
+    }
+
+    /// OWNER'S METHOD
+    /// Stakes the given extra amount at the staking pool
+    pub fn stake(&mut self, amount: U128) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
         // TODO: Validate the extra amount
 
         env::log(
             format!(
-                "Staking {} to the staking pool @{}",
-                extra_amount.0,
-                self.staking_information.as_ref().unwrap().staking_pool_account_id
+                "Staking {} at the staking pool @{}",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             )
             .as_bytes(),
         );
 
-        self.set_status(StakingStatus::Busy);
+        self.set_staking_status(StakingStatus::Busy);
 
         ext_staking_pool::stake(
-            extra_amount,
-            &self.staking_information.as_ref().unwrap().staking_pool_account_id,
+            amount,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
             NO_DEPOSIT,
             gas::staking_pool::STAKE,
         )
-        .then(ext_self::on_stake(
-            extra_amount,
+        .then(ext_self::on_staking_pool_stake(
+            amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_STAKE,
+            gas::callbacks::ON_STAKING_POOL_STAKE,
         ))
     }
 
-    // TODO: Add more methods
+    /// OWNER'S METHOD
+    /// Unstakes the given amount at the staking pool
+    pub fn unstake(&mut self, amount: U128) -> Promise {
+        assert_self();
+        self.assert_staking_pool_is_idle();
+
+        env::log(
+            format!(
+                "Unstaking {} at the staking pool @{}",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
+            )
+            .as_bytes(),
+        );
+
+        self.set_staking_status(StakingStatus::Busy);
+
+        ext_staking_pool::unstake(
+            amount,
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            NO_DEPOSIT,
+            gas::staking_pool::UNSTAKE,
+        )
+        .then(ext_self::on_staking_pool_unstake(
+            amount,
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            gas::callbacks::ON_STAKING_POOL_UNSTAKE,
+        ))
+    }
+
+    /// OWNER'S METHOD
+    pub fn check_transfers_vote(&mut self) -> Promise {
+        assert_self();
+        self.assert_transfers_disabled();
+
+        let transfer_voting_information = self.transfer_voting_information.as_ref().unwrap();
+
+        env::log(
+            format!(
+                "Checking that transfers are enabled (proposal {}) at the voting contract @{}",
+                transfer_voting_information.transfer_proposal_id,
+                transfer_voting_information.voting_contract_account_id,
+            )
+            .as_bytes(),
+        );
+
+        ext_voting::get_result(
+            transfer_voting_information.transfer_proposal_id,
+            &transfer_voting_information.voting_contract_account_id,
+            NO_DEPOSIT,
+            gas::voting::GET_RESULT,
+        )
+        .then(ext_self::on_voting_get_result(
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            gas::callbacks::ON_VOTING_GET_RESULT,
+        ))
+    }
+
+    /// OWNER'S METHOD
+    /// Transfers the given extra amount to the given receiver account ID.
+    /// This requires transfers to be enabled within the voting contract.
+    pub fn transfer(&mut self, amount: U128, receiver_id: AccountId) -> Promise {
+        assert_self();
+        assert!(
+            env::is_valid_account_id(receiver_id.as_bytes()),
+            "The receiver account ID is invalid"
+        );
+        self.assert_transfers_enabled();
+        self.assert_no_staking_or_idle();
+        // TODO: Verify transfer amount
+
+        env::log(format!("Transferring {} to account @{}", amount.0, receiver_id).as_bytes());
+
+        Promise::new(receiver_id).transfer(amount.0)
+    }
 
     /*************/
     /* Callbacks */
     /*************/
 
     /// Called after a given `staking_pool_account_id` was checked in the whitelist.
-    pub fn on_whitelist_check(
+    pub fn on_whitelist_is_whitelisted(
         &mut self,
         #[callback] is_whitelisted: bool,
         staking_pool_account_id: AccountId,
     ) -> bool {
         assert_self();
-        assert!(is_whitelisted, "The given staking pool account ID is not whitelisted");
+        assert!(
+            is_whitelisted,
+            "The given staking pool account ID is not whitelisted"
+        );
         self.assert_staking_pool_is_not_selected();
-        self.staking_information =
-            Some(StakingInformation { staking_pool_account_id, status: StakingStatus::Idle });
+        self.staking_information = Some(StakingInformation {
+            staking_pool_account_id,
+            status: StakingStatus::Idle,
+        });
         true
     }
 
     /// Called after there was a request to unselect current staking pool.
-    pub fn on_get_total_user_balance(&mut self, #[callback] total_balance: U128) -> bool {
+    pub fn on_staking_pool_get_total_user_balance(
+        &mut self,
+        #[callback] total_balance: U128,
+    ) -> bool {
         assert_self();
         if total_balance.0 > 0 {
             // There is still positive balance on the staking pool. Can't unselect the pool.
-            self.set_status(StakingStatus::Idle);
+            self.set_staking_status(StakingStatus::Idle);
             false
         } else {
             self.staking_information = None;
@@ -494,16 +702,21 @@ impl LockupContract {
 
     /// Called after a deposit amount was transferred out of this account to the staking pool
     /// This method needs to update staking pool status.
-    pub fn on_deposit(&mut self, extra_amount: U128) -> bool {
+    pub fn on_staking_pool_deposit(&mut self, amount: U128) -> bool {
         assert_self();
+
         let deposit_succeeded = is_promise_success();
-        self.set_status(StakingStatus::Idle);
+        self.set_staking_status(StakingStatus::Idle);
+
         if deposit_succeeded {
             env::log(
                 format!(
                     "The deposit of {} to @{} succeeded",
-                    extra_amount.0,
-                    self.staking_information.as_ref().unwrap().staking_pool_account_id
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
                 )
                 .as_bytes(),
             );
@@ -511,8 +724,11 @@ impl LockupContract {
             env::log(
                 format!(
                     "The deposit of {} to @{} has failed",
-                    extra_amount.0,
-                    self.staking_information.as_ref().unwrap().staking_pool_account_id
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
                 )
                 .as_bytes(),
             );
@@ -520,18 +736,60 @@ impl LockupContract {
         deposit_succeeded
     }
 
+    /// Called after the given amount was requested to transfer out from the staking pool to this
+    /// account.
+    /// This method needs to update staking pool status.
+    pub fn on_staking_pool_withdraw(&mut self, amount: U128) -> bool {
+        assert_self();
+
+        let withdraw_succeeded = is_promise_success();
+        self.set_staking_status(StakingStatus::Idle);
+
+        if withdraw_succeeded {
+            env::log(
+                format!(
+                    "The withdrawal of {} from @{} succeeded",
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
+                )
+                .as_bytes(),
+            );
+        } else {
+            env::log(
+                format!(
+                    "The withdrawal of {} from @{} failed",
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
+                )
+                .as_bytes(),
+            );
+        }
+        withdraw_succeeded
+    }
+
     /// Called after the extra amount stake was staked in the staking pool contract.
     /// This method needs to update staking pool status.
-    pub fn on_stake(&mut self, extra_amount: U128) -> bool {
+    pub fn on_staking_pool_stake(&mut self, amount: U128) -> bool {
         assert_self();
+
         let stake_succeeded = is_promise_success();
-        self.set_status(StakingStatus::Idle);
+        self.set_staking_status(StakingStatus::Idle);
+
         if stake_succeeded {
             env::log(
                 format!(
                     "Staking of {} at @{} succeeded",
-                    extra_amount.0,
-                    self.staking_information.as_ref().unwrap().staking_pool_account_id
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
                 )
                 .as_bytes(),
             );
@@ -539,8 +797,11 @@ impl LockupContract {
             env::log(
                 format!(
                     "Staking {} at @{} has failed",
-                    extra_amount.0,
-                    self.staking_information.as_ref().unwrap().staking_pool_account_id
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
                 )
                 .as_bytes(),
             );
@@ -548,16 +809,106 @@ impl LockupContract {
         stake_succeeded
     }
 
+    /// Called after the extra amount stake was staked in the staking pool contract.
+    /// This method needs to update staking pool status.
+    pub fn on_staking_pool_unstake(&mut self, amount: U128) -> bool {
+        assert_self();
+
+        let unstake_succeeded = is_promise_success();
+        self.set_staking_status(StakingStatus::Idle);
+
+        if unstake_succeeded {
+            env::log(
+                format!(
+                    "Unstaking of {} at @{} succeeded",
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
+                )
+                .as_bytes(),
+            );
+        } else {
+            env::log(
+                format!(
+                    "Unstaking {} at @{} has failed",
+                    amount.0,
+                    self.staking_information
+                        .as_ref()
+                        .unwrap()
+                        .staking_pool_account_id
+                )
+                .as_bytes(),
+            );
+        }
+        unstake_succeeded
+    }
+
+    /// Called after the extra amount stake was staked in the staking pool contract.
+    /// This method needs to update staking pool status.
+    pub fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool {
+        assert_self();
+        self.assert_transfers_disabled();
+
+        let expected_vote_index = self
+            .transfer_voting_information
+            .as_ref()
+            .unwrap()
+            .enable_transfers_vote_index;
+
+        if let Some(vote_index) = vote_index {
+            assert_eq!(vote_index, expected_vote_index, "The enable transfers proposal has been resolved to a different vote. Transfers will never be enabled.");
+            env::log(b"Transfers has been successfully enabled");
+            self.transfer_voting_information = None;
+            true
+        } else {
+            env::log(b"Voting on enabling transfers doesn't have a majority vote yet");
+            false
+        }
+    }
+
     /********************/
     /* Internal methods */
     /********************/
 
-    fn set_status(&mut self, status: StakingStatus) {
-        self.staking_information.as_mut().expect("Staking pool should be selected").status = status;
+    fn set_staking_status(&mut self, status: StakingStatus) {
+        self.staking_information
+            .as_mut()
+            .expect("Staking pool should be selected")
+            .status = status;
+    }
+
+    fn assert_transfers_enabled(&self) {
+        assert!(
+            self.transfer_voting_information.is_none(),
+            "Transfers are disabled"
+        );
+    }
+
+    fn assert_transfers_disabled(&self) {
+        assert!(
+            self.transfer_voting_information.is_some(),
+            "Transfers are already enabled"
+        );
+    }
+
+    fn assert_no_staking_or_idle(&self) {
+        if let Some(staking_information) = &self.staking_information {
+            match staking_information.status {
+                StakingStatus::Idle => (),
+                StakingStatus::Busy => {
+                    env::panic(b"Contract is currently busy with another operation")
+                }
+            };
+        }
     }
 
     fn assert_staking_pool_is_idle(&self) {
-        assert!(self.staking_information.is_some(), "Staking pool is not selected");
+        assert!(
+            self.staking_information.is_some(),
+            "Staking pool is not selected"
+        );
         match self.staking_information.as_ref().unwrap().status {
             StakingStatus::Idle => (),
             StakingStatus::Busy => env::panic(b"Contract is currently busy with another operation"),
@@ -565,7 +916,10 @@ impl LockupContract {
     }
 
     fn assert_staking_pool_is_not_selected(&self) {
-        assert!(self.staking_information.is_none(), "Staking pool is already selected");
+        assert!(
+            self.staking_information.is_none(),
+            "Staking pool is already selected"
+        );
     }
 }
 
@@ -574,10 +928,9 @@ impl LockupContract {
 mod tests {
     use super::*;
 
-    use near_bindgen::{testing_env, MockedBlockchain, VMContext};
+    use near_sdk::{testing_env, MockedBlockchain, VMContext};
     use std::convert::TryInto;
-    use utils::test_utils::*;
-
+    /*
     fn basic_setup() -> (VMContext, LockupContract) {
         let context = get_context(
             system_account(),
@@ -595,7 +948,10 @@ mod tests {
         let contract = LockupContract::new(
             to_yocto(LOCKUP_NEAR).into(),
             to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
-            vec![public_key(1).try_into().unwrap(), public_key(2).try_into().unwrap()],
+            vec![
+                public_key(1).try_into().unwrap(),
+                public_key(2).try_into().unwrap(),
+            ],
         );
         (context, contract)
     }
@@ -722,4 +1078,5 @@ mod tests {
         })
         .unwrap_err();
     }
+    */
 }
