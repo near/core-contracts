@@ -4,6 +4,12 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58PublicKey, U128, U64};
 use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseResult};
 use serde::{Deserialize, Serialize};
+use uint::construct_uint;
+
+construct_uint! {
+    /// 256-bit unsigned integer.
+    pub struct U256(4);
+}
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -24,6 +30,10 @@ const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
 
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
+
+/// The contract keeps at least 30 NEAR in the account to avoid being transferred out to cover
+/// contract code storage and some internal state.
+const MIN_BALANCE_FOR_STORAGE: u128 = 30_000_000_000_000_000_000_000_000;
 
 pub mod gas {
     pub mod whitelist {
@@ -149,29 +159,38 @@ pub struct StakingInformation {
 
     /// Contains status whether there is a transaction in progress.
     pub status: StakingStatus,
+
+    /// The minimum amount of tokens that were deposited from this account to the staking pool.
+    /// The actual amount might be higher due to stake rewards. This contract can't track stake
+    /// rewards on the staking pool reliably without querying it.
+    pub deposit_amount: WrappedBalance,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
-    pub vesting_start_timestamp: WrappedTimestamp,
+    pub start_timestamp: WrappedTimestamp,
     /// The timestamp in nanosecond when the first part of lockup tokens becomes vested.
     /// The remaining tokens will vest continuously until they are fully vested.
     /// Example: a 1 year of employment at which moment the 1/4 of tokens become vested.
-    pub vesting_cliff_timestamp: WrappedTimestamp,
+    pub cliff_timestamp: WrappedTimestamp,
     /// The timestamp in nanosecond when the vesting ends.
-    pub vesting_end_timestamp: WrappedTimestamp,
+    pub end_timestamp: WrappedTimestamp,
 }
 
 impl VestingSchedule {
     pub fn assert_valid(&self) {
         assert!(
-            self.vesting_start_timestamp.0 <= self.vesting_cliff_timestamp.0,
+            self.start_timestamp.0 <= self.cliff_timestamp.0,
             "Cliff timestamp can't be earlier than vesting start timestamp"
         );
         assert!(
-            self.vesting_cliff_timestamp.0 <= self.vesting_end_timestamp.0,
+            self.cliff_timestamp.0 <= self.end_timestamp.0,
             "Cliff timestamp can't be later than vesting end timestamp"
+        );
+        assert!(
+            self.start_timestamp.0 < self.end_timestamp.0,
+            "The total vesting time should be positive"
         );
     }
 }
@@ -267,15 +286,15 @@ fn is_promise_success() -> bool {
 pub trait ExtStakingPool {
     fn vote(&mut self, proposal_id: ProposalId, vote: VoteIndex);
 
-    fn get_total_user_balance(&self, account_id: AccountId) -> U128;
+    fn get_total_user_balance(&self, account_id: AccountId) -> WrappedBalance;
 
     fn deposit(&mut self);
 
-    fn withdraw(&mut self, amount: U128);
+    fn withdraw(&mut self, amount: WrappedBalance);
 
-    fn stake(&mut self, amount: U128);
+    fn stake(&mut self, amount: WrappedBalance);
 
-    fn unstake(&mut self, amount: U128);
+    fn unstake(&mut self, amount: WrappedBalance);
 }
 
 #[ext_contract(ext_whitelist)]
@@ -296,15 +315,18 @@ pub trait ExtLockupContract {
         staking_pool_account_id: AccountId,
     ) -> bool;
 
-    fn on_staking_pool_get_total_user_balance(&mut self, #[callback] total_balance: U128) -> bool;
+    fn on_staking_pool_get_total_user_balance(
+        &mut self,
+        #[callback] total_balance: WrappedBalance,
+    ) -> bool;
 
-    fn on_staking_pool_deposit(&mut self, amount: U128) -> bool;
+    fn on_staking_pool_deposit(&mut self, amount: WrappedBalance) -> bool;
 
-    fn on_staking_pool_withdraw(&mut self, amount: U128) -> bool;
+    fn on_staking_pool_withdraw(&mut self, amount: WrappedBalance) -> bool;
 
-    fn on_staking_pool_stake(&mut self, amount: U128) -> bool;
+    fn on_staking_pool_stake(&mut self, amount: WrappedBalance) -> bool;
 
-    fn on_staking_pool_unstake(&mut self, amount: U128) -> bool;
+    fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool;
 
     fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool;
 }
@@ -463,10 +485,13 @@ impl LockupContract {
 
     /// OWNER'S METHOD
     /// Deposits the given extra amount to the staking pool
-    pub fn deposit_to_staking_pool(&mut self, amount: U128) -> Promise {
+    pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
-        // TODO: Validate the extra amount
+        assert!(
+            self.get_available_balance().0 >= amount.0,
+            "The balance that can be deposited to the staking pool is lower than the extra amount"
+        );
 
         env::log(
             format!(
@@ -501,9 +526,16 @@ impl LockupContract {
 
     /// OWNER'S METHOD
     /// Withdraws the given amount from the staking pool
-    pub fn withdraw_from_staking_pool(&mut self, amount: U128) -> Promise {
+    pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
+        // The owner should not try to withdraw less than the deficit. Otherwise the owner
+        // may block the staking pool status and prevent foundation from withdrawing the
+        // required amount from the staking pool.
+        assert!(
+            amount.0 >= self.get_terminated_unvested_balance_deficit().0,
+            "The withdrawal balance can't be smaller than the required unvested balance amount"
+        );
 
         env::log(
             format!(
@@ -539,10 +571,15 @@ impl LockupContract {
 
     /// OWNER'S METHOD
     /// Stakes the given extra amount at the staking pool
-    pub fn stake(&mut self, amount: U128) -> Promise {
+    pub fn stake(&mut self, amount: WrappedBalance) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
-        // TODO: Validate the extra amount
+        // The owner can't increase stake until the entire unvested balance is returned back to the
+        // account from the staking pool.
+        assert_eq!(
+            self.get_terminated_unvested_balance_deficit().0, 0,
+            "Can't increase the stake until the required unvested balance is returned to the account"
+        );
 
         env::log(
             format!(
@@ -578,9 +615,16 @@ impl LockupContract {
 
     /// OWNER'S METHOD
     /// Unstakes the given amount at the staking pool
-    pub fn unstake(&mut self, amount: U128) -> Promise {
+    pub fn unstake(&mut self, amount: WrappedBalance) -> Promise {
         assert_self();
         self.assert_staking_pool_is_idle();
+        // The owner should not try to withdraw less than the deficit. Otherwise the owner
+        // may block the staking pool status and prevent foundation from withdrawing the
+        // required amount from the staking pool.
+        assert!(
+            amount.0 >= self.get_terminated_unvested_balance_deficit().0,
+            "The withdrawal balance can't be smaller than the required unvested balance amount"
+        );
 
         env::log(
             format!(
@@ -615,6 +659,8 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
+    /// are enabled, they can't be disabled anymore.
     pub fn check_transfers_vote(&mut self) -> Promise {
         assert_self();
         self.assert_transfers_disabled();
@@ -646,7 +692,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     /// Transfers the given extra amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
-    pub fn transfer(&mut self, amount: U128, receiver_id: AccountId) -> Promise {
+    pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise {
         assert_self();
         assert!(
             env::is_valid_account_id(receiver_id.as_bytes()),
@@ -654,11 +700,122 @@ impl LockupContract {
         );
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
-        // TODO: Verify transfer amount
+        assert!(
+            self.get_liquid_owners_balance().0 >= amount.0,
+            "The available liquid balance is smaller than the requested transfer amount"
+        );
 
         env::log(format!("Transferring {} to account @{}", amount.0, receiver_id).as_bytes());
 
         Promise::new(receiver_id).transfer(amount.0)
+    }
+
+    /***********/
+    /* Getters */
+    /***********/
+
+    /// The balance of the account excluding the storage staking balance.
+    /// NOTE: The storage staking balance can't be transferred out without deleting this contract.
+    pub fn get_account_balance(&self) -> WrappedBalance {
+        env::account_balance()
+            .saturating_sub(MIN_BALANCE_FOR_STORAGE)
+            .into()
+    }
+
+    /// The amount of tokens that can be deposited to the staking pool or transferred out.
+    /// It excludes tokens that are locked due to early termination of the vesting schedule.
+    pub fn get_available_balance(&self) -> WrappedBalance {
+        self.get_account_balance()
+            .0
+            .saturating_sub(self.get_terminated_unvested_balance().0)
+            .into()
+    }
+
+    /// The amount of tokens that are not going to be vested, because the vesting schedule was
+    /// terminated earlier.
+    pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
+        if let Some(VestingInformation::Terminating(TerminationInformation { unvested_amount })) =
+            &self.lockup_information.vesting_information
+        {
+            *unvested_amount
+        } else {
+            0.into()
+        }
+    }
+
+    /// The amount of tokens missing from the account balance that are required to cover
+    /// the unvested balance from the early-terminated vesting schedule.
+    pub fn get_terminated_unvested_balance_deficit(&self) -> WrappedBalance {
+        self.get_terminated_unvested_balance()
+            .0
+            .saturating_sub(self.get_account_balance().0)
+            .into()
+    }
+
+    /// Get the amount of tokens that are locked in this account due to lockup or vesting.
+    pub fn get_unvested_amount(&self) -> WrappedBalance {
+        let lockup_amount = self.lockup_information.lockup_amount.0;
+        let block_timestamp = env::block_timestamp();
+        if self.lockup_information.lockup_timestamp.0 > block_timestamp {
+            // The entire balance is still locked before the lockup timestamp.
+            return lockup_amount.into();
+        }
+        if let Some(vesting_information) = &self.lockup_information.vesting_information {
+            match vesting_information {
+                VestingInformation::Vesting(vesting_schedule) => {
+                    if block_timestamp < vesting_schedule.cliff_timestamp.0 {
+                        // Before the cliff, nothing is vested
+                        lockup_amount.into()
+                    } else if block_timestamp >= vesting_schedule.end_timestamp.0 {
+                        // After the end, everything is vested
+                        0.into()
+                    } else {
+                        // cannot overflow since block_timestamp >= vesting_schedule.end_timestamp
+                        let time_left =
+                            U256::from(vesting_schedule.end_timestamp.0 - block_timestamp);
+                        // The total time is positive. Checked at the contract initialization.
+                        let total_time = U256::from(
+                            vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0,
+                        );
+                        let unvested_amount = U256::from(lockup_amount) * time_left / total_time;
+                        // The unvested amount can't be larger than lockup_amount because the
+                        // time_left is smaller than total_time.
+                        unvested_amount.as_u128().into()
+                    }
+                }
+                VestingInformation::Terminating(termination_information) => {
+                    // It's safe to subtract, because terminated amount can't be larger.
+                    (lockup_amount - termination_information.unvested_amount.0).into()
+                }
+            }
+        } else {
+            // Everything is vested and unlocked
+            0.into()
+        }
+    }
+
+    /// The amount of tokens that were deposited to the staking pool.
+    /// NOTE: The actual balance can be larger than this known deposit balance due to staking
+    /// rewards acquired on the staking pool.
+    pub fn get_known_staking_pool_deposit_balance(&self) -> WrappedBalance {
+        self.staking_information
+            .as_ref()
+            .map(|info| info.deposit_amount.0)
+            .unwrap_or(0)
+            .into()
+    }
+
+    /// The owners balance of the account. It includes vested and liquid tokens.
+    /// NOTE: Some of this tokens may be deposited to the staking pool.
+    pub fn get_owners_balance(&self) -> WrappedBalance {
+        (self.get_account_balance().0 + self.get_known_staking_pool_deposit_balance().0)
+            .saturating_sub(self.get_unvested_amount().0)
+            .into()
+    }
+
+    /// The amount of tokens the owner can transfer now from the account.
+    pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
+        std::cmp::min(self.get_owners_balance().0, self.get_available_balance().0).into()
     }
 
     /*************/
@@ -680,6 +837,7 @@ impl LockupContract {
         self.staking_information = Some(StakingInformation {
             staking_pool_account_id,
             status: StakingStatus::Idle,
+            deposit_amount: 0.into(),
         });
         true
     }
@@ -687,7 +845,7 @@ impl LockupContract {
     /// Called after there was a request to unselect current staking pool.
     pub fn on_staking_pool_get_total_user_balance(
         &mut self,
-        #[callback] total_balance: U128,
+        #[callback] total_balance: WrappedBalance,
     ) -> bool {
         assert_self();
         if total_balance.0 > 0 {
@@ -702,13 +860,14 @@ impl LockupContract {
 
     /// Called after a deposit amount was transferred out of this account to the staking pool
     /// This method needs to update staking pool status.
-    pub fn on_staking_pool_deposit(&mut self, amount: U128) -> bool {
+    pub fn on_staking_pool_deposit(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
 
         let deposit_succeeded = is_promise_success();
         self.set_staking_status(StakingStatus::Idle);
 
         if deposit_succeeded {
+            self.staking_information.as_mut().unwrap().deposit_amount.0 += amount.0;
             env::log(
                 format!(
                     "The deposit of {} to @{} succeeded",
@@ -739,13 +898,21 @@ impl LockupContract {
     /// Called after the given amount was requested to transfer out from the staking pool to this
     /// account.
     /// This method needs to update staking pool status.
-    pub fn on_staking_pool_withdraw(&mut self, amount: U128) -> bool {
+    pub fn on_staking_pool_withdraw(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
 
         let withdraw_succeeded = is_promise_success();
         self.set_staking_status(StakingStatus::Idle);
 
         if withdraw_succeeded {
+            {
+                let staking_information = self.staking_information.as_mut().unwrap();
+                // Due to staking rewards the deposit amount can become negative.
+                staking_information.deposit_amount.0 = staking_information
+                    .deposit_amount
+                    .0
+                    .saturating_sub(amount.0);
+            }
             env::log(
                 format!(
                     "The withdrawal of {} from @{} succeeded",
@@ -775,7 +942,7 @@ impl LockupContract {
 
     /// Called after the extra amount stake was staked in the staking pool contract.
     /// This method needs to update staking pool status.
-    pub fn on_staking_pool_stake(&mut self, amount: U128) -> bool {
+    pub fn on_staking_pool_stake(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
 
         let stake_succeeded = is_promise_success();
@@ -811,7 +978,7 @@ impl LockupContract {
 
     /// Called after the extra amount stake was staked in the staking pool contract.
     /// This method needs to update staking pool status.
-    pub fn on_staking_pool_unstake(&mut self, amount: U128) -> bool {
+    pub fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
 
         let unstake_succeeded = is_promise_success();
