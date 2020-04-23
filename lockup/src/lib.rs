@@ -714,14 +714,6 @@ impl LockupContract {
     /* Getters */
     /***********/
 
-    /// The balance of the account excluding the storage staking balance.
-    /// NOTE: The storage staking balance can't be transferred out without deleting this contract.
-    pub fn get_account_balance(&self) -> WrappedBalance {
-        env::account_balance()
-            .saturating_sub(MIN_BALANCE_FOR_STORAGE)
-            .into()
-    }
-
     /// The amount of tokens that can be deposited to the staking pool or transferred out.
     /// It excludes tokens that are locked due to early termination of the vesting schedule.
     pub fn get_available_balance(&self) -> WrappedBalance {
@@ -792,17 +784,6 @@ impl LockupContract {
             // Everything is vested and unlocked
             0.into()
         }
-    }
-
-    /// The amount of tokens that were deposited to the staking pool.
-    /// NOTE: The actual balance can be larger than this known deposit balance due to staking
-    /// rewards acquired on the staking pool.
-    pub fn get_known_staking_pool_deposit_balance(&self) -> WrappedBalance {
-        self.staking_information
-            .as_ref()
-            .map(|info| info.deposit_amount.0)
-            .unwrap_or(0)
-            .into()
     }
 
     /// The owners balance of the account. It includes vested and liquid tokens.
@@ -1038,6 +1019,25 @@ impl LockupContract {
     /********************/
     /* Internal methods */
     /********************/
+
+    /// The balance of the account excluding the storage staking balance.
+    /// NOTE: The storage staking balance can't be transferred out without deleting this contract.
+    fn get_account_balance(&self) -> WrappedBalance {
+        env::account_balance()
+            .saturating_sub(MIN_BALANCE_FOR_STORAGE)
+            .into()
+    }
+
+    /// The amount of tokens that were deposited to the staking pool.
+    /// NOTE: The actual balance can be larger than this known deposit balance due to staking
+    /// rewards acquired on the staking pool.
+    fn get_known_staking_pool_deposit_balance(&self) -> WrappedBalance {
+        self.staking_information
+            .as_ref()
+            .map(|info| info.deposit_amount.0)
+            .unwrap_or(0)
+            .into()
+    }
 
     fn set_staking_status(&mut self, status: StakingStatus) {
         self.staking_information
