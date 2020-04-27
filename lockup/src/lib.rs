@@ -965,10 +965,12 @@ impl LockupContract {
         }
     }
 
-    /// The owners balance of the account. It includes vested and liquid tokens.
+    /// The balance of the account owner. It includes vested and extra tokens that may have been
+    /// deposited to this account.
     /// NOTE: Some of this tokens may be deposited to the staking pool.
+    /// Also it doesn't account for tokens locked for the contract storage.
     pub fn get_owners_balance(&self) -> WrappedBalance {
-        (self.get_account_balance().0 + self.get_known_deposited_balance().0)
+        (env::account_balance() + self.get_known_deposited_balance().0)
             .saturating_sub(self.get_locked_amount().0)
             .into()
     }
@@ -1371,8 +1373,83 @@ mod tests {
 
     use near_sdk::{testing_env, MockedBlockchain, VMContext};
     use std::convert::TryInto;
-    /*
-    fn basic_setup() -> (VMContext, LockupContract) {
+
+    pub type AccountId = String;
+
+    pub const LOCKUP_NEAR: u128 = 1000;
+    pub const GENESIS_TIME_IN_DAYS: u64 = 500;
+    pub const YEAR: u64 = 365;
+    pub const ALMOST_HALF_YEAR: u64 = YEAR / 2;
+
+    pub fn system_account() -> AccountId {
+        "system".to_string()
+    }
+
+    pub fn account_owner() -> AccountId {
+        "account_owner".to_string()
+    }
+
+    pub fn non_owner() -> AccountId {
+        "non_owner".to_string()
+    }
+
+    pub fn to_yocto(near_balance: u128) -> u128 {
+        near_balance * 10u128.pow(24)
+    }
+
+    pub fn to_ts(num_days: u64) -> u64 {
+        // 2018-08-01 UTC in nanoseconds
+        1533081600_000_000_000 + num_days * 86400_000_000_000
+    }
+
+    pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
+        assert!(
+            std::cmp::max(left, right) - std::cmp::min(left, right) < max_delta,
+            format!(
+                "Left {} is not even close to Right {} within delta {}",
+                left, right, max_delta
+            )
+        );
+    }
+
+    pub fn assert_almost_eq(left: u128, right: u128) {
+        assert_almost_eq_with_max_delta(left, right, to_yocto(10));
+    }
+
+    pub fn get_context(
+        predecessor_account_id: AccountId,
+        account_balance: u128,
+        account_locked_balance: u128,
+        block_timestamp: u64,
+        is_view: bool,
+    ) -> VMContext {
+        VMContext {
+            current_account_id: account_owner(),
+            signer_account_id: predecessor_account_id.clone(),
+            signer_account_pk: vec![0, 1, 2],
+            predecessor_account_id,
+            input: vec![],
+            block_index: 1,
+            block_timestamp,
+            epoch_height: 1,
+            account_balance,
+            account_locked_balance,
+            storage_usage: 10u64.pow(6),
+            attached_deposit: 0,
+            prepaid_gas: 10u64.pow(15),
+            random_seed: vec![0, 1, 2],
+            is_view,
+            output_data_receivers: vec![],
+        }
+    }
+
+    fn public_key(byte_val: u8) -> Base58PublicKey {
+        let mut pk = vec![byte_val; 33];
+        pk[0] = 0;
+        Base58PublicKey(pk)
+    }
+
+    fn lockup_only_setup() -> (VMContext, LockupContract) {
         let context = get_context(
             system_account(),
             to_yocto(LOCKUP_NEAR),
@@ -1387,40 +1464,44 @@ mod tests {
         // - Lockup for 1 year.
         // - Owner has 2 keys
         let contract = LockupContract::new(
-            to_yocto(LOCKUP_NEAR).into(),
-            to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
-            vec![
-                public_key(1).try_into().unwrap(),
-                public_key(2).try_into().unwrap(),
-            ],
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
+                vesting_information: None,
+            },
+            AccountId::from("whitelist"),
+            None,
+            vec![public_key(1), public_key(2)],
+            vec![],
         );
         (context, contract)
     }
 
     #[test]
-    fn test_basic() {
-        let (mut context, contract) = basic_setup();
+    fn test_lockup_only_basic() {
+        let (mut context, contract) = lockup_only_setup();
         // Checking initial values at genesis time
         context.is_view = true;
         testing_env!(context.clone());
 
-        assert_eq!(contract.get_transferrable().0, 0);
+        assert_eq!(contract.get_owners_balance().0, 0);
 
         // Checking values in 1 day after genesis time
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 1);
 
-        assert_eq!(contract.get_transferrable().0, 0);
+        assert_eq!(contract.get_owners_balance().0, 0);
 
         // Checking values next day after lockup timestamp
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
         testing_env!(context.clone());
 
-        assert_almost_eq(contract.get_transferrable().0, to_yocto(LOCKUP_NEAR));
+        assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
     }
 
+    /*
     #[test]
-    fn test_transferrable_with_different_stakes() {
-        let (mut context, contract) = basic_setup();
+    fn test_lockup_only_transferrable_with_different_stakes() {
+        let (mut context, contract) = lockup_only_setup();
 
         // Staking everything at the genesis
         context.account_locked_balance = to_yocto(999);
@@ -1439,30 +1520,34 @@ mod tests {
             context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 1);
             testing_env!(context.clone());
 
-            assert_eq!(contract.get_transferrable().0, to_yocto(extra_balance_near));
+            assert_eq!(
+                contract.get_owners_balance().0,
+                to_yocto(extra_balance_near)
+            );
 
             // Checking values next day after lockup timestamp
             context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
             testing_env!(context.clone());
 
             assert_almost_eq(
-                contract.get_transferrable().0,
+                contract.get_owners_balance().0,
                 to_yocto(LOCKUP_NEAR + extra_balance_near),
             );
         }
     }
+    */
 
     #[test]
-    fn test_transfer_call_by_owner() {
-        let (mut context, mut contract) = basic_setup();
+    fn test_lockup_only_transfer_call_by_owner() {
+        let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
         context.is_view = true;
         testing_env!(context.clone());
-        assert_almost_eq(contract.get_transferrable().0, to_yocto(LOCKUP_NEAR));
+        assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
 
         context.predecessor_account_id = account_owner();
         context.signer_account_id = account_owner();
-        context.signer_account_pk = public_key(1);
+        context.signer_account_pk = public_key(1).try_into().unwrap();
         context.is_view = false;
         testing_env!(context.clone());
 
@@ -1471,17 +1556,18 @@ mod tests {
         assert_almost_eq(env::account_balance(), to_yocto(LOCKUP_NEAR - 100));
     }
 
+    /*
     #[test]
-    fn test_stake_call_by_owner() {
-        let (mut context, mut contract) = basic_setup();
+    fn test_lockup_only_stake_call_by_owner() {
+        let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
         context.is_view = true;
         testing_env!(context.clone());
-        assert_almost_eq(contract.get_transferrable().0, to_yocto(LOCKUP_NEAR));
+        assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
 
         context.predecessor_account_id = account_owner();
         context.signer_account_id = account_owner();
-        context.signer_account_pk = public_key(1);
+        context.signer_account_pk = public_key(1).try_into().unwrap();
         context.is_view = false;
         testing_env!(context.clone());
 
@@ -1491,12 +1577,12 @@ mod tests {
     }
 
     #[test]
-    fn test_transfer_by_non_owner() {
-        let (mut context, mut contract) = basic_setup();
+    fn test_lockup_only_transfer_by_non_owner() {
+        let (mut context, mut contract) = lockup_only_setup();
 
         context.predecessor_account_id = non_owner();
         context.signer_account_id = non_owner();
-        context.signer_account_pk = public_key(5);
+        context.signer_account_pk = public_key(5).try_into().unwrap();
         testing_env!(context.clone());
 
         std::panic::catch_unwind(move || {
@@ -1506,8 +1592,8 @@ mod tests {
     }
 
     #[test]
-    fn test_stake_by_non_owner() {
-        let (mut context, mut contract) = basic_setup();
+    fn test_lockup_only_stake_by_non_owner() {
+        let (mut context, mut contract) = lockup_only_setup();
 
         context.predecessor_account_id = non_owner();
         context.signer_account_id = non_owner();
