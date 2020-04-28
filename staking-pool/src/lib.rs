@@ -8,6 +8,9 @@ use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight, Promise, Publ
 
 use uint::construct_uint;
 
+const PING_GAS: u64 = 80_000_000_000_000;
+const REFRESH_STAKE_GAS: u64 = 80_000_000_000_000;
+
 construct_uint! {
     /// 256-bit unsigned integer.
     pub struct U256(4);
@@ -42,6 +45,7 @@ impl Account {
     }
 }
 
+#[derive(Debug)]
 pub struct WrappedAccount {
     pub account_id: AccountId,
     pub account: Account,
@@ -63,7 +67,7 @@ impl EpochInfo {
     }
 }
 
-const EPOCHS_TOWARDS_REWARD: EpochHeight = 2;
+const EPOCHS_TOWARDS_REWARD: EpochHeight = 3;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -71,7 +75,8 @@ pub struct StakingContract {
     pub owner_id: AccountId,
     pub max_number_of_seats: u32,
     pub stake_public_key: PublicKey,
-    pub last_locked_balance: Balance,
+    pub last_locked_account_balance: Balance,
+    pub last_account_balance: Balance,
     pub total_stake: Balance,
     pub epoch_infos: Vec<EpochInfo>,
     pub active_accounts: HashMap<AccountId, Account>,
@@ -102,7 +107,8 @@ impl StakingContract {
                 .try_into()
                 .expect("invalid staking public key"),
             max_number_of_seats,
-            last_locked_balance: 0,
+            last_locked_account_balance: 0,
+            last_account_balance: env::account_balance(),
             total_stake: 0,
             epoch_infos: vec![EpochInfo::new(env::epoch_height())],
             active_accounts: HashMap::new(),
@@ -125,12 +131,22 @@ impl StakingContract {
         };
 
         // Distributing the reward. Note, the reward can be 0.
-        let reward =
-            U256::from(env::account_locked_balance().saturating_sub(self.last_locked_balance));
+        let total_balance =
+            env::account_locked_balance() + env::account_balance() - env::attached_deposit();
+        let last_total_balance = self.last_account_balance + self.last_locked_account_balance;
+
+        let total_reward = total_balance.saturating_sub(last_total_balance);
+        let total_staked_reward =
+            env::account_locked_balance().saturating_sub(self.last_locked_account_balance);
+        let total_unstaked_reward = total_reward.saturating_sub(total_staked_reward);
+
+        let total_staked_reward = U256::from(total_staked_reward);
+        let total_unstaked_reward = U256::from(total_unstaked_reward);
+
         let mut rewarded_accounts = HashMap::new();
         let mut total_stake: Balance = 0;
         for epoch_info in std::mem::take(&mut self.epoch_infos) {
-            if epoch_info.epoch_height + EPOCHS_TOWARDS_REWARD < epoch_height {
+            if epoch_info.epoch_height + EPOCHS_TOWARDS_REWARD <= epoch_height {
                 for (account_id, stake) in epoch_info.stakes.into_iter() {
                     *rewarded_accounts.entry(account_id).or_insert(0) += stake;
                     total_stake += stake;
@@ -144,11 +160,18 @@ impl StakingContract {
         if total_stake > 0 {
             let total_stake = U256::from(total_stake);
             for (account_id, stake) in rewarded_accounts {
-                let reward = (reward * U256::from(stake) / total_stake).as_u128();
-                self.active_accounts.get_mut(&account_id).unwrap().staked += reward;
+                let staked_reward =
+                    (total_staked_reward * U256::from(stake) / total_stake).as_u128();
+                let unstaked_reward =
+                    (total_unstaked_reward * U256::from(stake) / total_stake).as_u128();
+                {
+                    let account = self.active_accounts.get_mut(&account_id).unwrap();
+                    account.staked += staked_reward;
+                    account.unstaked += unstaked_reward;
+                }
                 if let Some(stake) = new_epoch_info.stakes.get_mut(&account_id) {
-                    *stake += reward;
-                    self.total_stake += reward;
+                    *stake += staked_reward;
+                    self.total_stake += staked_reward;
                 }
             }
         }
@@ -168,7 +191,8 @@ impl StakingContract {
             }
         }
 
-        self.last_locked_balance = env::account_locked_balance();
+        self.last_locked_account_balance = env::account_locked_balance();
+        self.last_account_balance = env::account_balance();
     }
 
     /// Call to deposit money.
@@ -311,7 +335,20 @@ impl StakingContract {
         self.save_account(wrapped_account);
 
         Promise::new(env::current_account_id())
+            .function_call(b"ping".to_vec(), b"{}".to_vec(), 0, PING_GAS)
             .stake(self.total_stake, self.stake_public_key.clone())
+            .function_call(
+                b"internal_after_stake".to_vec(),
+                b"{}".to_vec(),
+                0,
+                REFRESH_STAKE_GAS,
+            )
+    }
+
+    /// Private method to be called after stake action.
+    pub fn internal_after_stake(&mut self) {
+        assert_eq!(env::current_account_id(), env::predecessor_account_id());
+        self.last_locked_account_balance = env::account_locked_balance();
     }
 
     /// Returns given account's unstaked balance.
@@ -416,6 +453,7 @@ mod tests {
     use crate::test_utils::*;
 
     use super::*;
+    use std::convert::TryFrom;
 
     struct Emulator {
         pub contract: StakingContract,
@@ -425,35 +463,52 @@ mod tests {
     }
 
     impl Emulator {
-        pub fn new(owner: String, stake_public_key: String) -> Self {
+        pub fn new(owner: String, stake_public_key: String, max_number_of_seats: u32) -> Self {
             testing_env!(VMContextBuilder::new()
                 .current_account_id(owner.clone())
                 .finish());
             Emulator {
-                contract: StakingContract::new(owner, stake_public_key),
+                contract: StakingContract::new(
+                    owner,
+                    Base58PublicKey::try_from(stake_public_key).unwrap(),
+                    max_number_of_seats,
+                ),
                 epoch_height: 0,
                 amount: 0,
                 locked_amount: 0,
             }
         }
 
-        pub fn call_function(
-            &mut self,
-            caller: String,
-            deposit: Balance,
-            f: fn(&mut StakingContract),
-        ) {
+        pub fn update_context(&mut self, predecessor_account_id: String, deposit: Balance) {
             testing_env!(VMContextBuilder::new()
-                .current_account_id(caller)
+                .current_account_id(staking())
+                .predecessor_account_id(predecessor_account_id.clone())
+                .signer_account_id(predecessor_account_id)
                 .attached_deposit(deposit)
                 .account_balance(self.amount)
                 .account_locked_balance(self.locked_amount)
+                .epoch_height(self.epoch_height)
                 .finish());
             println!(
                 "Deposit: {}, amount: {}, locked_amount: {}",
                 deposit, self.amount, self.locked_amount
             );
-            f(&mut self.contract);
+        }
+
+        pub fn simulate_stake_call(&mut self) {
+            self.update_context(staking(), 0);
+            let total_stake = self.contract.total_stake;
+            // First function call action
+            self.contract.ping();
+            // Stake action
+            if total_stake > self.locked_amount {
+                let diff = total_stake - self.locked_amount;
+                self.amount -= diff;
+                self.locked_amount += diff;
+            }
+            // Second function call action
+            self.update_context(staking(), 0);
+            self.contract.internal_after_stake();
         }
 
         pub fn skip_epochs(&mut self, num: EpochHeight) {
@@ -464,69 +519,87 @@ mod tests {
 
     #[test]
     fn test_deposit_withdraw() {
-        testing_env!(VMContextBuilder::new()
-            .current_account_id("owner".to_string())
-            .finish());
-        let mut contract = StakingContract::new("owner".to_string(), "7LmTyhMqQ3nxAY6t78QoH4Dc1pRUq1S9mxtyXLdYKjVjWH7EWYdVA3YzJk5o1sMB5JrvKrzTwCAZ2HgiYhPgm6k".to_string());
+        let mut emulator = Emulator::new(
+            "owner".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            10,
+        );
         let deposit_amount = 1_000_000;
-        testing_env!(VMContextBuilder::new()
-            .current_account_id(staking())
-            .predecessor_account_id(bob())
-            .attached_deposit(deposit_amount)
-            .finish());
-        contract.deposit();
-        testing_env!(VMContextBuilder::new()
-            .current_account_id(staking())
-            .predecessor_account_id(bob())
-            .account_balance(deposit_amount)
-            .finish());
-        assert_eq!(contract.get_account_balance(bob()), deposit_amount);
-        contract.withdraw(deposit_amount.into());
-        assert_eq!(contract.get_account_balance(bob()), 0u128);
+        emulator.update_context(bob(), deposit_amount);
+        emulator.contract.deposit();
+        emulator.amount += deposit_amount;
+        emulator.update_context(bob(), 0);
+        assert_eq!(
+            emulator.contract.get_account_unstaked_balance(bob()).0,
+            deposit_amount
+        );
+        emulator.contract.withdraw(deposit_amount.into());
+        assert_eq!(
+            emulator.contract.get_account_unstaked_balance(bob()).0,
+            0u128
+        );
     }
 
     #[test]
     fn test_stake_unstake() {
-        testing_env!(VMContextBuilder::new()
-            .current_account_id("owner".to_string())
-            .finish());
-        let mut contract = StakingContract::new("owner".to_string(), "7LmTyhMqQ3nxAY6t78QoH4Dc1pRUq1S9mxtyXLdYKjVjWH7EWYdVA3YzJk5o1sMB5JrvKrzTwCAZ2HgiYhPgm6k".to_string());
+        let mut emulator = Emulator::new(
+            "owner".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            10,
+        );
         let deposit_amount = 1_000_000;
-        testing_env!(VMContextBuilder::new()
-            .current_account_id(staking())
-            .predecessor_account_id(bob())
-            .attached_deposit(deposit_amount)
-            .finish());
-        contract.deposit();
-        testing_env!(VMContextBuilder::new()
-            .current_account_id(staking())
-            .predecessor_account_id(bob())
-            .account_balance(deposit_amount)
-            .finish());
-        contract.stake(deposit_amount.into());
+        emulator.update_context(bob(), deposit_amount);
+        emulator.contract.deposit();
+        emulator.amount += deposit_amount;
+        emulator.update_context(bob(), 0);
+        emulator.contract.stake(deposit_amount.into());
+        emulator.simulate_stake_call();
+        assert_eq!(
+            emulator.contract.get_account_staked_balance(bob()).0,
+            deposit_amount
+        );
         // 10 epochs later, unstake half of the money.
-        testing_env!(VMContextBuilder::new()
-            .current_account_id(staking())
-            .predecessor_account_id(bob())
-            .epoch_height(10)
-            .account_locked_balance(deposit_amount + 10)
-            .finish());
-        assert_eq!(contract.get_account_stake(bob()), deposit_amount);
-        contract.unstake((deposit_amount / 2).into());
-        assert_eq!(contract.get_account_stake(bob()), deposit_amount / 2 + 10);
-        assert_eq!(contract.get_account_balance(bob()), deposit_amount / 2);
+        emulator.skip_epochs(10);
+        // Overriding rewards
+        emulator.locked_amount = deposit_amount + 10;
+        emulator.update_context(bob(), 0);
+        assert_eq!(
+            emulator.contract.get_account_staked_balance(bob()).0,
+            deposit_amount
+        );
+        emulator.contract.unstake((deposit_amount / 2).into());
+        emulator.simulate_stake_call();
+        assert_eq!(
+            emulator.contract.get_account_staked_balance(bob()).0,
+            deposit_amount / 2 + 10
+        );
+        assert_eq!(
+            emulator.contract.get_account_unstaked_balance(bob()).0,
+            deposit_amount / 2
+        );
     }
 
     /// Test that two can delegate and then undelegate their funds and rewards at different time.
     #[test]
-    #[ignore]
     fn test_two_delegates() {
-        let mut emulator = Emulator::new("owner".to_string(), "7LmTyhMqQ3nxAY6t78QoH4Dc1pRUq1S9mxtyXLdYKjVjWH7EWYdVA3YzJk5o1sMB5JrvKrzTwCAZ2HgiYhPgm6k".to_string());
-        emulator.call_function(alice(), 1_000_000, |contract| contract.deposit());
-        emulator.call_function(alice(), 0, |contract| contract.stake(1_000_000.into()));
+        let mut emulator = Emulator::new(
+            "owner".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            10,
+        );
+        emulator.update_context(alice(), 1_000_000);
+        emulator.contract.deposit();
+        emulator.amount += 1_000_000;
+        emulator.update_context(alice(), 0);
+        emulator.contract.stake(1_000_000.into());
+        emulator.simulate_stake_call();
         emulator.skip_epochs(2);
-        emulator.call_function(bob(), 1_000_000, |contract| contract.deposit());
-        emulator.call_function(bob(), 0, |contract| contract.stake(1_000_000.into()));
+        emulator.update_context(bob(), 1_000_000);
+        emulator.contract.deposit();
+        emulator.amount += 1_000_000;
+        emulator.update_context(bob(), 0);
+        emulator.contract.stake(1_000_000.into());
+        emulator.simulate_stake_call();
         emulator.skip_epochs(2);
     }
 }
