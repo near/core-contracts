@@ -119,6 +119,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
+name = "crunchy"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
 name = "digest"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,20 +222,22 @@ dependencies = [
 
 [[package]]
 name = "near-runtime-fees"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9556df68a27cd18af971149127b5a52afdbbbb2e54ded7006ae90356bdc40bb"
+checksum = "4324fa778de675b23edb4da36eac17a05ef7fc40f0a6d36e83cc6040e56fdb30"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "near-sdk"
-version = "0.7.0"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb9e0d31ae2ae0549767d726f5aa5fdc0e347a7d497cac3441f89a42a1b63403"
+checksum = "fdd218ef5ff9acf4ed8375c14aac570589ec837a05d61b60a2e3d212d4358a90"
 dependencies = [
+ "base64",
  "borsh",
+ "bs58",
  "near-runtime-fees",
  "near-sdk-macros",
  "near-vm-logic",
@@ -238,9 +246,9 @@ dependencies = [
 
 [[package]]
 name = "near-sdk-core"
-version = "0.7.0"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "711f0a69e8faccf6c054829f0373558ba6a47e04145f7137c1a111c6c3d6b863"
+checksum = "88f97b569352978bc6473f928459ce6f3d040a465b8d087097c6cd038e9dc65d"
 dependencies = [
  "Inflector",
  "proc-macro2",
@@ -250,9 +258,9 @@ dependencies = [
 
 [[package]]
 name = "near-sdk-macros"
-version = "0.7.0"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16dcf6b818df51cdeb0136609b4c91f8b27bb0a34e8c833d733bab612d7a43cf"
+checksum = "52b152b7e4821601ae363aa088a9f0b76b120c666b5b6a07aa395fa9a1279a49"
 dependencies = [
  "near-sdk-core",
  "proc-macro2",
@@ -262,9 +270,9 @@ dependencies = [
 
 [[package]]
 name = "near-vm-errors"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ffb5b1190a393f0717e0aef6aa3ada910c8d7187212033f33c633e618dc58cc"
+checksum = "464d6d36cf4840bed8ef57a4f043ce1da471b7021171d5470bd9f3112611fe9a"
 dependencies = [
  "borsh",
  "near-rpc-error-macro",
@@ -273,9 +281,9 @@ dependencies = [
 
 [[package]]
 name = "near-vm-logic"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bad4de5668d4d9d39b2ec7106f9aa1f14aca41bb11fb0529b41392417a5be4e0"
+checksum = "dd3b537fe6c7b0eada25747c6bd3a3de26f572f5ee84c72fda054f715b83e281"
 dependencies = [
  "base64",
  "bs58",
@@ -328,6 +336,12 @@ name = "regex-syntax"
 version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fe5bd57d1d7414c6b5ed48563a2c855d995ff777729dcd91c369ec7fea395ae"
+
+[[package]]
+name = "rustc-hex"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e75f6a532d0fd9f7f13144f392b6ad56a32696bfcd9c78f797f16bbb6f072d6"
 
 [[package]]
 name = "ryu"
@@ -397,12 +411,18 @@ name = "staking-contract"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "bs58",
  "near-sdk",
  "serde",
  "serde_json",
+ "uint",
  "wee_alloc",
 ]
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "syn"
@@ -429,6 +449,18 @@ name = "typenum"
 version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d2783fe2d6b8c1101136184eb41be8b1ad379e4657050b8aaff0c79ee7575f9"
+
+[[package]]
+name = "uint"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173cd16430c206dc1a430af8a89a0e9c076cf15cb42b4aedb10e8cc8fee73681"
+dependencies = [
+ "byteorder",
+ "crunchy",
+ "rustc-hex",
+ "static_assertions",
+]
 
 [[package]]
 name = "unicode-xid"
