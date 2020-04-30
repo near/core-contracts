@@ -73,7 +73,7 @@ const EPOCHS_TOWARDS_REWARD: EpochHeight = 3;
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct StakingContract {
     pub owner_id: AccountId,
-    pub max_number_of_seats: u32,
+    pub max_number_of_slots: u32,
     pub stake_public_key: PublicKey,
     pub last_locked_account_balance: Balance,
     pub last_account_balance: Balance,
@@ -98,7 +98,7 @@ impl StakingContract {
     pub fn new(
         owner_id: AccountId,
         stake_public_key: Base58PublicKey,
-        max_number_of_seats: u32,
+        max_number_of_slots: u32,
     ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         Self {
@@ -106,7 +106,7 @@ impl StakingContract {
             stake_public_key: stake_public_key
                 .try_into()
                 .expect("invalid staking public key"),
-            max_number_of_seats,
+            max_number_of_slots,
             last_locked_account_balance: 0,
             last_account_balance: env::account_balance(),
             total_stake: 0,
@@ -288,15 +288,15 @@ impl StakingContract {
             if wrapped_account.account.staked == 0 {
                 // Don't need to update anything, since the account wasn't actively staking in the
                 // current epoch.
-            } else if (epoch_info.stakes.len() as u32) < self.max_number_of_seats {
-                // A seat is available
+            } else if (epoch_info.stakes.len() as u32) < self.max_number_of_slots {
+                // A slot is available
                 epoch_info.stakes.insert(
                     wrapped_account.account_id.clone(),
                     wrapped_account.account.staked,
                 );
                 self.total_stake += wrapped_account.account.staked;
             } else {
-                // No seats available. Need to check if we can kick out someone.
+                // No slots available. Need to check if we can kick out someone.
                 let (account_id, smallest_stake) = epoch_info.stakes.iter().fold(
                     (None, 0),
                     |smallest_pair, (account_id, stake)| {
@@ -317,7 +317,7 @@ impl StakingContract {
                     self.total_stake += wrapped_account.account.staked;
                 } else {
                     // The current account stake is lower or equal to the current smallest stake.
-                    // There are also no seats available, so the account can't take a seat.
+                    // There are also no slots available, so the account can't take a slot.
                 }
             }
         }
@@ -463,7 +463,7 @@ mod tests {
     }
 
     impl Emulator {
-        pub fn new(owner: String, stake_public_key: String, max_number_of_seats: u32) -> Self {
+        pub fn new(owner: String, stake_public_key: String, max_number_of_slots: u32) -> Self {
             testing_env!(VMContextBuilder::new()
                 .current_account_id(owner.clone())
                 .finish());
@@ -471,7 +471,7 @@ mod tests {
                 contract: StakingContract::new(
                     owner,
                     Base58PublicKey::try_from(stake_public_key).unwrap(),
-                    max_number_of_seats,
+                    max_number_of_slots,
                 ),
                 epoch_height: 0,
                 amount: 0,
