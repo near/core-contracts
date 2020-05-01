@@ -8,7 +8,7 @@ use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight, Promise, Publ
 use uint::construct_uint;
 
 const PING_GAS: u64 = 30_000_000_000_000;
-const REFRESH_STAKE_GAS: u64 = 30_000_000_000_000;
+const INTERNAL_AFTER_STAKE_GAS: u64 = 30_000_000_000_000;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -110,7 +110,10 @@ impl StakingContract {
         let mut account = self.get_account(&account_id);
         account.unstaked += env::attached_deposit();
         self.save_account(&account_id, account);
+        self.last_account_balance = env::account_balance();
 
+        // Potentially restake in case in the locked amount is smaller than the desired staked
+        // balance due to unstake in the past.
         if self.total_staked_balance > self.last_locked_account_balance {
             self.restake();
         }
@@ -136,7 +139,10 @@ impl StakingContract {
         account.unstaked -= amount;
         self.save_account(&account_id, account);
         Promise::new(account_id).transfer(amount);
+        self.last_account_balance = env::account_balance();
 
+        // Potentially restake in case in the locked amount is smaller than the desired staked
+        // balance due to unstake in the past.
         if self.total_staked_balance > self.last_locked_account_balance {
             self.restake();
         }
@@ -152,23 +158,9 @@ impl StakingContract {
         let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
 
-        let num_shares = if self.total_staked_balance > 0 {
-            // price = total_staked / total_shares
-            // Price is fixed
-            // (total_staked + amount) / (total_shares + num_shares) = total_staked / total_shares
-            // (total_staked + amount) * total_shares = total_staked * (total_shares + num_shares)
-            // amount * total_shares = total_staked * num_shares
-            // num_shares = amount * total_shares / total_staked
-            // NOTE: Number of shares the account gets is rounded up, but the gas rebate within
-            // contract will compensate for the rounding errors.
-            // Rounding up `a / b` using `(a + b - 1) / b`.
-            ((U256::from(self.total_staked_shares) * U256::from(amount)
-                + U256::from(self.total_staked_balance - 1))
-                / U256::from(self.total_staked_balance))
-            .as_u128()
-        } else {
-            amount
-        };
+        // NOTE: Number of shares the account gets is rounded up, but the gas rebate within
+        // contract will compensate for the rounding errors.
+        let num_shares = self.num_shares_from_amount_rounded_up(amount);
 
         assert!(
             account.unstaked >= amount,
@@ -201,12 +193,7 @@ impl StakingContract {
         );
         // NOTE: The number of shares the account will pay is rounded up, to avoid giving extra
         // amount.
-        // Rounding up `a / b` using `(a + b - 1) / b`.
-        let num_shares = ((U256::from(self.total_staked_shares) * U256::from(amount)
-            + U256::from(self.total_staked_balance - 1))
-            / U256::from(self.total_staked_balance))
-        .as_u128();
-
+        let num_shares = self.num_shares_from_amount_rounded_up(amount);
         assert!(
             account.staked_shares >= num_shares,
             "Not enough staked balance to unstake"
@@ -222,6 +209,26 @@ impl StakingContract {
         self.restake();
     }
 
+    /// Returns the number of shares corresponding to the given amount rounded up.
+    ///
+    /// price = total_staked / total_shares
+    /// Price is fixed
+    /// (total_staked + amount) / (total_shares + num_shares) = total_staked / total_shares
+    /// (total_staked + amount) * total_shares = total_staked * (total_shares + num_shares)
+    /// amount * total_shares = total_staked * num_shares
+    /// num_shares = amount * total_shares / total_staked
+    /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
+    fn num_shares_from_amount_rounded_up(&self, amount: Balance) -> Balance {
+        if self.total_staked_balance == 0 {
+            return amount;
+        }
+        ((U256::from(self.total_staked_shares) * U256::from(amount)
+            + U256::from(self.total_staked_balance - 1))
+            / U256::from(self.total_staked_balance))
+        .as_u128()
+    }
+
+    /// Restakes the current `total_staked_balance` again.
     fn restake(&mut self) {
         Promise::new(env::current_account_id())
             .function_call(b"ping".to_vec(), b"{}".to_vec(), 0, PING_GAS)
@@ -230,7 +237,7 @@ impl StakingContract {
                 b"internal_after_stake".to_vec(),
                 b"{}".to_vec(),
                 0,
-                REFRESH_STAKE_GAS,
+                INTERNAL_AFTER_STAKE_GAS,
             );
     }
 
@@ -276,7 +283,7 @@ impl StakingContract {
     }
 
     fn save_account(&mut self, account_id: &AccountId, account: Account) {
-        if account != Account::default() {
+        if account.unstaked > 0 || account.staked_shares > 0 {
             self.accounts.insert(&account_id, &account);
         } else {
             self.accounts.remove(&account_id);
