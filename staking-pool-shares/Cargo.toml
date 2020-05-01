@@ -1,5 +1,5 @@
 [package]
-name = "staking-contract"
+name = "staking-pool-with-shares"
 version = "0.1.0"
 authors = ["Illia Polosukhin <ilblackdragon@gmail.com>"]
 edition = "2018"
