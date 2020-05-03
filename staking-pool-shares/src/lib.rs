@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, U128};
@@ -68,9 +66,7 @@ impl StakingContract {
         assert!(!env::state_exists(), "Already initialized");
         Self {
             owner_id,
-            stake_public_key: stake_public_key
-                .try_into()
-                .expect("invalid staking public key"),
+            stake_public_key: stake_public_key.into(),
             last_epoch_height: env::epoch_height(),
             last_locked_account_balance: 0,
             last_account_balance: env::account_balance(),
