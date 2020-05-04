@@ -104,9 +104,18 @@ impl StakingContract {
 
         let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
-        account.unstaked += env::attached_deposit();
-        self.save_account(&account_id, account);
+        let amount = env::attached_deposit();
+        account.unstaked += amount;
+        self.save_account(&account_id, &account);
         self.last_account_balance = env::account_balance();
+
+        env::log(
+            format!(
+                "@{} deposited {}. New unstaked balance is {}",
+                account_id, amount, account.unstaked
+            )
+            .as_bytes(),
+        );
 
         // Potentially restake in case in the locked amount is smaller than the desired staked
         // balance due to unstake in the past.
@@ -133,7 +142,16 @@ impl StakingContract {
             "The unstaked balance is not yet available due to unstaking delay"
         );
         account.unstaked -= amount;
-        self.save_account(&account_id, account);
+        self.save_account(&account_id, &account);
+
+        env::log(
+            format!(
+                "@{} withdrawing {}. New unstaked balance is {}",
+                account_id, amount, account.unstaked
+            )
+            .as_bytes(),
+        );
+
         Promise::new(account_id).transfer(amount);
         self.last_account_balance = env::account_balance();
 
@@ -164,10 +182,25 @@ impl StakingContract {
         );
         account.unstaked -= amount;
         account.staked_shares += num_shares;
-        self.save_account(&account_id, account);
+        self.save_account(&account_id, &account);
 
         self.total_staked_balance += amount;
         self.total_staked_shares += num_shares;
+
+        env::log(
+            format!(
+                "@{} staking {}. Received {} new staking shares. Total {} unstaked balance and {} staking shares",
+                account_id, amount, num_shares, account.unstaked, account.staked_shares
+            )
+            .as_bytes(),
+        );
+        env::log(
+            format!(
+                "Contract total staked balance is {}. Total number of shares {}",
+                self.total_staked_balance, self.total_staked_shares
+            )
+            .as_bytes(),
+        );
 
         self.restake();
     }
@@ -197,10 +230,25 @@ impl StakingContract {
         account.staked_shares -= num_shares;
         account.unstaked += amount;
         account.unstaked_available_epoch_height = env::epoch_height() + EPOCHS_TOWARDS_REWARD;
-        self.save_account(&account_id, account);
+        self.save_account(&account_id, &account);
 
         self.total_staked_balance -= amount;
         self.total_staked_shares -= num_shares;
+
+        env::log(
+            format!(
+                "@{} unstaking {}. Spent {} staking shares. Total {} unstaked balance and {} staking shares",
+                account_id, amount, num_shares, account.unstaked, account.staked_shares
+            )
+                .as_bytes(),
+        );
+        env::log(
+            format!(
+                "Contract total staked balance is {}. Total number of shares {}",
+                self.total_staked_balance, self.total_staked_shares
+            )
+            .as_bytes(),
+        );
 
         self.restake();
     }
@@ -278,7 +326,7 @@ impl StakingContract {
         self.accounts.get(account_id).unwrap_or_default()
     }
 
-    fn save_account(&mut self, account_id: &AccountId, account: Account) {
+    fn save_account(&mut self, account_id: &AccountId, account: &Account) {
         if account.unstaked > 0 || account.staked_shares > 0 {
             self.accounts.insert(&account_id, &account);
         } else {
