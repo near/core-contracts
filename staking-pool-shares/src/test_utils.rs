@@ -12,6 +12,10 @@ pub fn bob() -> AccountId {
     "bob".to_string()
 }
 
+pub fn ntoy(near_amount: Balance) -> Balance {
+    near_amount * (10u128.pow(24))
+}
+
 pub struct VMContextBuilder {
     context: VMContext,
 }
