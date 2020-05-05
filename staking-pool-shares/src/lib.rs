@@ -166,7 +166,8 @@ impl StakingContract {
             };
 
             // Distributing the remaining reward to the delegators first.
-            self.total_staked_balance += total_reward - owners_fee;
+            let remaining_reward = total_reward - owners_fee;
+            self.total_staked_balance += remaining_reward;
 
             // Now buying "stake" shares for the contract owner at the new shares price.
             let num_shares = self.num_shares_from_amount_rounded_up(owners_fee);
@@ -179,6 +180,23 @@ impl StakingContract {
                 // Increasing the total amount of "stake" shares and the total staked balance.
                 self.total_stake_shares += num_shares;
                 self.total_staked_balance += owners_fee;
+            }
+
+            env::log(
+                format!(
+                    "Epoch {}: Contract received total rewards of {} tokens. New total staked balance is {}. Total number of shares {}",
+                    epoch_height, total_reward, self.total_staked_balance, self.total_stake_shares,
+                )
+                .as_bytes(),
+            );
+            if num_shares > 0 {
+                env::log(
+                    format!(
+                        "Total rewards fee is {} tokens or {} stake shares.",
+                        owners_fee, num_shares
+                    )
+                    .as_bytes(),
+                );
             }
         }
 
