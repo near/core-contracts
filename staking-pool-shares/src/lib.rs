@@ -12,7 +12,9 @@ const INTERNAL_AFTER_STAKE_GAS: u64 = 30_000_000_000_000;
 
 construct_uint! {
     /// 256-bit unsigned integer.
-    pub struct U256(4);
+    // TODO: Revert back to 4 once wasm/wasmer bug is fixed.
+    // See https://github.com/wasmerio/wasmer/issues/1429
+    pub struct U256(8);
 }
 
 #[cfg(test)]
