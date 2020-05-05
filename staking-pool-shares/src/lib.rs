@@ -71,7 +71,6 @@ pub struct StakingContract {
     pub last_account_balance: Balance,
     /// The total amount of shares. It should be equal to the total amount of shares across all
     /// accounts.
-    /// TODO: Update this comment once the fees are implemented.
     pub total_stake_shares: Balance,
     /// The total staked balance.
     pub total_staked_balance: Balance,
@@ -88,7 +87,7 @@ impl Default for StakingContract {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 pub struct RewardFeeFraction {
     pub numerator: u32,
     pub denominator: u32,
@@ -120,6 +119,10 @@ impl StakingContract {
     ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         reward_fee_fraction.assert_valid();
+        assert!(
+            env::is_valid_account_id(owner_id.as_bytes()),
+            "The owner account ID is invalid"
+        );
         Self {
             owner_id,
             stake_public_key: stake_public_key.into(),
@@ -400,6 +403,16 @@ impl StakingContract {
     /// Returns the total staking balance.
     pub fn get_total_staked_balance(&self) -> U128 {
         self.total_staked_balance.into()
+    }
+
+    /// Returns account ID of the staking pool owner.
+    pub fn get_owner_id(&self) -> AccountId {
+        self.owner_id.clone()
+    }
+
+    /// Returns the current reward fee as a fraction.
+    pub fn get_reward_fee_fraction(&self) -> RewardFeeFraction {
+        self.reward_fee_fraction.clone()
     }
 
     /*******************/
