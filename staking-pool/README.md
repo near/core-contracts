@@ -30,7 +30,7 @@ Commands to deploy and initialize a staking contract:
 
 ```bash
 near create_account my_validator --masterAccount=owner
-near deploy --accountId=my_validator --wasmFile=res/staking_pool_with_shares.wasm
+near deploy --accountId=my_validator --wasmFile=res/staking_pool.wasm
 # Initialize staking pool at account `my_validator` for the owner account ID `owner`, given staking pool and 10% reward fee.
 near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVLeScmY9YeEyR3Tw9yXfjBPzFLzroTranYtVb", "reward_fee_fraction": {"numerator": 10, "denominator": 100}}' --account_id owner
 # TODO: Delete all access keys from the `my_validator` account
