@@ -18,9 +18,14 @@ const VOTE_GAS: u64 = 200_000_000_000_000;
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
 
+/// Proposal ID for voting contract.
 pub type ProposalId = U64;
 
+/// The sha256 hash of the Account ID
 pub type AccountHash = Vec<u8>;
+
+/// A type to distinguish between a balance and a staking shares for better readability.
+pub type NumStakeShares = Balance;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -45,7 +50,7 @@ pub struct Account {
     /// NOTE: The number of shares should always be less or equal than the amount of staked balance.
     /// This means the price of stake share should always be at least `1`.
     /// The price of stake share can be computed as `total_staked_balance` / `total_stake_shares`.
-    pub stake_shares: Balance,
+    pub stake_shares: NumStakeShares,
     /// The minimum epoch height when the withdrawn is allowed.
     /// This changes after unstaking action, because the amount is still locked for 3 epochs.
     pub unstaked_available_epoch_height: EpochHeight,
@@ -62,7 +67,10 @@ impl Default for Account {
 }
 
 /// The number of epochs required for the locked balance to become unlocked.
-const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 3;
+/// NOTE: The actual number of epochs when the funds are unlocked is 3. But there is a corner case
+/// when the unstaking promise can arrive at the next epoch, while the inner state is already
+/// updated in the previous epoch. Which will not unlock the funds for 4 epochs.
+const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -82,7 +90,7 @@ pub struct StakingContract {
     pub last_account_balance: Balance,
     /// The total amount of shares. It should be equal to the total amount of shares across all
     /// accounts.
-    pub total_stake_shares: Balance,
+    pub total_stake_shares: NumStakeShares,
     /// The total staked balance.
     pub total_staked_balance: Balance,
     /// The fraction of the reward that goes to the owner of the staking pool for running the
@@ -134,6 +142,10 @@ pub trait VoteContract {
 impl StakingContract {
     /// Initializes the contract with the given owner_id, initial staking public key (with ED25519
     /// curve) and initial reward fee fraction that owner charges for the validation work.
+    ///
+    /// The entire current balance of this contract will be used to stake. This allows contract to
+    /// always maintain staking shares that can't be unstaked or withdrawn.
+    /// It prevents inflation the price of the share too much.
     #[init]
     pub fn new(
         owner_id: AccountId,
@@ -146,14 +158,20 @@ impl StakingContract {
             env::is_valid_account_id(owner_id.as_bytes()),
             "The owner account ID is invalid"
         );
+        let account_balance = env::account_balance();
+        assert_eq!(
+            env::account_locked_balance(),
+            0,
+            "The staking pool shouldn't be staking at the initialization"
+        );
         Self {
             owner_id,
             stake_public_key: stake_public_key.into(),
             last_epoch_height: env::epoch_height(),
             last_locked_account_balance: 0,
-            last_account_balance: env::account_balance(),
-            total_staked_balance: 0,
-            total_stake_shares: 0,
+            last_account_balance: account_balance,
+            total_staked_balance: account_balance,
+            total_stake_shares: NumStakeShares::from(account_balance),
             reward_fee_fraction,
             accounts: Map::new(b"u".to_vec()),
         }
@@ -176,24 +194,21 @@ impl StakingContract {
         // Old total amount.
         let last_total_balance = self.last_account_balance + self.last_locked_account_balance;
 
-        // TODO: Verify if the reward can become negative.
-        let total_reward = total_balance.saturating_sub(last_total_balance);
+        assert!(
+            total_balance >= last_total_balance,
+            "The new total balance should not be less than the old total balance"
+        );
+        let total_reward = total_balance - last_total_balance;
         if total_reward > 0 {
-            // The validation fee that the contract owner takes. If no one else is actively staking,
-            // the owner takes the full reward. This may happen due to gas rebate or when everyone
-            // else has unstaked.
-            let owners_fee = if self.total_stake_shares > 0 {
-                self.reward_fee_fraction.multiply(total_reward)
-            } else {
-                total_reward
-            };
+            // The validation fee that the contract owner takes.
+            let owners_fee = self.reward_fee_fraction.multiply(total_reward);
 
             // Distributing the remaining reward to the delegators first.
             let remaining_reward = total_reward - owners_fee;
             self.total_staked_balance += remaining_reward;
 
             // Now buying "stake" shares for the contract owner at the new shares price.
-            let num_shares = self.num_shares_from_amount_rounded_up(owners_fee);
+            let num_shares = self.num_shares_from_staked_amount_rounded_down(owners_fee);
             if num_shares > 0 {
                 // Updating owner's inner account
                 let owner_id = self.owner_id.clone();
@@ -213,13 +228,7 @@ impl StakingContract {
                 .as_bytes(),
             );
             if num_shares > 0 {
-                env::log(
-                    format!(
-                        "Total rewards fee is {} tokens or {} stake shares.",
-                        owners_fee, num_shares
-                    )
-                    .as_bytes(),
-                );
+                env::log(format!("Total rewards fee is {} stake shares.", num_shares).as_bytes());
             }
         }
 
@@ -298,9 +307,18 @@ impl StakingContract {
 
         // Calculate the number of "stake" shares that the account will receive for staking the
         // given amount.
-        // NOTE: Number of shares the account gets is rounded up, but the gas rebate within
-        // contract will compensate for the rounding errors.
-        let num_shares = self.num_shares_from_amount_rounded_up(amount);
+        let num_shares = self.num_shares_from_staked_amount_rounded_down(amount);
+        assert!(
+            num_shares > 0,
+            "The calculated number of \"stake\" shares received for staking should be positive"
+        );
+        // NOTE: We round the staked amount corresponding to the given number of shares down, to
+        // avoid overcharging the account owner. The maximum amount difference can be 1 yocto NEAR.
+        let amount = self.staked_amount_from_num_shares_rounded_down(num_shares);
+        assert!(
+            amount > 0,
+            "Invariant violation. Calculated staked amount be positive, because \"stake\" share price should be at least 1"
+        );
 
         assert!(
             account.unstaked >= amount,
@@ -348,13 +366,25 @@ impl StakingContract {
             "The contract doesn't have staked balance"
         );
         // Calculate the number of shares required to unstake the given amount.
-        // NOTE: The number of shares the account will pay is rounded up, to avoid giving extra
-        // amount.
-        let num_shares = self.num_shares_from_amount_rounded_up(amount);
+        // NOTE: The number of shares the account will pay is rounded up.
+        let num_shares = self.num_shares_from_staked_amount_rounded_up(amount);
+        assert!(
+            num_shares > 0,
+            "Invariant violation. The calculated number of \"stake\" shares for unstaking should be positive"
+        );
         assert!(
             account.stake_shares >= num_shares,
             "Not enough staked balance to unstake"
         );
+
+        // Calculating the amount of tokens the account will unstake corresponding to the given
+        // number of shares, rounding up.
+        let amount = self.staked_amount_from_num_shares_rounded_up(num_shares);
+        assert!(
+            amount > 0,
+            "Invariant violation. Calculated staked amount be positive, because \"stake\" share price should be at least 1"
+        );
+
         account.stake_shares -= num_shares;
         account.unstaked += amount;
         account.unstaked_available_epoch_height = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
@@ -416,16 +446,8 @@ impl StakingContract {
     /// NOTE: This is computed from the amount of "stake" shares the given account has and the
     /// current amount of total staked balance and total stake shares on the account.
     pub fn get_account_staked_balance(&self, account_id: AccountId) -> U128 {
-        if self.total_stake_shares > 0 {
-            // Rounding down
-            (U256::from(self.total_staked_balance)
-                * U256::from(self.get_account(&account_id).stake_shares)
-                / U256::from(self.total_stake_shares))
-            .as_u128()
+        self.staked_amount_from_num_shares_rounded_down(self.get_account(&account_id).stake_shares)
             .into()
-        } else {
-            0.into()
-        }
     }
 
     /// Returns the total balance of the given account (including staked and unstaked balances).
@@ -518,7 +540,7 @@ impl StakingContract {
         }
     }
 
-    /// Returns the number of "stake" shares rounded up corresponding to the given staked balance
+    /// Returns the number of "stake" shares rounded down corresponding to the given staked balance
     /// amount.
     ///
     /// price = total_staked / total_shares
@@ -527,14 +549,53 @@ impl StakingContract {
     /// (total_staked + amount) * total_shares = total_staked * (total_shares + num_shares)
     /// amount * total_shares = total_staked * num_shares
     /// num_shares = amount * total_shares / total_staked
+    fn num_shares_from_staked_amount_rounded_down(&self, amount: Balance) -> NumStakeShares {
+        assert!(
+            self.total_staked_balance > 0,
+            "The total staked balance can't be 0"
+        );
+        (U256::from(self.total_stake_shares) * U256::from(amount)
+            / U256::from(self.total_staked_balance))
+        .as_u128()
+    }
+
+    /// Returns the number of "stake" shares rounded up corresponding to the given staked balance
+    /// amount.
+    ///
     /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
-    fn num_shares_from_amount_rounded_up(&self, amount: Balance) -> Balance {
-        if self.total_staked_balance == 0 {
-            return amount;
-        }
+    fn num_shares_from_staked_amount_rounded_up(&self, amount: Balance) -> NumStakeShares {
+        assert!(
+            self.total_staked_balance > 0,
+            "The total staked balance can't be 0"
+        );
         ((U256::from(self.total_stake_shares) * U256::from(amount)
             + U256::from(self.total_staked_balance - 1))
             / U256::from(self.total_staked_balance))
+        .as_u128()
+    }
+
+    /// Returns the staked amount rounded down corresponding to the given number of "stake" shares.
+    fn staked_amount_from_num_shares_rounded_down(&self, num_shares: NumStakeShares) -> Balance {
+        assert!(
+            self.total_stake_shares > 0,
+            "The total number of stake shares can't be 0"
+        );
+        (U256::from(self.total_staked_balance) * U256::from(num_shares)
+            / U256::from(self.total_stake_shares))
+        .as_u128()
+    }
+
+    /// Returns the staked amount rounded up corresponding to the given number of "stake" shares.
+    ///
+    /// Rounding up division of `a / b` is done using `(a + b - 1) / b`.
+    fn staked_amount_from_num_shares_rounded_up(&self, num_shares: NumStakeShares) -> Balance {
+        assert!(
+            self.total_stake_shares > 0,
+            "The total number of stake shares can't be 0"
+        );
+        ((U256::from(self.total_staked_balance) * U256::from(num_shares)
+            + U256::from(self.total_stake_shares - 1))
+            / U256::from(self.total_stake_shares))
         .as_u128()
     }
 
@@ -587,6 +648,7 @@ mod tests {
         ) -> Self {
             testing_env!(VMContextBuilder::new()
                 .current_account_id(owner.clone())
+                .account_balance(ntoy(30))
                 .finish());
             Emulator {
                 contract: StakingContract::new(
@@ -595,7 +657,7 @@ mod tests {
                     reward_fee_fraction,
                 ),
                 epoch_height: 0,
-                amount: 0,
+                amount: ntoy(30),
                 locked_amount: 0,
             }
         }
@@ -680,14 +742,18 @@ mod tests {
             deposit_amount
         );
 
+        let locked_amount = emulator.locked_amount;
+        let n_locked_amount = yton(locked_amount);
         emulator.skip_epochs(10);
         // Overriding rewards (+ 100K reward)
-        emulator.locked_amount = deposit_amount + ntoy(100_000);
+        emulator.locked_amount = locked_amount + ntoy(100_000);
         emulator.update_context(bob(), 0);
         emulator.contract.ping();
+        let expected_amount = deposit_amount
+            + ntoy((yton(deposit_amount) * 90_000 + n_locked_amount / 2) / n_locked_amount);
         assert_eq_in_near!(
             emulator.contract.get_account_staked_balance(bob()).0,
-            deposit_amount + ntoy(90_000)
+            expected_amount
         );
         // Owner got 10% of the rewards
         assert_eq_in_near!(
@@ -695,21 +761,26 @@ mod tests {
             ntoy(10_000)
         );
 
+        let locked_amount = emulator.locked_amount;
+        let n_locked_amount = yton(locked_amount);
         emulator.skip_epochs(10);
         // Overriding rewards (another 100K reward)
-        emulator.locked_amount = deposit_amount + ntoy(100_000) + ntoy(100_000);
+        emulator.locked_amount = locked_amount + ntoy(100_000);
 
         emulator.update_context(bob(), 0);
         emulator.contract.ping();
-        // previous balance plus (1_090_000 / 1_100_000)% of the 90_000 reward (rounding to nearest).
+        // previous balance plus (1_090_000 / 1_100_030)% of the 90_000 reward (rounding to nearest).
         assert_eq_in_near!(
             emulator.contract.get_account_staked_balance(bob()).0,
-            deposit_amount + ntoy(90_000) + ntoy((1_090_000u128 * 90_000 + 550_000) / 1_100_000)
+            expected_amount
+                + ntoy((yton(expected_amount) * 90_000 + n_locked_amount / 2) / n_locked_amount)
         );
         // owner earns 10% with the fee and also small percentage from restaking.
         assert_eq_in_near!(
             emulator.contract.get_account_staked_balance(owner()).0,
-            ntoy(10_000) + ntoy(10_000) + ntoy((10_000u128 * 90_000 + 550_000) / 1_100_000)
+            ntoy(10_000)
+                + ntoy(10_000)
+                + ntoy((10_000u128 * 90_000 + n_locked_amount / 2) / n_locked_amount)
         );
     }
 
@@ -731,10 +802,11 @@ mod tests {
             emulator.contract.get_account_staked_balance(bob()).0,
             deposit_amount
         );
+        let locked_amount = emulator.locked_amount;
         // 10 epochs later, unstake half of the money.
         emulator.skip_epochs(10);
         // Overriding rewards
-        emulator.locked_amount = deposit_amount + ntoy(10);
+        emulator.locked_amount = locked_amount + ntoy(10);
         emulator.update_context(bob(), 0);
         emulator.contract.ping();
         assert_eq_in_near!(
@@ -754,7 +826,7 @@ mod tests {
         assert!(!emulator
             .contract
             .is_account_unstaked_balance_available(bob()),);
-        emulator.skip_epochs(3);
+        emulator.skip_epochs(4);
         emulator.update_context(bob(), 0);
         assert!(emulator
             .contract
