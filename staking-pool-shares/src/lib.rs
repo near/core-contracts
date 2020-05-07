@@ -1,7 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
-use near_sdk::json_types::{Base58PublicKey, U128};
-use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey};
+use near_sdk::json_types::{Base58PublicKey, U128, U64};
+use near_sdk::{
+    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
+};
 use serde::{Deserialize, Serialize};
 
 use uint::construct_uint;
@@ -10,6 +12,15 @@ use uint::construct_uint;
 const PING_GAS: u64 = 30_000_000_000_000;
 /// The amount of gas given to complete `internal_after_stake` call.
 const INTERNAL_AFTER_STAKE_GAS: u64 = 30_000_000_000_000;
+/// The amount of gas given to complete `internal_after_stake` call.
+const VOTE_GAS: u64 = 200_000_000_000_000;
+
+/// There is no deposit balance attached.
+const NO_DEPOSIT: Balance = 0;
+
+pub type ProposalId = U64;
+
+pub type AccountHash = Vec<u8>;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -77,8 +88,13 @@ pub struct StakingContract {
     /// The fraction of the reward that goes to the owner of the staking pool for running the
     /// validator node.
     pub reward_fee_fraction: RewardFeeFraction,
-    /// Persistent map of the account ID to the account.
-    pub accounts: Map<AccountId, Account>,
+    /// Persistent map from an account ID hash to the corresponding account.
+    pub accounts: Map<AccountHash, Account>,
+}
+
+/// Returns sha256 hash of the given account ID.
+fn hash_account_id(account_id: &AccountId) -> Vec<u8> {
+    env::sha256(account_id.as_bytes())
 }
 
 impl Default for StakingContract {
@@ -105,6 +121,13 @@ impl RewardFeeFraction {
     pub fn multiply(&self, value: Balance) -> Balance {
         (U256::from(self.numerator) * U256::from(value) / U256::from(self.denominator)).as_u128()
     }
+}
+
+/// Interface for a voting contract.
+#[ext_contract(ext_voting)]
+pub trait VoteContract {
+    /// Votes on the given proposal_id.
+    fn vote(&mut self, proposal_id: ProposalId);
 }
 
 #[near_bindgen]
@@ -465,6 +488,24 @@ impl StakingContract {
         self.maybe_restake();
     }
 
+    /// Owner's method.
+    /// Vote on a given proposal on a given voting contract account ID on behalf of the pool.
+    /// NOTE: This method allows the owner to call `vote(proposal_id: U64)` on any contract on
+    /// behalf of this staking pool.
+    pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) -> Promise {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner_id,
+            "Can only be called by the owner"
+        );
+        assert!(
+            env::is_valid_account_id(voting_account_id.as_bytes()),
+            "Invalid voting account ID"
+        );
+
+        ext_voting::vote(proposal_id, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
+    }
+
     /********************/
     /* Internal methods */
     /********************/
@@ -499,16 +540,18 @@ impl StakingContract {
 
     /// Inner method to get the given account or a new default value account.
     fn get_account(&self, account_id: &AccountId) -> Account {
-        self.accounts.get(account_id).unwrap_or_default()
+        self.accounts
+            .get(&hash_account_id(account_id))
+            .unwrap_or_default()
     }
 
     /// Inner method to get the save the given account for a given account ID.
     /// If the account balances are 0, the account is deleted instead to release storage.
     fn save_account(&mut self, account_id: &AccountId, account: &Account) {
         if account.unstaked > 0 || account.stake_shares > 0 {
-            self.accounts.insert(&account_id, &account);
+            self.accounts.insert(&hash_account_id(account_id), &account);
         } else {
-            self.accounts.remove(&account_id);
+            self.accounts.remove(&hash_account_id(account_id));
         }
     }
 }
