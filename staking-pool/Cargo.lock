@@ -407,7 +407,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "staking-pool-with-shares"
+name = "staking-pool"
 version = "0.1.0"
 dependencies = [
  "borsh",
