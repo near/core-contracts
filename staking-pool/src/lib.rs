@@ -134,8 +134,8 @@ impl RewardFeeFraction {
 /// Interface for a voting contract.
 #[ext_contract(ext_voting)]
 pub trait VoteContract {
-    /// Votes on the given proposal_id.
-    fn vote(&mut self, proposal_id: ProposalId);
+    /// Votes on the given proposal_id with the given stake.
+    fn vote(&mut self, proposal_id: ProposalId, stake: U128);
 }
 
 #[near_bindgen]
@@ -511,10 +511,16 @@ impl StakingContract {
     }
 
     /// Owner's method.
-    /// Vote on a given proposal on a given voting contract account ID on behalf of the pool.
-    /// NOTE: This method allows the owner to call `vote(proposal_id: U64)` on any contract on
-    /// behalf of this staking pool.
-    pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) -> Promise {
+    /// Vote on a given proposal with the given stake amount on a given voting contract account ID
+    /// on behalf of the pool.
+    /// NOTE: This method allows the owner to call `vote(proposal_id: U64, stake: U128)` on any
+    /// contract on behalf of this staking pool.
+    pub fn vote(
+        &mut self,
+        voting_account_id: AccountId,
+        proposal_id: ProposalId,
+        stake: U128,
+    ) -> Promise {
         assert_eq!(
             env::predecessor_account_id(),
             self.owner_id,
@@ -525,7 +531,7 @@ impl StakingContract {
             "Invalid voting account ID"
         );
 
-        ext_voting::vote(proposal_id, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
+        ext_voting::vote(proposal_id, stake, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
     }
 
     /********************/
