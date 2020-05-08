@@ -8,14 +8,6 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[dependencies]
-serde = { version = "*", features = ["derive"] }
-serde_json = "*"
-borsh = "*"
-near-sdk = "0.9.2"
-uint = { version = "0.8.3", default-features = false }
-wee_alloc = { version = "0.4.5", default-features = false, features = [] }
-
 [profile.release]
 codegen-units = 1
 # Tell `rustc` to optimize for small code size.
@@ -25,3 +17,31 @@ debug = false
 panic = "abort"
 overflow-checks = true
 
+[dependencies]
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+borsh = "*"
+near-sdk = "0.9.2"
+uint = { version = "0.8.3", default-features = false }
+wee_alloc = { version = "0.4.5", default-features = false, features = [] }
+
+[dev-dependencies]
+lazy_static = "1.4.0"
+
+[dev-dependencies.near-runtime-standalone]
+version = "0.1.0"
+git = "https://github.com/nearprotocol/nearcore.git"
+branch = "fckt/runtime-standalone"
+#path = "../../nearcore/runtime/runtime-standalone"
+
+[dev-dependencies.near-primitives]
+git = "https://github.com/nearprotocol/nearcore.git"
+branch = "fckt/runtime-standalone"
+version = "0.1.0"
+#path = "../../nearcore/core/primitives"
+
+[dev-dependencies.near-crypto]
+git = "https://github.com/nearprotocol/nearcore.git"
+branch = "fckt/runtime-standalone"
+version = "0.1.0"
+# path = "../../nearcore/core/crypto"
