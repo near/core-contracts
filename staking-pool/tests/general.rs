@@ -8,9 +8,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 mod utils;
 
-use near_primitives::{
-    types::{AccountId, Balance},
-};
+use near_primitives::types::{AccountId, Balance};
 use near_sdk::json_types::U128;
 use serde::de::DeserializeOwned;
 use serde_json::json;
