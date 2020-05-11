@@ -1,10 +1,121 @@
-# Example Staking / Delegation contract
+# Staking / Delegation contract
 
-*This is an experimental contract. Please use only on TestNet.*
-
-This contract provides a way for other users to delegate funds to a single staker.
+This contract provides a way for other users to delegate funds to a single validation node.
 
 Implements the https://github.com/nearprotocol/NEPs/pull/27 standard.
+
+There are 3 different roles:
+- The staking pool contract account `my_validator`. A key-less account with the contract that pools funds.
+- The owner of the staking contract `owner`. Owner runs the validator node on behalf of the staking pool account.
+- A delegator account `user1`. The account who wants to stake their fund to the pool.
+
+The owner can setup such contract and validate on behalf of this contract in their node.
+Any other user can send their tokens to the contract, which will be pooled together and increase the total stake.
+These users would accrue rewards (subtracted fees set by the owner).
+Then they can unstake and withdraw their balance after some unlocking period.
+
+## Staking pool implementation details
+
+For secure operation of the staking pool, the contract should not have any access keys.
+
+This staking contract pools together staked tokens and issues "stake" shares to the owners of these tokens.
+The price of a "stake" share can be defined as the total amount of staked tokens divided by the the total amount of "stake" shares.
+The number of "stake" shares is always less than the number of the staked tokens, so the price of single "stake" share is not less than `1`.
+
+### Initialization
+
+A contract has to be initialized with the following parameters:
+- `owner_id` - `string` the account ID of the contract owner. This account will be able to call owner-only methods. E.g. `owner`
+- `stake_public_key` - `string` the initial public key that will be used for staking on behalf of the contract's account in base58 ED25519 curve. E.g. `KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7`
+- `reward_fee_fraction` - `json serialized object` the initial value of the fraction of the reward that the owner charges delegators for running the node.
+The fraction is defined by the numerator and denumerator with `u32` types. E.g. `{numerator: 10, denominator: 100}` defines `10%` reward fee.
+The fraction can be at most `1`. The denumerator can't be `0`.
+
+During the initialization the contract checks validity of the input and initializes the contract.
+The contract shouldn't have locked balance during the initialization.
+All current balance is converted to shares and will be staked (after the next action).
+This balance can never be unstaked or withdrawn from the contract.
+It's used to maintain the minimum number of shares, as well as help pay for the potentially growing contract storage.
+
+### Delegator accounts
+
+The contract maintains information per delegator in the persistent map keyed by the hash of the delegator account ID.
+
+The information contains:
+- Unstaked balance of the account.
+- Number of "Stake" shares.
+- The minimum epoch height when the unstaked balance can be withdrawn.
+
+A delegator can do the following actions:
+
+**Deposit**
+When a delegator account first deposit funds to the contract, the internal account is created and credited with the
+attached amount of unstaked tokens.
+**Stake**
+When an account wants to stake a given amount, the contract calculates the number of "stake" shares (`num_shares`) and the actual rounded stake amount (`amount`).
+The unstaked balance of the account is decreased by `amount`, the number of "stake" shares of the account is increased by `num_shares`.
+The contract increases the total number of staked tokens and the total number of "stake" shares. Then the contract restakes.
+**Unstake**
+When an account wants to unstake a given amount, the contract calculates the number of "stake" shares needed (`num_shares`) and
+the actual required rounded unstake amount (`amount`).
+The unstaked balance of the account is increased by `amount`, the number of "stake" shares of the account is decreased by `num_shares`.
+The minimum epoch height when the account can withdraw is set to the current epoch height increased by `4`.
+The contract decreases the total number of staked tokens and the total number of "stake" shares. Then the contract restakes.
+**Withdraw**
+When an account wants to withdraw, the contract checks the minimum epoch height of this account and checks the amount.
+Then sends the transfer and decreases the unstaked balance of the account.
+**Ping**
+Calls the internal function to distribute rewards if the blockchain epoch switched. The contract will restake in this case.
+
+### Reward distribution
+
+Before every action the contract calls method `internal_ping`.
+This method distributes rewards towards active delegators when the blockchain epoch switches.
+The rewards might be given due to staking and also because the contract earns gas fee rebates for every function call.
+
+The method first checks that the current epoch is different from the last epoch, and if it's not changed exits the method.
+
+The reward are computed the following way. The contract keeps track of the last known total account balance.
+This balance consist of the initial contract balance, and all delegator account balances (including the owner) and all accumulated rewards.
+
+When the method is called the contract uses the current total account balance (without attached deposit) and the subtracts the last total account balance.
+The difference is the total reward that has to be distributed.
+
+The fraction of the reward is awarded to the contract owner. The fraction is configurable by the owner, but can't exceed 1.
+
+The remaining part of the reward is added to the total staked balance. This action increases the price of each "stake" share without
+changing the amount of "stake" shares owned by different accounts. Which is effectively distributing the reward based on the number of shares.
+
+The owner's reward is converted into "stake" shares at the new price and added to the owner's account.
+It's done similarly to `stake` method but without debiting the unstaked balance of owner's account.
+
+Once the rewards are distributed the contract remembers the new total balance.
+
+## Owner-only methods
+
+Contract owner can do the following:
+- Change public staking key. This action restakes with the new key.
+- Change reward fee fraction.
+- Vote on behalf of the pool. This is needed for the NEAR chain governence, and can be discussed in the following NEP: https://github.com/nearprotocol/NEPs/pull/62
+
+## Staking pool contract guarantees and invariants
+
+This staking pool implementation guarantees the required properties of the staking pool standard:
+
+- The contract can't lose or lock tokens of users.
+- If a user deposited X, the user should be able to withdraw at least X.
+- If a user successfully staked X, the user can unstake at least X.
+- The contract should lock unstaked funds for longer than 4 epochs.
+
+It also has inner invariants:
+
+- The staking pool contract is secure if it doesn't have any access keys.
+- The price of a "stake" is always at least `1`.
+- The price of a "stake" share never decreases.
+- The reward fee is a fraction be from `0` to `1` inclusive.
+- The owner can't withdraw funds from other delegators.
+- The owner can't delete the staking pool account.
+
 
 ## Pre-requisites
 
@@ -106,8 +217,7 @@ pub fn new(
     reward_fee_fraction: RewardFeeFraction,
 );
 
-/// Call to distribute rewards after the new epoch. It's automatically called before every
-/// action.
+/// Distributes rewards and restakes if needed.
 pub fn ping(&mut self);
 
 /// Deposits the attached amount into the inner account of the predecessor.
