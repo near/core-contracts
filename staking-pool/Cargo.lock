@@ -797,9 +797,9 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "futures"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c329ae8753502fb44ae4fc2b622fa2a94652c41e795143765ba0927f92ab780"
+checksum = "1e05b85ec287aac0dc34db7d4a569323df697f9c55b99b15d6b4ef8cde49f613"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -812,9 +812,9 @@ dependencies = [
 
 [[package]]
 name = "futures-channel"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0c77d04ce8edd9cb903932b608268b3fffec4163dc053b3b402bf47eac1f1a8"
+checksum = "f366ad74c28cca6ba456d95e6422883cfb4b252a83bed929c83abfdbbf2967d5"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -822,15 +822,15 @@ dependencies = [
 
 [[package]]
 name = "futures-core"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f25592f769825e89b92358db00d26f965761e094951ac44d3663ef25b7ac464a"
+checksum = "59f5fff90fd5d971f936ad674802482ba441b6f09ba5e15fd8b39145582ca399"
 
 [[package]]
 name = "futures-executor"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f674f3e1bcb15b37284a90cedf55afdba482ab061c407a9c0ebbd0f3109741ba"
+checksum = "10d6bb888be1153d3abeb9006b11b02cf5e9b209fda28693c31ae1e4e012e314"
 dependencies = [
  "futures-core",
  "futures-task",
@@ -839,15 +839,15 @@ dependencies = [
 
 [[package]]
 name = "futures-io"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a638959aa96152c7a4cddf50fcb1e3fede0583b27157c26e67d6f99904090dc6"
+checksum = "de27142b013a8e869c14957e6d2edeef89e97c289e69d042ee3a49acd8b51789"
 
 [[package]]
 name = "futures-macro"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a5081aa3de1f7542a794a397cde100ed903b0630152d0973479018fd85423a7"
+checksum = "d0b5a30a4328ab5473878237c447333c093297bded83a4983d10f4deea240d39"
 dependencies = [
  "proc-macro-hack",
  "proc-macro2",
@@ -857,21 +857,24 @@ dependencies = [
 
 [[package]]
 name = "futures-sink"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3466821b4bc114d95b087b850a724c6f83115e929bc88f1fa98a3304a944c8a6"
+checksum = "3f2032893cb734c7a05d85ce0cc8b8c4075278e93b24b66f9de99d6eb0fa8acc"
 
 [[package]]
 name = "futures-task"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0a34e53cf6cdcd0178aa573aed466b646eb3db769570841fda0c7ede375a27"
+checksum = "bdb66b5f09e22019b1ab0830f7785bcea8e7a42148683f99214f73f8ec21a626"
+dependencies = [
+ "once_cell",
+]
 
 [[package]]
 name = "futures-util"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22766cf25d64306bedf0384da004d05c9974ab104fcc4528f1236181c18004c5"
+checksum = "8764574ff08b701a084482c3c7031349104b07ac897393010494beaa18ce32c6"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -880,6 +883,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
+ "pin-project",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -1301,6 +1305,7 @@ dependencies = [
 [[package]]
 name = "near-actix-utils"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "actix",
 ]
@@ -1308,6 +1313,7 @@ dependencies = [
 [[package]]
 name = "near-chain"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "borsh",
  "cached",
@@ -1334,6 +1340,7 @@ dependencies = [
 [[package]]
 name = "near-chain-configs"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "chrono",
  "derive_more",
@@ -1349,6 +1356,7 @@ dependencies = [
 [[package]]
 name = "near-crypto"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "arrayref",
  "blake2",
@@ -1372,6 +1380,7 @@ dependencies = [
 [[package]]
 name = "near-logger-utils"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "near-actix-utils",
  "tracing-subscriber",
@@ -1380,6 +1389,7 @@ dependencies = [
 [[package]]
 name = "near-metrics"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "lazy_static",
  "log",
@@ -1389,6 +1399,7 @@ dependencies = [
 [[package]]
 name = "near-pool"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "borsh",
  "near-crypto",
@@ -1399,6 +1410,7 @@ dependencies = [
 [[package]]
 name = "near-primitives"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "actix",
  "base64",
@@ -1414,8 +1426,8 @@ dependencies = [
  "lazy_static",
  "log",
  "near-crypto",
- "near-rpc-error-macro 0.1.0",
- "near-vm-errors 0.8.0",
+ "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "num-rational",
  "rand",
  "reed-solomon-erasure",
@@ -1431,6 +1443,7 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-core"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1455,8 +1468,9 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-macro"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
- "near-rpc-error-core 0.1.0",
+ "near-rpc-error-core 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "proc-macro2",
  "quote",
  "serde",
@@ -1481,16 +1495,18 @@ dependencies = [
 [[package]]
 name = "near-runtime-configs"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "near-primitives",
- "near-runtime-fees 0.8.0",
- "near-vm-logic 0.8.0",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "serde",
 ]
 
 [[package]]
 name = "near-runtime-fees"
 version = "0.8.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "num-rational",
  "serde",
@@ -1508,6 +1524,7 @@ dependencies = [
 [[package]]
 name = "near-runtime-standalone"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "near-chain",
  "near-crypto",
@@ -1560,6 +1577,7 @@ dependencies = [
 [[package]]
 name = "near-store"
 version = "0.1.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "borsh",
  "byteorder",
@@ -1579,9 +1597,10 @@ dependencies = [
 [[package]]
 name = "near-vm-errors"
 version = "0.8.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "borsh",
- "near-rpc-error-macro 0.1.0",
+ "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "serde",
 ]
 
@@ -1599,12 +1618,13 @@ dependencies = [
 [[package]]
 name = "near-vm-logic"
 version = "0.8.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "base64",
  "bs58",
  "byteorder",
- "near-runtime-fees 0.8.0",
- "near-vm-errors 0.8.0",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "serde",
  "sha2",
  "sha3",
@@ -1629,11 +1649,12 @@ dependencies = [
 [[package]]
 name = "near-vm-runner"
 version = "0.8.0"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "cached",
- "near-runtime-fees 0.8.0",
- "near-vm-errors 0.8.0",
- "near-vm-logic 0.8.0",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "parity-wasm",
  "pwasm-utils",
  "wasmer-runtime",
@@ -1667,6 +1688,7 @@ dependencies = [
 [[package]]
 name = "node-runtime"
 version = "0.0.1"
+source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone#090635875137f31de81561d810e505a4699e77ae"
 dependencies = [
  "borsh",
  "byteorder",
@@ -1677,10 +1699,10 @@ dependencies = [
  "near-metrics",
  "near-primitives",
  "near-runtime-configs",
- "near-runtime-fees 0.8.0",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "near-store",
- "near-vm-errors 0.8.0",
- "near-vm-logic 0.8.0",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/runtime-standalone)",
  "near-vm-runner",
  "num-rational",
  "rand",
@@ -1867,18 +1889,18 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "pin-project"
-version = "0.4.13"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82c3bfbfb5bb42f99498c7234bbd768c220eb0cea6818259d0d18a1aa3d2595d"
+checksum = "81d480cb4e89522ccda96d0eed9af94180b7a5f93fb28f66e1fd7d68431663d1"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "0.4.13"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccbf6449dcfb18562c015526b085b8df1aa3cdab180af8ec2ebd300a3bd28f63"
+checksum = "a82996f11efccb19b685b14b5df818de31c1edcee3daa256ab5775dd98e72feb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1917,9 +1939,9 @@ checksum = "8e946095f9d3ed29ec38de908c22f95d9ac008e424c7bcae54c75a79c527c694"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.10"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df246d292ff63439fea9bc8c0a270bed0e390d5ebd4db4ba15aba81111b5abe3"
+checksum = "8872cf6f48eee44265156c111456a700ab3483686b3f96df4cf5481c89157319"
 dependencies = [
  "unicode-xid",
 ]
@@ -1960,6 +1982,29 @@ name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
+name = "quickcheck"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a44883e74aa97ad63db83c4bf8ca490f02b2fc02f92575e720c8551e843c945f"
+dependencies = [
+ "env_logger",
+ "log",
+ "rand",
+ "rand_core",
+]
+
+[[package]]
+name = "quickcheck_macros"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "608c156fd8e97febc07dc9c2e2c80bf74cfc6ef26893eae3daf8bc2bc94a4b7f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "quote"
@@ -2130,9 +2175,9 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.106"
+version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36df6ac6412072f67cf767ebbde4133a5b2e88e76dc6187fa7104cd16f783399"
+checksum = "99e7b308464d16b56eba9964e4972a3eee817760ab60d88c3f86e1fecb08204c"
 dependencies = [
  "serde_derive",
 ]
@@ -2158,9 +2203,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.106"
+version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e549e3abf4fb8621bd1609f11dfc9f5e50320802273b12f3811a67e6716ea6c"
+checksum = "818fbf6bfa9a42d3bfcaca148547aa00c7b915bec71d1757aa2d44ca68771984"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2169,9 +2214,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.52"
+version = "1.0.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7894c8ed05b7a3a279aeb79025fdec1d3158080b75b98a08faf2806bb799edd"
+checksum = "993948e75b189211a9b31a7528f950c6adc21f9720b6438ff80a7fa2f864cea2"
 dependencies = [
  "indexmap",
  "itoa",
@@ -2308,11 +2353,15 @@ name = "staking-pool"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "env_logger",
  "lazy_static",
+ "log",
  "near-crypto",
  "near-primitives",
  "near-runtime-standalone",
  "near-sdk",
+ "quickcheck",
+ "quickcheck_macros",
  "serde",
  "serde_json",
  "uint",
@@ -2354,9 +2403,9 @@ checksum = "7c65d530b10ccaeac294f349038a597e435b18fb456aadd0840a623f83b9e941"
 
 [[package]]
 name = "syn"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "410a7488c0a728c7ceb4ad59b9567eb4053d02e8cc7f5c0e0eeeb39518369213"
+checksum = "e8e5aa70697bb26ee62214ae3288465ecec0000f05182f039b477001f08f5ae7"
 dependencies = [
  "proc-macro2",
  "quote",
