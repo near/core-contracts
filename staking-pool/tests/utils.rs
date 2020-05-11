@@ -4,7 +4,7 @@ use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
     account::AccessKey,
     hash::CryptoHash,
-    transaction::{ExecutionOutcome, Transaction},
+    transaction::{ExecutionOutcome, ExecutionStatus, Transaction},
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::RuntimeStandalone;
@@ -52,7 +52,8 @@ impl ExternalUser {
             .add_key(new_signer.public_key(), AccessKey::full_access())
             .transfer(amount)
             .sign(&self.signer);
-        runtime.send_tx(tx);
+        let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         ExternalUser {
             account_id: new_account_id,
@@ -63,6 +64,7 @@ impl ExternalUser {
     pub fn pool_init_new(
         &self,
         runtime: &mut RuntimeStandalone,
+        amount: Balance,
         reward_fee_fraction: RewardFeeFraction,
     ) -> ExecutionOutcome {
         let args = json!({
@@ -77,11 +79,12 @@ impl ExternalUser {
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .create_account()
-            .transfer(ntoy(100))
+            .transfer(amount)
             .deploy_contract(POOL_WASM_BYTES.to_vec())
             .function_call("new".into(), args, 1000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         res
     }
@@ -96,6 +99,18 @@ impl ExternalUser {
             .function_call("deposit".into(), vec![], 10000000000000000, amount)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
+        runtime.process_all().unwrap();
+        res
+    }
+
+    pub fn pool_ping(&self, runtime: &mut RuntimeStandalone) -> ExecutionOutcome {
+        let tx = self
+            .new_tx(runtime, POOL_ACCOUNT_ID.into())
+            .function_call("ping".into(), vec![], 10000000000000000, 0)
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         res
     }
@@ -107,28 +122,31 @@ impl ExternalUser {
             .function_call("stake".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         res
     }
 
-    pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: U128) -> CryptoHash {
+    pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: U128) -> ExecutionOutcome {
         let args = json!({ "amount": amount }).to_string().as_bytes().to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("unstake".into(), args, 10000000000, 0)
+            .function_call("unstake".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
-        let res = runtime.send_tx(tx);
+        let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         res
     }
 
-    pub fn pool_withdraw(&self, runtime: &mut RuntimeStandalone, amount: U128) -> CryptoHash {
+    pub fn pool_withdraw(&self, runtime: &mut RuntimeStandalone, amount: U128) -> ExecutionOutcome {
         let args = json!({ "amount": amount }).to_string().as_bytes().to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("withdraw".into(), args, 10000000000, 0)
+            .function_call("withdraw".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
-        let res = runtime.send_tx(tx);
+        let res = runtime.resolve_tx(tx).unwrap();
+        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
         res
     }
