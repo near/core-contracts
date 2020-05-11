@@ -7,7 +7,7 @@ use near_primitives::{
     transaction::{ExecutionOutcome, ExecutionStatus, Transaction},
     types::{AccountId, Balance},
 };
-use near_runtime_standalone::{RuntimeStandalone, init_runtime_and_signer};
+use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
 use near_sdk::json_types::U128;
 use serde_json::json;
 use staking_pool::RewardFeeFraction;
@@ -116,7 +116,10 @@ impl ExternalUser {
     }
 
     pub fn pool_stake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
-        let args = json!({ "amount": format!("{}", amount) }).to_string().as_bytes().to_vec();
+        let args = json!({ "amount": format!("{}", amount) })
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .function_call("stake".into(), args, 10000000000000000, 0)
@@ -128,7 +131,10 @@ impl ExternalUser {
     }
 
     pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
-        let args = json!({ "amount": format!("{}", amount) }).to_string().as_bytes().to_vec();
+        let args = json!({ "amount": format!("{}", amount) })
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .function_call("unstake".into(), args, 10000000000000000, 0)
@@ -140,7 +146,10 @@ impl ExternalUser {
     }
 
     pub fn pool_withdraw(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
-        let args = json!({ "amount": format!("{}", amount) }).to_string().as_bytes().to_vec();
+        let args = json!({ "amount": format!("{}", amount) })
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .function_call("withdraw".into(), args, 10000000000000000, 0)
@@ -198,15 +207,14 @@ impl ExternalUser {
 pub fn init_pool(initial_transfer: Balance) -> (RuntimeStandalone, ExternalUser) {
     let (mut runtime, signer) = init_runtime_and_signer(&"root".into());
     let root = ExternalUser::new("root".into(), signer);
-    
+
     root.pool_init_new(
         &mut runtime,
         initial_transfer,
         RewardFeeFraction {
             numerator: 10,
             denominator: 100,
-        }
+        },
     );
-    return (runtime, root)
-    
+    return (runtime, root);
 }

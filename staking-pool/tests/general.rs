@@ -1,4 +1,6 @@
 extern crate env_logger;
+// #[war]
+#[allow(unused_imports)]
 #[macro_use]
 extern crate log;
 extern crate quickcheck;
@@ -7,16 +9,14 @@ extern crate quickcheck_macros;
 mod utils;
 
 use near_primitives::{
-    transaction::{ExecutionStatus},
     types::{AccountId, Balance},
 };
 use near_sdk::json_types::U128;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use staking_pool::RewardFeeFraction;
-use utils::{ntoy, ExternalUser, POOL_ACCOUNT_ID, init_pool};
+use utils::{init_pool, ntoy, POOL_ACCOUNT_ID};
 
-use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
+use near_runtime_standalone::RuntimeStandalone;
 
 fn call_view<I: ToString, O: DeserializeOwned>(
     runtime: &mut RuntimeStandalone,
@@ -96,7 +96,7 @@ fn qc_test_deposit_withdraw_standalone(inital_balance: Balance) -> bool {
     let _res = bob.get_account_unstaked_balance(&runtime);
 
     assert_eq!(_res, deposit_amount);
-    let outcome = bob.pool_withdraw(&mut runtime, deposit_amount);
+    let _outcome = bob.pool_withdraw(&mut runtime, deposit_amount);
     // match outcome.status {
     //     ExecutionStatus::Failure(err) => panic!(err),
     //     ExecutionStatus::SuccessValue(val) => info!("{}", String::from_utf8(val).unwrap()),
