@@ -48,23 +48,32 @@ The information contains:
 
 A delegator can do the following actions:
 
-**Deposit**
+#### Deposit
+
 When a delegator account first deposit funds to the contract, the internal account is created and credited with the
 attached amount of unstaked tokens.
-**Stake**
+
+#### Stake
+
 When an account wants to stake a given amount, the contract calculates the number of "stake" shares (`num_shares`) and the actual rounded stake amount (`amount`).
 The unstaked balance of the account is decreased by `amount`, the number of "stake" shares of the account is increased by `num_shares`.
 The contract increases the total number of staked tokens and the total number of "stake" shares. Then the contract restakes.
-**Unstake**
+
+#### Unstake
+
 When an account wants to unstake a given amount, the contract calculates the number of "stake" shares needed (`num_shares`) and
 the actual required rounded unstake amount (`amount`).
 The unstaked balance of the account is increased by `amount`, the number of "stake" shares of the account is decreased by `num_shares`.
 The minimum epoch height when the account can withdraw is set to the current epoch height increased by `4`.
 The contract decreases the total number of staked tokens and the total number of "stake" shares. Then the contract restakes.
-**Withdraw**
+
+#### Withdraw
+
 When an account wants to withdraw, the contract checks the minimum epoch height of this account and checks the amount.
 Then sends the transfer and decreases the unstaked balance of the account.
-**Ping**
+
+#### Ping
+
 Calls the internal function to distribute rewards if the blockchain epoch switched. The contract will restake in this case.
 
 ### Reward distribution
