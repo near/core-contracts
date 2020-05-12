@@ -39,7 +39,8 @@ fn call_pool<I: ToString, O: DeserializeOwned>(
     call_view(runtime, &POOL_ACCOUNT_ID.into(), method, args)
 }
 
-fn check_invariants(runtime: &mut RuntimeStandalone, users: &[AccountId]) {}
+#[allow(dead_code)]
+fn check_invariants(_runtime: &mut RuntimeStandalone, _users: &[AccountId]) {}
 
 #[quickcheck]
 fn qc_should_stake(initial_balance: Balance) -> bool {

@@ -30,10 +30,13 @@ impl ExternalUser {
     pub fn new(account_id: AccountId, signer: InMemorySigner) -> Self {
         Self { account_id, signer }
     }
+
+    #[allow(dead_code)]
     pub fn account_id(&self) -> &AccountId {
         &self.account_id
     }
 
+    #[allow(dead_code)]
     pub fn signer(&self) -> &InMemorySigner {
         &self.signer
     }
@@ -130,6 +133,7 @@ impl ExternalUser {
         res
     }
 
+    #[allow(dead_code)]
     pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
         let args = json!({ "amount": format!("{}", amount) })
             .to_string()
@@ -160,6 +164,7 @@ impl ExternalUser {
         res
     }
 
+    #[allow(dead_code)]
     pub fn get_account_staked_balance(&self, runtime: &RuntimeStandalone) -> Balance {
         let balance = runtime
             .view_method_call(

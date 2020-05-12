@@ -503,9 +503,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "2.33.0"
+version = "2.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5067f5bb2d80ef5d68b4c87db81601f0b75bca627bc2ef76b141d7b846a3c6d9"
+checksum = "bdfa80d47f954d53a35a64987ca1422f495b8d6483c0fe9f7117b36c2a792129"
 dependencies = [
  "ansi_term",
  "atty",
@@ -1305,7 +1305,7 @@ dependencies = [
 [[package]]
 name = "near-actix-utils"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "actix",
 ]
@@ -1313,7 +1313,7 @@ dependencies = [
 [[package]]
 name = "near-chain"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "borsh",
  "cached",
@@ -1340,7 +1340,7 @@ dependencies = [
 [[package]]
 name = "near-chain-configs"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "chrono",
  "derive_more",
@@ -1356,7 +1356,7 @@ dependencies = [
 [[package]]
 name = "near-crypto"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "arrayref",
  "blake2",
@@ -1380,7 +1380,7 @@ dependencies = [
 [[package]]
 name = "near-logger-utils"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "near-actix-utils",
  "tracing-subscriber",
@@ -1389,7 +1389,7 @@ dependencies = [
 [[package]]
 name = "near-metrics"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "lazy_static",
  "log",
@@ -1399,7 +1399,7 @@ dependencies = [
 [[package]]
 name = "near-pool"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "borsh",
  "near-crypto",
@@ -1410,7 +1410,7 @@ dependencies = [
 [[package]]
 name = "near-primitives"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "actix",
  "base64",
@@ -1426,8 +1426,8 @@ dependencies = [
  "lazy_static",
  "log",
  "near-crypto",
- "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "num-rational",
  "rand",
  "reed-solomon-erasure",
@@ -1443,7 +1443,7 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-core"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1468,9 +1468,9 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-macro"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
- "near-rpc-error-core 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-rpc-error-core 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "proc-macro2",
  "quote",
  "serde",
@@ -1495,18 +1495,18 @@ dependencies = [
 [[package]]
 name = "near-runtime-configs"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "near-primitives",
- "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "serde",
 ]
 
 [[package]]
 name = "near-runtime-fees"
 version = "0.8.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "num-rational",
  "serde",
@@ -1524,7 +1524,7 @@ dependencies = [
 [[package]]
 name = "near-runtime-standalone"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "near-chain",
  "near-crypto",
@@ -1577,7 +1577,7 @@ dependencies = [
 [[package]]
 name = "near-store"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "borsh",
  "byteorder",
@@ -1597,10 +1597,10 @@ dependencies = [
 [[package]]
 name = "near-vm-errors"
 version = "0.8.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "borsh",
- "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "serde",
 ]
 
@@ -1618,13 +1618,13 @@ dependencies = [
 [[package]]
 name = "near-vm-logic"
 version = "0.8.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "base64",
  "bs58",
  "byteorder",
- "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "serde",
  "sha2",
  "sha3",
@@ -1649,12 +1649,12 @@ dependencies = [
 [[package]]
 name = "near-vm-runner"
 version = "0.8.0"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "cached",
- "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "parity-wasm",
  "pwasm-utils",
  "wasmer-runtime",
@@ -1688,7 +1688,7 @@ dependencies = [
 [[package]]
 name = "node-runtime"
 version = "0.0.1"
-source = "git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch#538a8218d218944c5ae640e9e55aef4c1ca27db9"
+source = "git+https://github.com/nearprotocol/nearcore.git#b2210c7fa282612858aaca3b1c996a00e709f779"
 dependencies = [
  "borsh",
  "byteorder",
@@ -1699,10 +1699,10 @@ dependencies = [
  "near-metrics",
  "near-primitives",
  "near-runtime-configs",
- "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-runtime-fees 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "near-store",
- "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
- "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git?branch=fckt/standalone-runitme-patch)",
+ "near-vm-errors 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-logic 0.8.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "near-vm-runner",
  "num-rational",
  "rand",
@@ -2473,9 +2473,9 @@ dependencies = [
 
 [[package]]
 name = "threadpool"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8dae184447c15d5a6916d973c642aec485105a13cd238192a6927ae3e077d66"
+checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
 dependencies = [
  "num_cpus",
 ]
