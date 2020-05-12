@@ -163,7 +163,7 @@ impl StakingContract {
             0,
             "The staking pool shouldn't be staking at the initialization"
         );
-        Self {
+        let mut this = Self {
             owner_id,
             stake_public_key: stake_public_key.into(),
             last_epoch_height: env::epoch_height(),
@@ -172,7 +172,10 @@ impl StakingContract {
             total_stake_shares: NumStakeShares::from(total_staked_balance),
             reward_fee_fraction,
             accounts: Map::new(b"u".to_vec()),
-        }
+        };
+        // Staking with the current pool to make sure the staking key is valid.
+        this.restake();
+        this
     }
 
     /// Distributes rewards and restakes if needed.
@@ -376,6 +379,8 @@ impl StakingContract {
 
     /// Restakes the current `total_staked_balance` again.
     fn restake(&mut self) {
+        // Stakes with the staking public key. If the key is invalid the entire function call
+        // will be rolled back. See https://github.com/nearprotocol/nearcore/issues/2636
         Promise::new(env::current_account_id())
             .stake(self.total_staked_balance, self.stake_public_key.clone());
     }

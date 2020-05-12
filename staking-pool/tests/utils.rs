@@ -84,7 +84,7 @@ impl ExternalUser {
             .create_account()
             .transfer(amount)
             .deploy_contract(POOL_WASM_BYTES.to_vec())
-            .function_call("new".into(), args, 1000000000000, 0)
+            .function_call("new".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
