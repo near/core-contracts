@@ -7,17 +7,16 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 mod utils;
-use quickcheck::TestResult;
 
 use near_primitives::{
-    types::{AccountId, Balance},
+    errors::TxExecutionError,
     transaction::ExecutionStatus,
-    errors::TxExecutionError
+    types::{AccountId, Balance},
 };
 use near_sdk::json_types::U128;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use utils::{init_pool, ntoy, POOL_ACCOUNT_ID, ExternalUser};
+use utils::{init_pool, ntoy, ExternalUser, POOL_ACCOUNT_ID};
 
 use near_runtime_standalone::RuntimeStandalone;
 
@@ -91,7 +90,11 @@ fn qc_should_stake(initial_balance: Balance) -> bool {
 //     }
 // }
 
-fn create_with_user(initial_transfer: Balance, account_id: AccountId, initial_balance: Balance) -> (RuntimeStandalone, ExternalUser, ExternalUser) {
+fn create_with_user(
+    initial_transfer: Balance,
+    account_id: AccountId,
+    initial_balance: Balance,
+) -> (RuntimeStandalone, ExternalUser, ExternalUser) {
     let (mut runtime, root) = init_pool(initial_transfer);
     let bob = root.create_external(&mut runtime, account_id, initial_balance);
     (runtime, root, bob)
@@ -135,12 +138,11 @@ fn qc_test_stake_unstake(initial_balance: Balance) -> bool {
     assert_eq!(bob.get_account_unstaked_balance(&runtime), deposit_amount);
     let mut res = bob.pool_withdraw(&mut runtime, amount_to_stake);
     match res.status {
-        ExecutionStatus::Failure(
-            TxExecutionError::ActionError(_)) => (),
-        _ => panic!("shouldn't withdraw before epoch incremented")
+        ExecutionStatus::Failure(TxExecutionError::ActionError(_)) => (),
+        _ => panic!("shouldn't withdraw before epoch incremented"),
     };
     runtime.produce_blocks(3).unwrap();
     res = bob.pool_withdraw(&mut runtime, amount_to_stake);
-    assert!(!matches!(res.status,  ExecutionStatus::Failure(_)));
+    assert!(!matches!(res.status, ExecutionStatus::Failure(_)));
     return true;
 }
