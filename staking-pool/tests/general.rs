@@ -7,12 +7,17 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 mod utils;
+use quickcheck::TestResult;
 
-use near_primitives::types::{AccountId, Balance};
+use near_primitives::{
+    types::{AccountId, Balance},
+    transaction::ExecutionStatus,
+    errors::TxExecutionError
+};
 use near_sdk::json_types::U128;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use utils::{init_pool, ntoy, POOL_ACCOUNT_ID};
+use utils::{init_pool, ntoy, POOL_ACCOUNT_ID, ExternalUser};
 
 use near_runtime_standalone::RuntimeStandalone;
 
@@ -86,11 +91,22 @@ fn qc_should_stake(initial_balance: Balance) -> bool {
 //     }
 // }
 
+fn create_with_user(initial_transfer: Balance, account_id: AccountId, initial_balance: Balance) -> (RuntimeStandalone, ExternalUser, ExternalUser) {
+    let (mut runtime, root) = init_pool(initial_transfer);
+    let bob = root.create_external(&mut runtime, account_id, initial_balance);
+    (runtime, root, bob)
+}
+
+fn create_default(initial_balance: Balance) -> (RuntimeStandalone, ExternalUser, ExternalUser) {
+    create_with_user(ntoy(100), "bob".into(), initial_balance)
+}
+
 #[quickcheck]
-fn qc_test_deposit_withdraw_standalone(inital_balance: Balance) -> bool {
-    let deposit_amount = ntoy(inital_balance);
-    let (mut runtime, root) = init_pool(ntoy(100));
-    let bob = root.create_external(&mut runtime, "bob".into(), ntoy(100));
+fn qc_test_deposit_withdraw_standalone(initial_balance: Balance) -> bool {
+    let deposit_amount = ntoy(initial_balance + 1);
+    let (mut runtime, _root, bob) = create_default(deposit_amount * 2);
+    // let (mut runtime, root) = init_pool();
+    // let bob = root.create_external(&mut runtime, "bob".into(), ntoy(100));
     bob.pool_deposit(&mut runtime, deposit_amount);
     let _res = bob.get_account_unstaked_balance(&runtime);
 
@@ -102,4 +118,29 @@ fn qc_test_deposit_withdraw_standalone(inital_balance: Balance) -> bool {
     //     _ => ()
     // };
     bob.get_account_unstaked_balance(&runtime) == 0u128
+}
+
+#[quickcheck]
+fn qc_test_stake_unstake(initial_balance: Balance) -> bool {
+    let deposit_amount = ntoy(initial_balance + 1);
+    let (mut runtime, _root, bob) = create_default(ntoy(100) + deposit_amount);
+    // let (mut runtime, root) = init_pool();
+    // let bob = root.create_external(&mut runtime, "bob".into(), ntoy(100));
+    bob.pool_deposit(&mut runtime, deposit_amount);
+    let amount_to_stake = deposit_amount / 2;
+    let _outcome = bob.pool_stake(&mut runtime, amount_to_stake);
+    assert_eq!(bob.get_account_staked_balance(&runtime), amount_to_stake);
+    bob.pool_unstake(&mut runtime, amount_to_stake);
+    assert_eq!(bob.get_account_staked_balance(&runtime), 0);
+    assert_eq!(bob.get_account_unstaked_balance(&runtime), deposit_amount);
+    let mut res = bob.pool_withdraw(&mut runtime, amount_to_stake);
+    match res.status {
+        ExecutionStatus::Failure(
+            TxExecutionError::ActionError(_)) => (),
+        _ => panic!("shouldn't withdraw before epoch incremented")
+    };
+    runtime.produce_blocks(3).unwrap();
+    res = bob.pool_withdraw(&mut runtime, amount_to_stake);
+    assert!(!matches!(res.status,  ExecutionStatus::Failure(_)));
+    return true;
 }
