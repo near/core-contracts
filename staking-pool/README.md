@@ -7,7 +7,7 @@ Implements the https://github.com/nearprotocol/NEPs/pull/27 standard.
 There are three different roles:
 - The staking pool contract account `my_validator`. A key-less account with the contract that pools funds.
 - The owner of the staking contract `owner`. Owner runs the validator node on behalf of the staking pool account.
-- A delegator account `user1`. The account who wants to stake their fund to the pool.
+- Delegator accounts `user1`, `user2`, etc. Accounts that want to stake their funds with the pool.
 
 The owner can setup such contract and validate on behalf of this contract in their node.
 Any other user can send their tokens to the contract, which will be pooled together and increase the total stake.
@@ -17,6 +17,7 @@ Then they can unstake and withdraw their balance after some unlocking period.
 ## Staking pool implementation details
 
 For secure operation of the staking pool, the contract should not have any access keys.
+Otherwise the contract account may issue a transaction that can violate the contract guarantees.
 
 After users deposit tokens to the contract, they can stake some or all of them to receive "stake" shares.
 The price of a "stake" share can be defined as the total amount of staked tokens divided by the the total amount of "stake" shares.
@@ -33,7 +34,12 @@ The fraction can be at most `1`. The denumerator can't be `0`.
 
 During the initialization the contract checks validity of the input and initializes the contract.
 The contract shouldn't have locked balance during the initialization.
-The current total balance is converted to shares and will be staked (after the next action).
+
+At the initialization the contract allocates one trillion yocto NEAR tokens towards "stake" share price guarantees.
+This fund is later used to adjust the the amount of staked and unstaked tokens due to rounding error.
+For each stake and unstake action, the contract may spend at most 1 yocto NEAR from this fund (implicitly).
+
+The current total balance (except for the "stake" share price guarantee amount) is converted to shares and will be staked (after the next action).
 This balance can never be unstaked or withdrawn from the contract.
 It's used to maintain the minimum number of shares, as well as help pay for the potentially growing contract storage.
 
@@ -62,7 +68,7 @@ The contract increases the total number of staked tokens and the total number of
 #### Unstake
 
 When an account wants to unstake a given amount, the contract calculates the number of "stake" shares needed (`num_shares`) and
-the actual required rounded unstake amount (`amount`).
+the actual required rounded unstake amount (`amount`). It's calculated based on the current total price of "stake" shares.
 The unstaked balance of the account is increased by `amount`, the number of "stake" shares of the account is decreased by `num_shares`.
 The minimum epoch height when the account can withdraw is set to the current epoch height increased by `4`.
 The contract decreases the total number of staked tokens and the total number of "stake" shares. Then the contract restakes.
@@ -86,6 +92,7 @@ The method first checks that the current epoch is different from the last epoch,
 
 The reward are computed the following way. The contract keeps track of the last known total account balance.
 This balance consist of the initial contract balance, and all delegator account balances (including the owner) and all accumulated rewards.
+(Validation rewards are added automatically at the beginning of the epoch, while contract execution gas rebates are added after each transaction)
 
 When the method is called the contract uses the current total account balance (without attached deposit) and the subtracts the last total account balance.
 The difference is the total reward that has to be distributed.
@@ -114,7 +121,7 @@ This staking pool implementation guarantees the required properties of the staki
 - The contract can't lose or lock tokens of users.
 - If a user deposited X, the user should be able to withdraw at least X.
 - If a user successfully staked X, the user can unstake at least X.
-- The contract should lock unstaked funds for longer than 4 epochs.
+- The contract should not lock unstaked funds for longer than 4 epochs after unstake action.
 
 It also has inner invariants:
 
