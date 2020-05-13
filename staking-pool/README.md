@@ -4,21 +4,21 @@ This contract provides a way for other users to delegate funds to a single valid
 
 Implements the https://github.com/nearprotocol/NEPs/pull/27 standard.
 
-There are 3 different roles:
+There are three different roles:
 - The staking pool contract account `my_validator`. A key-less account with the contract that pools funds.
 - The owner of the staking contract `owner`. Owner runs the validator node on behalf of the staking pool account.
 - A delegator account `user1`. The account who wants to stake their fund to the pool.
 
 The owner can setup such contract and validate on behalf of this contract in their node.
 Any other user can send their tokens to the contract, which will be pooled together and increase the total stake.
-These users would accrue rewards (subtracted fees set by the owner).
+These users accrue rewards (subtracted fees set by the owner).
 Then they can unstake and withdraw their balance after some unlocking period.
 
 ## Staking pool implementation details
 
 For secure operation of the staking pool, the contract should not have any access keys.
 
-This staking contract pools together staked tokens and issues "stake" shares to the owners of these tokens.
+After users deposit tokens to the contract, they can stake some or all of them to receive "stake" shares.
 The price of a "stake" share can be defined as the total amount of staked tokens divided by the the total amount of "stake" shares.
 The number of "stake" shares is always less than the number of the staked tokens, so the price of single "stake" share is not less than `1`.
 
@@ -33,24 +33,24 @@ The fraction can be at most `1`. The denumerator can't be `0`.
 
 During the initialization the contract checks validity of the input and initializes the contract.
 The contract shouldn't have locked balance during the initialization.
-All current balance is converted to shares and will be staked (after the next action).
+The current total balance is converted to shares and will be staked (after the next action).
 This balance can never be unstaked or withdrawn from the contract.
 It's used to maintain the minimum number of shares, as well as help pay for the potentially growing contract storage.
 
 ### Delegator accounts
 
-The contract maintains information per delegator in the persistent map keyed by the hash of the delegator account ID.
+The contract maintains account information per delegator associated with the hash of the delegator's account ID.
 
 The information contains:
 - Unstaked balance of the account.
-- Number of "Stake" shares.
-- The minimum epoch height when the unstaked balance can be withdrawn.
+- Number of "stake" shares.
+- The minimum epoch height when the unstaked balance can be withdrawn. Initially zero.
 
 A delegator can do the following actions:
 
 #### Deposit
 
-When a delegator account first deposit funds to the contract, the internal account is created and credited with the
+When a delegator account first deposits funds to the contract, the internal account is created and credited with the
 attached amount of unstaked tokens.
 
 #### Stake
