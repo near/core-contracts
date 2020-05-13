@@ -1,14 +1,17 @@
+#![allow(dead_code)]
 extern crate staking_pool;
 
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
-    account::AccessKey,
+    account::{AccessKey, Account},
+    errors::{RuntimeError, TxExecutionError},
     hash::CryptoHash,
     transaction::{ExecutionOutcome, ExecutionStatus, Transaction},
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
 use near_sdk::json_types::U128;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use staking_pool::RewardFeeFraction;
 
@@ -20,6 +23,17 @@ pub fn ntoy(near_amount: Balance) -> Balance {
 
 lazy_static::lazy_static! {
     static ref POOL_WASM_BYTES: &'static [u8] = include_bytes!("../res/staking_pool.wasm").as_ref();
+}
+
+type TxResult = Result<ExecutionOutcome, ExecutionOutcome>;
+
+fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
+    match outcome.status {
+        ExecutionStatus::SuccessValue(_) => Ok(outcome),
+        ExecutionStatus::Failure(_) => Err(outcome),
+        ExecutionStatus::SuccessReceiptId(_) => panic!("Unresolved ExecutionOutcome run runitme.resolve(tx) to resolve the filnal outcome of tx"),
+        ExecutionStatus::Unknown => unreachable!()
+    }
 }
 pub struct ExternalUser {
     account_id: AccountId,
@@ -41,12 +55,18 @@ impl ExternalUser {
         &self.signer
     }
 
+    pub fn account(&self, runtime: &mut RuntimeStandalone) -> Account {
+        runtime
+            .view_account(&self.account_id)
+            .expect("Account should be there")
+    }
+
     pub fn create_external(
         &self,
         runtime: &mut RuntimeStandalone,
         new_account_id: AccountId,
         amount: Balance,
-    ) -> ExternalUser {
+    ) -> Result<ExternalUser, ExecutionOutcome> {
         let new_signer =
             InMemorySigner::from_seed(&new_account_id, KeyType::ED25519, &new_account_id);
         let tx = self
@@ -55,12 +75,24 @@ impl ExternalUser {
             .add_key(new_signer.public_key(), AccessKey::full_access())
             .transfer(amount)
             .sign(&self.signer);
-        let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
-        runtime.process_all().unwrap();
-        ExternalUser {
-            account_id: new_account_id,
-            signer: new_signer,
+        let res = runtime.resolve_tx(tx);
+
+        // TODO: this temporary hack, must be rewritten
+        if let Err(err) = res.clone() {
+            if let RuntimeError::InvalidTxError(tx_err) = err {
+                let mut out = ExecutionOutcome::default();
+                out.status = ExecutionStatus::Failure(TxExecutionError::InvalidTxError(tx_err));
+                return Err(out);
+            } else {
+                unreachable!();
+            }
+        } else {
+            outcome_into_result(res.unwrap())?;
+            runtime.process_all().unwrap();
+            Ok(ExternalUser {
+                account_id: new_account_id,
+                signer: new_signer,
+            })
         }
     }
 
@@ -69,7 +101,7 @@ impl ExternalUser {
         runtime: &mut RuntimeStandalone,
         amount: Balance,
         reward_fee_fraction: RewardFeeFraction,
-    ) -> ExecutionOutcome {
+    ) -> TxResult {
         let args = json!({
             "owner_id": self.account_id,
             "stake_public_key": "ed25519:3tysLvy7KGoE8pznUgXvSHa4vYyGvrDZFcT8jgb8PEQ6", // not relevant for now
@@ -87,38 +119,31 @@ impl ExternalUser {
             .function_call("new".into(), args, 1000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        outcome_into_result(res)
     }
 
-    pub fn pool_deposit(
-        &self,
-        runtime: &mut RuntimeStandalone,
-        amount: Balance,
-    ) -> ExecutionOutcome {
+    pub fn pool_deposit(&self, runtime: &mut RuntimeStandalone, amount: Balance) -> TxResult {
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .function_call("deposit".into(), vec![], 10000000000000000, amount)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        outcome_into_result(res)
     }
 
-    pub fn pool_ping(&self, runtime: &mut RuntimeStandalone) -> ExecutionOutcome {
+    pub fn pool_ping(&self, runtime: &mut RuntimeStandalone) -> TxResult {
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
             .function_call("ping".into(), vec![], 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        outcome_into_result(res)
     }
 
-    pub fn pool_stake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
+    pub fn pool_stake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> TxResult {
         let args = json!({ "amount": format!("{}", amount) })
             .to_string()
             .as_bytes()
@@ -128,13 +153,11 @@ impl ExternalUser {
             .function_call("stake".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        outcome_into_result(res)
     }
 
-    #[allow(dead_code)]
-    pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
+    pub fn pool_unstake(&self, runtime: &mut RuntimeStandalone, amount: u128) -> TxResult {
         let args = json!({ "amount": format!("{}", amount) })
             .to_string()
             .as_bytes()
@@ -144,12 +167,20 @@ impl ExternalUser {
             .function_call("unstake".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        let outcome_res = outcome_into_result(res);
+        if outcome_res.is_ok() {
+            wait_epoch(runtime);
+            let total_stake: U128 = call_pool(runtime, "get_total_staked_balance", "");
+            let mut pool_account = runtime.view_account(&POOL_ACCOUNT_ID.into()).unwrap();
+            pool_account.amount += pool_account.locked - total_stake.0;
+            pool_account.locked = total_stake.0;
+            runtime.force_account_update(POOL_ACCOUNT_ID.into(), &pool_account);
+        }
+        outcome_res
     }
 
-    pub fn pool_withdraw(&self, runtime: &mut RuntimeStandalone, amount: u128) -> ExecutionOutcome {
+    pub fn pool_withdraw(&self, runtime: &mut RuntimeStandalone, amount: u128) -> TxResult {
         let args = json!({ "amount": format!("{}", amount) })
             .to_string()
             .as_bytes()
@@ -159,9 +190,23 @@ impl ExternalUser {
             .function_call("withdraw".into(), args, 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
-        // assert!(matches!(res, ExecutionOutcome { status: ExecutionStatus::SuccessValue(_), ..}));
         runtime.process_all().unwrap();
-        res
+        outcome_into_result(res)
+    }
+
+    #[allow(dead_code)]
+    pub fn pool_vote(&self, runtime: &mut RuntimeStandalone, amount: u128) -> TxResult {
+        let args = json!({ "amount": format!("{}", amount) })
+            .to_string()
+            .as_bytes()
+            .to_vec();
+        let tx = self
+            .new_tx(runtime, POOL_ACCOUNT_ID.into())
+            .function_call("withdraw".into(), args, 10000000000000000, 0)
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
     }
 
     #[allow(dead_code)]
@@ -220,6 +265,47 @@ pub fn init_pool(initial_transfer: Balance) -> (RuntimeStandalone, ExternalUser)
             numerator: 10,
             denominator: 100,
         },
-    );
+    )
+    .unwrap();
     return (runtime, root);
+}
+
+pub fn reward_pool(runtime: &mut RuntimeStandalone, amount: Balance) {
+    let mut pool_account = runtime.view_account(&POOL_ACCOUNT_ID.into()).unwrap();
+    pool_account.locked += amount;
+    runtime.force_account_update(POOL_ACCOUNT_ID.into(), &pool_account);
+}
+
+pub fn wait_epoch(runtime: &mut RuntimeStandalone) {
+    let epoch_height = runtime.current_block().epoch_height;
+    while epoch_height == runtime.current_block().epoch_height {
+        runtime.produce_block().unwrap();
+    }
+}
+
+pub fn call_pool<I: ToString, O: DeserializeOwned>(
+    runtime: &mut RuntimeStandalone,
+    method: &str,
+    args: I,
+) -> O {
+    call_view(runtime, &POOL_ACCOUNT_ID.into(), method, args)
+}
+
+pub fn pool_account(runtime: &mut RuntimeStandalone) -> Account {
+    runtime.view_account(&POOL_ACCOUNT_ID.into()).unwrap()
+}
+
+fn call_view<I: ToString, O: DeserializeOwned>(
+    runtime: &mut RuntimeStandalone,
+    account_id: &AccountId,
+    method: &str,
+    args: I,
+) -> O {
+    let args = args.to_string();
+    let result = runtime
+        .view_method_call(account_id, method, args.as_bytes())
+        .unwrap()
+        .0;
+    let output: O = serde_json::from_reader(result.as_slice()).unwrap();
+    output
 }
