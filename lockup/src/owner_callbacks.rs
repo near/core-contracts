@@ -23,29 +23,13 @@ impl LockupContract {
         true
     }
 
-    /// Called after there was a request to unselect current staking pool.
-    pub fn on_staking_pool_get_total_user_balance(
-        &mut self,
-        #[callback] total_balance: WrappedBalance,
-    ) -> bool {
-        assert_self();
-        if total_balance.0 > 0 {
-            // There is still positive balance on the staking pool. Can't unselect the pool.
-            self.set_staking_status(TransactionStatus::Idle);
-            false
-        } else {
-            self.staking_information = None;
-            true
-        }
-    }
-
     /// Called after a deposit amount was transferred out of this account to the staking pool
     /// This method needs to update staking pool status.
     pub fn on_staking_pool_deposit(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
 
         let deposit_succeeded = is_promise_success();
-        self.set_staking_status(TransactionStatus::Idle);
+        self.set_staking_pool_status(TransactionStatus::Idle);
 
         if deposit_succeeded {
             self.staking_information.as_mut().unwrap().deposit_amount.0 += amount.0;
@@ -83,7 +67,7 @@ impl LockupContract {
         assert_self();
 
         let withdraw_succeeded = is_promise_success();
-        self.set_staking_status(TransactionStatus::Idle);
+        self.set_staking_pool_status(TransactionStatus::Idle);
 
         if withdraw_succeeded {
             {
@@ -127,7 +111,7 @@ impl LockupContract {
         assert_self();
 
         let stake_succeeded = is_promise_success();
-        self.set_staking_status(TransactionStatus::Idle);
+        self.set_staking_pool_status(TransactionStatus::Idle);
 
         if stake_succeeded {
             env::log(
@@ -163,7 +147,7 @@ impl LockupContract {
         assert_self();
 
         let unstake_succeeded = is_promise_success();
-        self.set_staking_status(TransactionStatus::Idle);
+        self.set_staking_pool_status(TransactionStatus::Idle);
 
         if unstake_succeeded {
             env::log(
@@ -214,36 +198,5 @@ impl LockupContract {
             env::log(b"Voting on enabling transfers doesn't have a majority vote yet");
             false
         }
-    }
-
-    /// Called after the foundation tried to withdraw the unvested amount from the account.
-    pub fn on_withdraw_unvested_amount(
-        &mut self,
-        amount: WrappedBalance,
-        receiver_id: AccountId,
-    ) -> bool {
-        assert_self();
-
-        let withdraw_succeeded = is_promise_success();
-        if withdraw_succeeded {
-            self.lockup_information.vesting_information = None;
-            env::log(
-                format!(
-                    "The withdrawal of the terminated unvested amount of {} to @{} succeeded",
-                    amount.0, receiver_id,
-                )
-                .as_bytes(),
-            );
-        } else {
-            self.set_terminating_status(TransactionStatus::Idle);
-            env::log(
-                format!(
-                    "The withdrawal of the terminated unvested amount of {} to @{} failed",
-                    amount.0, receiver_id,
-                )
-                .as_bytes(),
-            );
-        }
-        withdraw_succeeded
     }
 }

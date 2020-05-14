@@ -13,6 +13,7 @@ impl LockupContract {
             "The staking pool account ID is invalid"
         );
         self.assert_staking_pool_is_not_selected();
+        self.assert_no_termination();
 
         env::log(
             format!(
@@ -28,11 +29,11 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::whitelist::IS_WHITELISTED,
         )
-        .then(ext_self::on_whitelist_is_whitelisted(
+        .then(ext_self_owner::on_whitelist_is_whitelisted(
             staking_pool_account_id,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_WHITELIST_IS_WHITELISTED,
+            gas::owner_callbacks::ON_WHITELIST_IS_WHITELISTED,
         ))
     }
 
@@ -42,7 +43,7 @@ impl LockupContract {
     pub fn unselect_staking_pool(&mut self) {
         assert_self();
         self.assert_staking_pool_is_idle();
-        self.assert_no_deficit();
+        self.assert_no_termination();
         // NOTE: This is best effort checks. There is still some balance might be left on the
         // staking pool, but it's on the owner. The contract doesn't care about leftover.
         assert_eq!(
@@ -71,7 +72,7 @@ impl LockupContract {
         assert_self();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
-        self.assert_no_deficit();
+        self.assert_no_termination();
         assert!(
             self.get_liquid_balance().0 >= amount.0,
             "The balance that can be deposited to the staking pool is lower than the extra amount"
@@ -89,7 +90,7 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        self.set_staking_status(TransactionStatus::Busy);
+        self.set_staking_pool_status(TransactionStatus::Busy);
 
         ext_staking_pool::deposit(
             &self
@@ -100,11 +101,11 @@ impl LockupContract {
             amount.0,
             gas::staking_pool::DEPOSIT,
         )
-        .then(ext_self::on_staking_pool_deposit(
+        .then(ext_self_owner::on_staking_pool_deposit(
             amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_STAKING_POOL_DEPOSIT,
+            gas::owner_callbacks::ON_STAKING_POOL_DEPOSIT,
         ))
     }
 
@@ -114,7 +115,7 @@ impl LockupContract {
         assert_self();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
-        self.assert_no_deficit();
+        self.assert_no_termination();
 
         env::log(
             format!(
@@ -128,7 +129,7 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        self.set_staking_status(TransactionStatus::Busy);
+        self.set_staking_pool_status(TransactionStatus::Busy);
 
         ext_staking_pool::withdraw(
             amount,
@@ -140,11 +141,11 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::staking_pool::WITHDRAW,
         )
-        .then(ext_self::on_staking_pool_withdraw(
+        .then(ext_self_owner::on_staking_pool_withdraw(
             amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_STAKING_POOL_WITHDRAW,
+            gas::owner_callbacks::ON_STAKING_POOL_WITHDRAW,
         ))
     }
 
@@ -154,7 +155,7 @@ impl LockupContract {
         assert_self();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
-        self.assert_no_deficit();
+        self.assert_no_termination();
 
         env::log(
             format!(
@@ -168,7 +169,7 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        self.set_staking_status(TransactionStatus::Busy);
+        self.set_staking_pool_status(TransactionStatus::Busy);
 
         ext_staking_pool::stake(
             amount,
@@ -180,11 +181,11 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::staking_pool::STAKE,
         )
-        .then(ext_self::on_staking_pool_stake(
+        .then(ext_self_owner::on_staking_pool_stake(
             amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_STAKING_POOL_STAKE,
+            gas::owner_callbacks::ON_STAKING_POOL_STAKE,
         ))
     }
 
@@ -194,11 +195,11 @@ impl LockupContract {
         assert_self();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
-        self.assert_no_deficit();
+        self.assert_no_termination();
 
         env::log(
             format!(
-                "Unstaking {} at the staking pool @{}",
+                "Unstaking {} from the staking pool @{}",
                 amount.0,
                 self.staking_information
                     .as_ref()
@@ -208,7 +209,7 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        self.set_staking_status(TransactionStatus::Busy);
+        self.set_staking_pool_status(TransactionStatus::Busy);
 
         ext_staking_pool::unstake(
             amount,
@@ -220,11 +221,11 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::staking_pool::UNSTAKE,
         )
-        .then(ext_self::on_staking_pool_unstake(
+        .then(ext_self_owner::on_staking_pool_unstake(
             amount,
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_STAKING_POOL_UNSTAKE,
+            gas::owner_callbacks::ON_STAKING_POOL_UNSTAKE,
         ))
     }
 
@@ -234,6 +235,7 @@ impl LockupContract {
     pub fn check_transfers_vote(&mut self) -> Promise {
         assert_self();
         self.assert_transfers_disabled();
+        self.assert_no_termination();
 
         let transfer_voting_information = self.transfer_voting_information.as_ref().unwrap();
 
@@ -252,10 +254,10 @@ impl LockupContract {
             NO_DEPOSIT,
             gas::voting::GET_RESULT,
         )
-        .then(ext_self::on_voting_get_result(
+        .then(ext_self_owner::on_voting_get_result(
             &env::current_account_id(),
             NO_DEPOSIT,
-            gas::callbacks::ON_VOTING_GET_RESULT,
+            gas::owner_callbacks::ON_VOTING_GET_RESULT,
         ))
     }
 
@@ -271,6 +273,7 @@ impl LockupContract {
         );
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
+        self.assert_no_termination();
         assert!(
             self.get_liquid_owners_balance().0 >= amount.0,
             "The available liquid balance is smaller than the requested transfer amount"

@@ -24,14 +24,14 @@ impl LockupContract {
             .into()
     }
 
-    pub fn set_staking_status(&mut self, status: TransactionStatus) {
+    pub fn set_staking_pool_status(&mut self, status: TransactionStatus) {
         self.staking_information
             .as_mut()
             .expect("Staking pool should be selected")
             .status = status;
     }
 
-    pub fn set_terminating_status(&mut self, status: TransactionStatus) {
+    pub fn set_termination_status(&mut self, status: TerminationStatus) {
         if let Some(VestingInformation::Terminating(termination_information)) =
             self.lockup_information.vesting_information.as_mut()
         {
@@ -41,11 +41,12 @@ impl LockupContract {
         }
     }
 
-    pub fn assert_no_deficit(&self) {
-        assert_eq!(
-            self.get_terminated_unvested_balance_deficit().0, 0,
-            "All normal staking pool operations are blocked until the terminated unvested balance deficit is returned to the account"
-        );
+    pub fn assert_no_termination(&self) {
+        if let Some(VestingInformation::Terminating(_)) =
+            &self.lockup_information.vesting_information
+        {
+            env::panic(b"All operations are blocked until vesting termination is completed");
+        }
     }
 
     pub fn assert_transfers_enabled(&self) {
@@ -73,16 +74,11 @@ impl LockupContract {
         }
     }
 
-    pub fn assert_termination_is_idle(&self) {
+    pub fn get_termination_status(&self) -> TerminationStatus {
         if let Some(VestingInformation::Terminating(termination_information)) =
             &self.lockup_information.vesting_information
         {
-            match termination_information.status {
-                TransactionStatus::Idle => (),
-                TransactionStatus::Busy => {
-                    env::panic(b"Contract is currently busy with termination withdrawal")
-                }
-            };
+            termination_information.status
         } else {
             env::panic(b"There are no termination in progress");
         }

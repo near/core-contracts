@@ -10,8 +10,8 @@ pub use crate::types::*;
 pub mod utils;
 pub use crate::utils::*;
 
-pub mod callbacks;
-pub use crate::callbacks::*;
+pub mod owner_callbacks;
+pub use crate::owner_callbacks::*;
 
 pub mod foundation;
 pub use crate::foundation::*;
@@ -47,6 +47,10 @@ const MIN_BALANCE_FOR_STORAGE: u128 = 30_000_000_000_000_000_000_000_000;
 
 #[ext_contract(ext_staking_pool)]
 pub trait ExtStakingPool {
+    fn get_account_staked_balance(&self, account_id: AccountId) -> WrappedBalance;
+
+    fn get_account_unstaked_balance(&self, account_id: AccountId) -> WrappedBalance;
+
     fn deposit(&mut self);
 
     fn withdraw(&mut self, amount: WrappedBalance);
@@ -66,8 +70,8 @@ pub trait ExtVotingContract {
     fn get_result(&self, proposal_id: ProposalId) -> Option<VoteIndex>;
 }
 
-#[ext_contract(ext_self)]
-pub trait ExtLockupContract {
+#[ext_contract(ext_self_owner)]
+pub trait ExtLockupContractOwner {
     fn on_whitelist_is_whitelisted(
         &mut self,
         #[callback] is_whitelisted: bool,
@@ -83,12 +87,29 @@ pub trait ExtLockupContract {
     fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool;
 
     fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool;
+}
 
+#[ext_contract(ext_self_foundation)]
+pub trait ExtLockupContractFoundation {
     fn on_withdraw_unvested_amount(
         &mut self,
         amount: WrappedBalance,
         receiver_id: AccountId,
     ) -> bool;
+
+    fn on_get_account_staked_balance_to_unstake(
+        &mut self,
+        #[callback] staked_balance: WrappedBalance,
+    );
+
+    fn on_staking_pool_unstake_for_termination(&mut self, amount: WrappedBalance) -> bool;
+
+    fn on_get_account_unstaked_balance_to_withdraw(
+        &mut self,
+        #[callback] unstaked_balance: WrappedBalance,
+    );
+
+    fn on_staking_pool_withdraw_for_termination(&mut self, amount: WrappedBalance) -> bool;
 }
 
 #[near_bindgen]

@@ -118,6 +118,26 @@ pub enum VestingInformation {
     Terminating(TerminationInformation),
 }
 
+/// Describes the status of transactions with the staking pool contract or terminated unvesting
+/// amount withdrawal.
+#[derive(
+    BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq, Copy, Clone, Debug,
+)]
+pub enum TerminationStatus {
+    /// Initial stage of the termination in case there are deficit on the account.
+    VestingTerminatedWithDeficit,
+    /// A transaction to unstake everything is in progress.
+    UnstakingInProgress,
+    /// The transaction to unstake everything from the staking pool has completed.
+    EverythingUnstaked,
+    /// A transaction to withdraw everything from the staking pool is in progress.
+    WithdrawingFromStakingPoolInProgress,
+    /// Everything is withdrawn from the staking pool. Ready to withdraw out of the account.
+    ReadyToWithdraw,
+    /// A transaction to withdraw tokens from the account is in progress.
+    WithdrawingFromAccountInProgress,
+}
+
 /// Contains information about early termination of the vesting schedule.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub struct TerminationInformation {
@@ -127,7 +147,7 @@ pub struct TerminationInformation {
 
     /// The status of the withdrawal. When the unvested amount is in progress of withdrawal the
     /// status will be marked as busy, to avoid withdrawing the funds twice.
-    pub status: TransactionStatus,
+    pub status: TerminationStatus,
 }
 
 /// Contains information about voting on enabling transfers.
