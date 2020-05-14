@@ -639,6 +639,8 @@ mod tests {
         pub epoch_height: EpochHeight,
         pub amount: Balance,
         pub locked_amount: Balance,
+        last_total_staked_balance: Balance,
+        last_total_stake_shares: Balance,
     }
 
     fn zero_fee() -> RewardFeeFraction {
@@ -658,19 +660,37 @@ mod tests {
                 .current_account_id(owner.clone())
                 .account_balance(ntoy(30))
                 .finish());
+            let contract = StakingContract::new(
+                owner,
+                Base58PublicKey::try_from(stake_public_key).unwrap(),
+                reward_fee_fraction,
+            );
+            let last_total_staked_balance = contract.total_staked_balance;
+            let last_total_stake_shares = contract.total_stake_shares;
             Emulator {
-                contract: StakingContract::new(
-                    owner,
-                    Base58PublicKey::try_from(stake_public_key).unwrap(),
-                    reward_fee_fraction,
-                ),
+                contract,
                 epoch_height: 0,
                 amount: ntoy(30),
                 locked_amount: 0,
+                last_total_staked_balance,
+                last_total_stake_shares,
             }
         }
 
+        fn verify_stake_price_increase_guarantee(&mut self) {
+            let total_staked_balance = self.contract.total_staked_balance;
+            let total_stake_shares = self.contract.total_stake_shares;
+            assert!(
+                U256::from(total_staked_balance) * U256::from(self.last_total_stake_shares)
+                    >= U256::from(self.last_total_staked_balance) * U256::from(total_stake_shares),
+                "Price increase guarantee was violated."
+            );
+            self.last_total_staked_balance = total_staked_balance;
+            self.last_total_stake_shares = total_stake_shares;
+        }
+
         pub fn update_context(&mut self, predecessor_account_id: String, deposit: Balance) {
+            self.verify_stake_price_increase_guarantee();
             testing_env!(VMContextBuilder::new()
                 .current_account_id(staking())
                 .predecessor_account_id(predecessor_account_id.clone())
@@ -874,5 +894,52 @@ mod tests {
             emulator.contract.get_account_staked_balance(bob()).0,
             ntoy(1_030_000)
         );
+    }
+
+    #[test]
+    fn test_low_balances() {
+        let mut emulator = Emulator::new(
+            owner(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            zero_fee(),
+        );
+        let initial_balance = 100;
+        emulator.update_context(alice(), initial_balance);
+        emulator.contract.deposit();
+        emulator.amount += initial_balance;
+        let mut remaining = initial_balance;
+        let mut amount = 1;
+        while remaining >= 4 {
+            emulator.update_context(alice(), 0);
+            amount = 2 + (amount - 1) % 3;
+            emulator.contract.stake(amount.into());
+            emulator.simulate_stake_call();
+            remaining -= amount;
+        }
+    }
+
+    #[test]
+    fn test_rewards() {
+        let mut emulator = Emulator::new(
+            owner(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            zero_fee(),
+        );
+        let initial_balance = ntoy(100);
+        emulator.update_context(alice(), initial_balance);
+        emulator.contract.deposit();
+        emulator.amount += initial_balance;
+        let mut remaining = 100;
+        let mut amount = 1;
+        while remaining >= 4 {
+            emulator.skip_epochs(3);
+            emulator.update_context(alice(), 0);
+            emulator.contract.ping();
+            emulator.update_context(alice(), 0);
+            amount = 2 + (amount - 1) % 3;
+            emulator.contract.stake(ntoy(amount).into());
+            emulator.simulate_stake_call();
+            remaining -= amount;
+        }
     }
 }
