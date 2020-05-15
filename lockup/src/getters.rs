@@ -54,7 +54,7 @@ impl LockupContract {
                         // After the end, everything is vested
                         0.into()
                     } else {
-                        // cannot overflow since block_timestamp >= vesting_schedule.end_timestamp
+                        // cannot overflow since block_timestamp < vesting_schedule.end_timestamp
                         let time_left =
                             U256::from(vesting_schedule.end_timestamp.0 - block_timestamp);
                         // The total time is positive. Checked at the contract initialization.
