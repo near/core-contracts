@@ -189,7 +189,7 @@ impl LockupContract {
         if let Some(poll_result) = poll_result {
             let timestamp = poll_result.timestamp;
             env::log(format!("Transfers were successfully enabled at {}", timestamp.0).as_bytes());
-            self.transfer_voting_information = None;
+            self.transfer_poll_account_id = None;
             self.lockup_information.lockup_timestamp = Some(timestamp);
             true
         } else {

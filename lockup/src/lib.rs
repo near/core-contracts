@@ -30,13 +30,19 @@ pub use crate::owner::*;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-/// Method names allowed for the owner's access keys.
-const OWNER_KEY_ALLOWED_METHODS: &[u8] =
-    b"vote,select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake,check_transfers_vote,transfer";
-/// Method names allowed for the NEAR Foundation access key in case of vesting schedule that
+/// Method names allowed to be called by the owner's access keys for staking.
+const OWNER_STAKING_KEY_ALLOWED_METHODS: &[u8] =
+    b"select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake";
+
+/// Method names allowed to be called by the owner's access key for managing staking access keys and
+/// transfers.
+const OWNER_MAIN_KEY_ALLOWED_METHODS: &[u8] =
+    b"change_staking_access_key,check_transfers_vote,transfer";
+
+/// Method names allowed to be called by the NEAR Foundation access key in case of vesting schedule that
 /// can be terminated by foundation.
 const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
-    b"terminate_vesting,resolve_deficit,withdraw_unvested_amount";
+    b"terminate_vesting,termination_prepare_to_withdraw,termination_withdraw";
 
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
@@ -129,13 +135,15 @@ pub struct LockupContract {
     /// `None` means there is no staking pool selected.
     pub staking_information: Option<StakingInformation>,
 
-    /// Information about transfer voting. At the launch transfers are disabled, once transfers are
-    /// enabled, they can't be disabled and don't need to be checked again.
-    /// `Some` means transfers are disabled. `TransferVotingInformation` contains information
-    /// required to check whether transfers were voted to be enabled.
-    /// If transfers are disabled, every transfer attempt will try to first pull the results
-    /// of transfer voting from the voting contract using transfer proposal ID.
-    pub transfer_voting_information: Option<TransferVotingInformation>,
+    /// The account ID of the transfer poll contract. At the launch of the network transfers are
+    /// disabled for all lockup contracts, once transfers are enabled, they can't be disabled and
+    /// don't need to be checked again.
+    /// `Some` account ID means transfers are disabled.
+    /// `None` means the transfers are enabled.
+    pub transfer_poll_account_id: Option<AccountId>,
+
+    /// Information about access keys associated with the account.
+    pub access_keys_information: AccessKeysInformation,
 }
 
 impl Default for LockupContract {
@@ -157,9 +165,10 @@ impl LockupContract {
     pub fn new(
         lockup_information: LockupInformation,
         staking_pool_whitelist_account_id: AccountId,
-        transfer_voting_information: Option<TransferVotingInformation>,
-        owner_public_keys: Vec<Base58PublicKey>,
-        foundation_public_keys: Vec<Base58PublicKey>,
+        transfer_poll_account_id: Option<AccountId>,
+        owners_main_public_key: Base58PublicKey,
+        owners_staking_public_key: Option<Base58PublicKey>,
+        foundation_public_key: Option<Base58PublicKey>,
     ) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
         assert!(
@@ -167,18 +176,17 @@ impl LockupContract {
             "The staking pool whitelist account ID is invalid"
         );
         lockup_information.assert_valid();
-        if !foundation_public_keys.is_empty() {
+        if foundation_public_key.is_some() {
             assert!(
                 lockup_information.vesting_information.is_some(),
                 "Foundation keys can't be added without vesting schedule"
             )
         }
-        assert!(
-            !owner_public_keys.is_empty(),
-            "At least one owner's public key has to be provided"
-        );
-        if let Some(transfer_voting_information) = transfer_voting_information.as_ref() {
-            transfer_voting_information.assert_valid();
+        if let Some(transfer_poll_account_id) = &transfer_poll_account_id {
+            assert!(
+                env::is_valid_account_id(transfer_poll_account_id.as_bytes()),
+                "The transfer poll account ID is invalid"
+            );
             assert!(
                 lockup_information.lockup_timestamp.is_none(),
                 "Lockup timestamp should not be given when transfer voting information is present"
@@ -189,20 +197,32 @@ impl LockupContract {
                 "Lockup timestamp should be given when transfer voting information is absent"
             );
         }
+        let access_keys_information = AccessKeysInformation {
+            owners_main_public_key: owners_main_public_key.into(),
+            owners_staking_public_key: owners_staking_public_key.map(std::convert::Into::into),
+            foundation_public_key: foundation_public_key.map(std::convert::Into::into),
+        };
+        access_keys_information.assert_valid();
         let account_id = env::current_account_id();
-        for public_key in owner_public_keys {
+        Promise::new(account_id.clone()).add_access_key(
+            access_keys_information.owners_main_public_key.clone(),
+            0,
+            account_id.clone(),
+            OWNER_MAIN_KEY_ALLOWED_METHODS.to_vec(),
+        );
+        if let Some(public_key) = &access_keys_information.owners_staking_public_key {
             Promise::new(account_id.clone()).add_access_key(
-                public_key.into(),
+                public_key.clone(),
                 0,
                 account_id.clone(),
-                OWNER_KEY_ALLOWED_METHODS.to_vec(),
+                OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
             );
         }
-        for public_key in foundation_public_keys {
+        if let Some(public_key) = &access_keys_information.foundation_public_key {
             Promise::new(account_id.clone()).add_access_key(
-                public_key.into(),
+                public_key.clone(),
                 0,
-                account_id.clone(),
+                account_id,
                 FOUNDATION_KEY_ALLOWED_METHODS.to_vec(),
             );
         }
@@ -210,7 +230,8 @@ impl LockupContract {
             lockup_information,
             staking_information: None,
             staking_pool_whitelist_account_id,
-            transfer_voting_information,
+            transfer_poll_account_id,
+            access_keys_information,
         }
     }
 }
@@ -325,8 +346,9 @@ mod tests {
             },
             AccountId::from("whitelist"),
             None,
-            vec![public_key(1), public_key(2)],
-            vec![],
+            public_key(1),
+            Some(public_key(2)),
+            None,
         );
         (context, contract)
     }

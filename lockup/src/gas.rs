@@ -33,8 +33,8 @@ pub mod staking_pool {
     pub const GET_ACCOUNT_UNSTAKED_BALANCE: u64 = 100_000_000_000_000;
 }
 
-pub mod voting {
-    /// Gas attached to the promise to check whether transfers were enabled on the voting
+pub mod transfer_poll {
+    /// Gas attached to the promise to check whether transfers were enabled on the transfer poll
     /// contract.
     /// Requires 100e12 (no external calls).
     pub const GET_RESULT: u64 = 100_000_000_000_000;

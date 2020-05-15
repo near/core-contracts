@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, AccountId, Promise};
+use near_sdk::{near_bindgen, AccountId, Promise, PublicKey};
 
 #[near_bindgen]
 impl LockupContract {
@@ -237,21 +237,20 @@ impl LockupContract {
         self.assert_transfers_disabled();
         self.assert_no_termination();
 
-        let transfer_voting_information = self.transfer_voting_information.as_ref().unwrap();
+        let transfer_poll_account_id = self.transfer_poll_account_id.as_ref().unwrap();
 
         env::log(
             format!(
-                "Checking that transfers are enabled (proposal {}) at the voting contract @{}",
-                transfer_voting_information.transfer_proposal_id,
-                transfer_voting_information.voting_contract_account_id,
+                "Checking that transfers are enabled at the transfer poll contract @{}",
+                transfer_poll_account_id,
             )
             .as_bytes(),
         );
 
         ext_transfer_poll::get_result(
-            &transfer_voting_information.voting_contract_account_id,
+            &transfer_poll_account_id,
             NO_DEPOSIT,
-            gas::voting::GET_RESULT,
+            gas::transfer_poll::GET_RESULT,
         )
         .then(ext_self_owner::on_get_result_from_transfer_poll(
             &env::current_account_id(),
@@ -281,5 +280,34 @@ impl LockupContract {
         env::log(format!("Transferring {} to account @{}", amount.0, receiver_id).as_bytes());
 
         Promise::new(receiver_id).transfer(amount.0)
+    }
+
+    /// OWNER'S METHOD
+    /// Changes owner's staking access key to the new given public key.
+    pub fn change_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
+        assert_self();
+
+        let current_staking_public_key = self
+            .access_keys_information
+            .owners_staking_public_key
+            .take();
+
+        env::log(b"Changing owner's staking pool access key");
+
+        let new_public_key: PublicKey = new_public_key.into();
+        self.access_keys_information.owners_staking_public_key = Some(new_public_key.clone());
+        self.access_keys_information.assert_valid();
+
+        let account_id = env::current_account_id();
+        let mut promise = Promise::new(account_id.clone());
+        if let Some(old_public_key) = current_staking_public_key {
+            promise = promise.delete_key(old_public_key);
+        }
+        promise.add_access_key(
+            new_public_key,
+            0,
+            account_id,
+            OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
+        )
     }
 }

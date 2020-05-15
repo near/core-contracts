@@ -51,14 +51,14 @@ impl LockupContract {
 
     pub fn assert_transfers_enabled(&self) {
         assert!(
-            self.transfer_voting_information.is_none(),
+            self.transfer_poll_account_id.is_none(),
             "Transfers are disabled"
         );
     }
 
     pub fn assert_transfers_disabled(&self) {
         assert!(
-            self.transfer_voting_information.is_some(),
+            self.transfer_poll_account_id.is_some(),
             "Transfers are already enabled"
         );
     }

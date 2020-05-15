@@ -123,7 +123,7 @@ impl LockupContract {
 
     /// FOUNDATION'S METHOD
     /// Withdraws the unvested amount from the early termination of the vesting schedule.
-    pub fn withdraw_unvested_amount(&mut self, receiver_id: AccountId) -> Promise {
+    pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise {
         assert_self();
         assert!(
             env::is_valid_account_id(receiver_id.as_bytes()),
