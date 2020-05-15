@@ -7,11 +7,11 @@ pub mod whitelist {
 
 pub mod staking_pool {
     /// Gas attached to deposit call on the staking pool contract.
-    /// Requires 100e12 for local updates.
-    pub const DEPOSIT: u64 = 100_000_000_000_000;
+    /// Requires 100e12 for local updates + 200e12 potentially restake.
+    pub const DEPOSIT: u64 = 300_000_000_000_000;
 
     /// Gas attached to withdraw call on the staking pool contract.
-    /// Requires 100e12 for execution + 200e12 for transferring amount to us.
+    /// Requires 100e12 for execution + 200e12 for transferring amount to us and potentially restake.
     pub const WITHDRAW: u64 = 300_000_000_000_000;
 
     /// Gas attached to stake call on the staking pool contract.

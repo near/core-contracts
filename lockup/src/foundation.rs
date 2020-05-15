@@ -11,11 +11,7 @@ impl LockupContract {
     /// Terminates vesting schedule and locks the remaining unvested amount.
     pub fn terminate_vesting(&mut self) {
         assert_self();
-        assert_eq!(
-            self.get_terminated_unvested_balance().0,
-            0,
-            "Vesting has been already terminated"
-        );
+        self.assert_vesting();
         let unvested_amount = self.get_unvested_amount();
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 
@@ -27,9 +23,12 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        let status = if self.get_terminated_unvested_balance_deficit().0 > 0
-            && self.get_known_deposited_balance().0 > 0
-        {
+        let deficit = unvested_amount
+            .0
+            .saturating_sub(self.get_account_balance().0);
+        // If there is deficit of liquid balance and also there is a staking pool selected, then the
+        // contract will try to withdraw everything from this staking pool to cover deficit.
+        let status = if deficit > 0 && self.staking_information.is_some() {
             TerminationStatus::VestingTerminatedWithDeficit
         } else {
             TerminationStatus::ReadyToWithdraw

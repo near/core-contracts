@@ -41,6 +41,14 @@ impl LockupContract {
         }
     }
 
+    pub fn assert_vesting(&self) {
+        if let Some(VestingInformation::Vesting(_)) = &self.lockup_information.vesting_information {
+            // OK
+        } else {
+            env::panic(b"There is no vesting in progress");
+        }
+    }
+
     pub fn assert_no_termination(&self) {
         if let Some(VestingInformation::Terminating(_)) =
             &self.lockup_information.vesting_information

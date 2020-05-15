@@ -30,7 +30,7 @@ pub use crate::owner::*;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-/// Method names allowed to be called by the owner's access keys for staking.
+/// Method names allowed to be called by the owner's access keys for staking with the staking pool.
 const OWNER_STAKING_KEY_ALLOWED_METHODS: &[u8] =
     b"select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake";
 
