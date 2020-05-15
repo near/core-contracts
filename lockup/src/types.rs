@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::{env, AccountId};
+use near_sdk::{env, AccountId, BlockHeight};
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -10,14 +10,14 @@ construct_uint! {
     // See https://github.com/wasmerio/wasmer/issues/1429
     pub struct U256(8);
 }
-/// Timestamp in nanosecond.
+/// Timestamp in nanosecond wrapped into a struct for JSON serialization as a string.
 pub type WrappedTimestamp = U64;
-/// Duration in nanosecond.
+/// Duration in nanosecond wrapped into a struct for JSON serialization as a string.
 pub type WrappedDuration = U64;
+/// Balance wrapped into a struct for JSON serialization as a string.
 pub type WrappedBalance = U128;
 
 pub type ProposalId = u64;
-pub type VoteIndex = u64;
 
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
@@ -153,11 +153,8 @@ pub struct TerminationInformation {
 /// Contains information about voting on enabling transfers.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub struct TransferVotingInformation {
-    /// The proposal ID to vote on transfers.
+    /// The proposal ID which is expected to be voted on.
     pub transfer_proposal_id: ProposalId,
-
-    /// Vote index indicating that the transfers are enabled.
-    pub enable_transfers_vote_index: VoteIndex,
 
     /// Voting contract account ID
     pub voting_contract_account_id: AccountId,
@@ -170,4 +167,15 @@ impl TransferVotingInformation {
             "Voting contract account ID is invalid"
         );
     }
+}
+
+/// Contains information about poll result.
+#[derive(Deserialize)]
+pub struct PollResult {
+    /// The proposal ID that was voted in.
+    pub proposal_id: ProposalId,
+    /// The timestamp when the proposal was voted in.
+    pub timestamp: WrappedTimestamp,
+    /// The block height when the proposal was voted in.
+    pub block_height: BlockHeight,
 }

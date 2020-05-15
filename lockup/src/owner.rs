@@ -74,7 +74,7 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
         assert!(
-            self.get_liquid_balance().0 >= amount.0,
+            self.get_account_balance().0 >= amount.0,
             "The balance that can be deposited to the staking pool is lower than the extra amount"
         );
 
@@ -248,13 +248,12 @@ impl LockupContract {
             .as_bytes(),
         );
 
-        ext_voting::get_result(
-            transfer_voting_information.transfer_proposal_id,
+        ext_transfer_poll::get_result(
             &transfer_voting_information.voting_contract_account_id,
             NO_DEPOSIT,
             gas::voting::GET_RESULT,
         )
-        .then(ext_self_owner::on_voting_get_result(
+        .then(ext_self_owner::on_get_result_from_transfer_poll(
             &env::current_account_id(),
             NO_DEPOSIT,
             gas::owner_callbacks::ON_VOTING_GET_RESULT,

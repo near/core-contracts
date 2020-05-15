@@ -3,15 +3,6 @@ use near_sdk::near_bindgen;
 
 #[near_bindgen]
 impl LockupContract {
-    /// The amount of tokens that can be deposited to the staking pool or transferred out.
-    /// It excludes tokens that are locked due to early termination of the vesting schedule.
-    pub fn get_liquid_balance(&self) -> WrappedBalance {
-        self.get_account_balance()
-            .0
-            .saturating_sub(self.get_terminated_unvested_balance().0)
-            .into()
-    }
-
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
@@ -99,6 +90,6 @@ impl LockupContract {
 
     /// The amount of tokens the owner can transfer now from the account.
     pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
-        std::cmp::min(self.get_owners_balance().0, self.get_liquid_balance().0).into()
+        std::cmp::min(self.get_owners_balance().0, self.get_account_balance().0).into()
     }
 }

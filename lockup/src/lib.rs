@@ -65,9 +65,9 @@ pub trait ExtStakingPoolWhitelist {
     fn is_whitelisted(&self, staking_pool_account_id: AccountId) -> bool;
 }
 
-#[ext_contract(ext_voting)]
-pub trait ExtVotingContract {
-    fn get_result(&self, proposal_id: ProposalId) -> Option<VoteIndex>;
+#[ext_contract(ext_transfer_poll)]
+pub trait ExtTransferPoll {
+    fn get_result(&self) -> Option<PollResult>;
 }
 
 #[ext_contract(ext_self_owner)]
@@ -86,7 +86,10 @@ pub trait ExtLockupContractOwner {
 
     fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool;
 
-    fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool;
+    fn on_get_result_from_transfer_poll(
+        &mut self,
+        #[callback] poll_result: Option<PollResult>,
+    ) -> bool;
 }
 
 #[ext_contract(ext_self_foundation)]

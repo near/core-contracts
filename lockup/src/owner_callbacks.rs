@@ -179,23 +179,21 @@ impl LockupContract {
 
     /// Called after the extra amount stake was staked in the staking pool contract.
     /// This method needs to update staking pool status.
-    pub fn on_voting_get_result(&mut self, #[callback] vote_index: Option<VoteIndex>) -> bool {
+    pub fn on_get_result_from_transfer_poll(
+        &mut self,
+        #[callback] poll_result: Option<PollResult>,
+    ) -> bool {
         assert_self();
         self.assert_transfers_disabled();
 
-        let expected_vote_index = self
-            .transfer_voting_information
-            .as_ref()
-            .unwrap()
-            .enable_transfers_vote_index;
-
-        if let Some(vote_index) = vote_index {
-            assert_eq!(vote_index, expected_vote_index, "The enable transfers proposal has been resolved to a different vote. Transfers will never be enabled.");
-            env::log(b"Transfers has been successfully enabled");
+        if let Some(poll_result) = poll_result {
+            let timestamp = poll_result.timestamp;
+            env::log(format!("Transfers were successfully enabled at {}", timestamp.0).as_bytes());
             self.transfer_voting_information = None;
+            self.lockup_information.lockup_timestamp = Some(timestamp);
             true
         } else {
-            env::log(b"Voting on enabling transfers doesn't have a majority vote yet");
+            env::log(b"The transfers are not enabled yet");
             false
         }
     }
