@@ -157,10 +157,12 @@ impl LockupContract {
     /// Initializes lockup contract.
     /// - `lockup_information` - information about the lockup amount and the release timestamp.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-    /// - `vesting_schedule` - if `Some` contains vesting schedule.
-    /// - `transfer_voting_information` - if `Some` means transfers are disabled and can only be
-    ///   enabled by voting on the proposal.
-    /// - `owner_public_keys`
+    /// - `transfer_poll_account_id` - if `Some` means transfers are disabled and can only be
+    /// - `owners_main_public_key` - the public key for the owner's main access key.
+    /// - `owners_staking_public_key` - the public key for the owner's access key for staking
+    ///    pool operations (optional).
+    /// - `foundation_public_key` - the public key for NEAR foundation's access key to be able to
+    ///    terminate vesting schedule.
     #[init]
     pub fn new(
         lockup_information: LockupInformation,
@@ -374,45 +376,6 @@ mod tests {
         assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
     }
 
-    /*
-    #[test]
-    fn test_lockup_only_transferrable_with_different_stakes() {
-        let (mut context, contract) = lockup_only_setup();
-
-        // Staking everything at the genesis
-        context.account_locked_balance = to_yocto(999);
-        context.account_balance = to_yocto(1);
-
-        // Checking values in 1 day after genesis time
-        context.is_view = true;
-
-        for stake in &[1, 10, 100, 500, 999, 1001, 1005, 1100, 1500, 1999, 3000] {
-            let stake = *stake;
-            context.account_locked_balance = to_yocto(stake);
-            let balance_near = std::cmp::max(1000u128.saturating_sub(stake), 1);
-            context.account_balance = to_yocto(balance_near);
-            let extra_balance_near = stake + balance_near - 1000;
-
-            context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 1);
-            testing_env!(context.clone());
-
-            assert_eq!(
-                contract.get_owners_balance().0,
-                to_yocto(extra_balance_near)
-            );
-
-            // Checking values next day after lockup timestamp
-            context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
-            testing_env!(context.clone());
-
-            assert_almost_eq(
-                contract.get_owners_balance().0,
-                to_yocto(LOCKUP_NEAR + extra_balance_near),
-            );
-        }
-    }
-    */
-
     #[test]
     fn test_lockup_only_transfer_call_by_owner() {
         let (mut context, mut contract) = lockup_only_setup();
@@ -431,55 +394,4 @@ mod tests {
         contract.transfer(to_yocto(100).into(), non_owner());
         assert_almost_eq(env::account_balance(), to_yocto(LOCKUP_NEAR - 100));
     }
-
-    /*
-    #[test]
-    fn test_lockup_only_stake_call_by_owner() {
-        let (mut context, mut contract) = lockup_only_setup();
-        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
-        context.is_view = true;
-        testing_env!(context.clone());
-        assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
-
-        context.predecessor_account_id = account_owner();
-        context.signer_account_id = account_owner();
-        context.signer_account_pk = public_key(1).try_into().unwrap();
-        context.is_view = false;
-        testing_env!(context.clone());
-
-        assert_eq!(env::account_balance(), to_yocto(LOCKUP_NEAR));
-        contract.stake(to_yocto(100).into(), public_key(10).try_into().unwrap());
-        assert_almost_eq(env::account_balance(), to_yocto(LOCKUP_NEAR));
-    }
-
-    #[test]
-    fn test_lockup_only_transfer_by_non_owner() {
-        let (mut context, mut contract) = lockup_only_setup();
-
-        context.predecessor_account_id = non_owner();
-        context.signer_account_id = non_owner();
-        context.signer_account_pk = public_key(5).try_into().unwrap();
-        testing_env!(context.clone());
-
-        std::panic::catch_unwind(move || {
-            contract.transfer(to_yocto(100).into(), non_owner());
-        })
-        .unwrap_err();
-    }
-
-    #[test]
-    fn test_lockup_only_stake_by_non_owner() {
-        let (mut context, mut contract) = lockup_only_setup();
-
-        context.predecessor_account_id = non_owner();
-        context.signer_account_id = non_owner();
-        context.signer_account_pk = public_key(5);
-        testing_env!(context.clone());
-
-        std::panic::catch_unwind(move || {
-            contract.stake(to_yocto(100).into(), public_key(4).try_into().unwrap());
-        })
-        .unwrap_err();
-    }
-    */
 }
