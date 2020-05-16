@@ -180,28 +180,28 @@ View methods:
 
 ```bash
 # User1 total balance
-near view my_validator get_account_total_balance '{"account_id": "user1"}'
+near view my_validator get_account_total_balance '{"account_id": "user1"}' --accountId user1
 
 # User1 staked balance
-near view my_validator get_account_staked_balance '{"account_id": "user1"}'
+near view my_validator get_account_staked_balance '{"account_id": "user1"}' --accountId user1
 
 # User1 unstaked balance
-near view my_validator get_account_unstaked_balance '{"account_id": "user1"}'
+near view my_validator get_account_unstaked_balance '{"account_id": "user1"}' --accountId user1
 
 # Whether user1 can withdraw now
-near view my_validator is_account_unstaked_balance_available '{"account_id": "user1"}'
+near view my_validator is_account_unstaked_balance_available '{"account_id": "user1"}' --accountId user1
 
 # Total staked balance of the entire pool
-near view my_validator get_total_staked_balance '{}'
+near view my_validator get_total_staked_balance '{}' --accountId user1
 
 # Owner of the staking pool
-near view my_validator get_owner_id '{}'
+near view my_validator get_owner_id '{}' --accountId user1
 
 # Current reward fee
-near view my_validator get_reward_fee_fraction '{}'
+near view my_validator get_reward_fee_fraction '{}' --accountId user1
 
 # Owners balance
-near view my_validator get_account_total_balance '{"account_id": "owner"}'
+near view my_validator get_account_total_balance '{"account_id": "owner"}' --accountId user1
 ```
 
 To un-delegate, first run `unstake`:
