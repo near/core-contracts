@@ -300,7 +300,7 @@ pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) ->
 ```
 
 ## Migrating from an existing validator or contract
-This provides instructions to migrate your staked valdator or a validator contract to the new contract for Stakewars2
+This provides instructions to migrate your staked validator or a validator contract to the new contract for Stakewars2
 
 Upgrade to the latest near-shell:
 ```bash
@@ -372,7 +372,7 @@ near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVL
 
 #Check the current `seat price` to transfer the correct amount to your delegator(s)
 ```bash
-near validators next
+near validators next| grep "seat price"
 ```
 #Register one or more delegator accounts at https://wallet.betanet.near.org, backup your seed phrase and transfer NEAR to them online
 
@@ -393,7 +393,9 @@ near login
 ```
 #Check that your validator proposal was (Accepted) other wise deposit and stake more
 ```bash
-near proposals
+near proposals | grep my_validator
+#After some time check to make sure your listed
+near validators next | grep my_validator
 ```
 ### Common errors and resolutions
 #### Error:  TypedError: [-32000] Server error: account <accountId> does not exist while viewing
