@@ -298,3 +298,111 @@ pub fn update_reward_fee_fraction(&mut self, reward_fee_fraction: RewardFeeFract
 /// behalf of this staking pool.
 pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) -> Promise;
 ```
+
+## Migrating from an existing validator or contract
+This provides instructions to migrate your staked valdator or a validator contract to the new contract for Stakewars2
+
+Upgrade to the latest near-shell:
+```bash
+npm install -g near-shell
+```
+Login:
+```bash
+#If not logged into the browser recover your account with the seed phrase first
+export NEAR_ENV=betanet
+near login
+```
+
+Unstake and Withdraw:
+```bash
+#If you staked to your validator unstake, there is no withdraw
+near stake nearkat.betanet <staking public key> 0
+
+#If you staked to a contract
+near call my_validator unstake '{"amount": "100000000000000000000000000"}' --accountId user1
+
+#Wait 3 epochs (9 hours) to withdraw
+#Check if balance is available to withdraw
+near view my_validator is_account_unstaked_balance_available '{"account_id": "user1"}'
+
+#If is_account_unstaked_balance_available returns "true" withdraw
+near call my_validator withdraw '{"amount": "100000000000000000000000000"}' --accountId user1
+```
+#Download new contract with Git:
+```bash
+mkdir staking-pool
+
+cd staking-pool
+
+git clone https://github.com/near/initial-contracts
+
+cd initial-contracts
+
+cd staking-pool
+```
+#Install Rust:
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+#Add wasm target to your toolchain:
+```bash
+rustup target add wasm32-unknown-unknown
+```
+#Build:
+```bash
+./build.sh
+```
+#Get validator key:
+```bash
+cat ~/.near/betanet/validator_key.json |grep "public_key"
+```
+#Create a new account to deploy contract to
+#Set my_validator to the name you want publicly displayed
+#--mastAccount is your account you signed up to StakeWars2 with
+```bash
+near create_account my_validator --masterAccount=owner
+```
+#Deploy the contract to the new account
+```bash
+near deploy --accountId=my_validator --wasmFile=res/staking_pool.wasm
+```
+#Initialize staking pool at account `my_validator` for the owner account ID `owner`, given staking pool and 10% reward fee
+```bash
+near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVLeScmY9YeEyR3Tw9yXfjBPzFLzroTranYtVb", "reward_fee_fraction": {"numerator": 10, "denominator": 100}}' --account_id owner
+```
+
+#Check the current "seat price" to transfer the correct amount to your delegator(s)
+```bash
+near validators next
+```
+#Register one or more delegator accounts at https://wallet.betanet.near.org, backup your seed phrase and transfer NEAR to them online
+
+#Login and authorize the delegator (complete the next 3 steps for each delegator account)
+```bash
+export NEAR_ENV=betanet
+near login
+```
+#Deposit to the valdiator
+```bash
+near call my_validator deposit '{}' --accountId user1 --amount 100
+near login
+```
+#Stake the deposited amount
+```bash
+near call my_validator stake '{"amount": "100000000000000000000000000"}' --accountId user1
+near login
+```
+#Check that your validator proposal was (Accepted) other wise deposit and stake more
+near proposals
+
+###Common errors and resolutions
+
+#Error:  GasExceeded [Error]: Exceeded the prepaid gas
+Add additional gas by adding the parameter: --gas 10000000000000000
+
+#"Error": "wasm execution failed with error: FunctionCallError(MethodResolveError(MethodNotFound))"
+Your function call is incorrect or your contract is not updated
+
+
+
+
