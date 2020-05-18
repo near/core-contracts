@@ -382,25 +382,28 @@ near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVL
 ```bash
 near validators next| grep "seat price"
 ```
-#### Register one or more delegator accounts at https://wallet.betanet.near.org, backup your seed phrase and transfer NEAR to them online
+#### Register a delegator account (repeat these steps for additional delegators)
+-- https://wallet.betanet.near.org
+-- backup your seed phrase
+-- transfer NEAR from your MasterAccount to the delegator account
 
-#### Login and authorize the delegator (complete the next 3 steps for each delegator account)
+#### Login and authorize the delegator
 ```bash
 export NEAR_ENV=betanet
 near login
 ```
-#### Deposit to the valdiator
+#### Deposit NEAR from the delegator account to the valdiator contract
 ```bash
 near call my_validator deposit '{}' --accountId user1 --amount 100
 ```
-#### Stake the deposited amount
+#### Stake the deposited amount to the validator contract
 ```bash
 near call my_validator stake '{"amount": "100000000000000000000000000"}' --accountId user1
 ```
-#### Check that your validator proposal was (Accepted) other wise deposit and stake more
+#### Check that your validator proposal was (Accepted) or deposit and stake more NEAR
 ```bash
 near proposals | grep my_validator
-#After some time check to make sure your listed
+#After some time check to make sure you're listed
 near validators next | grep my_validator
 ```
 ## Common errors and resolutions
