@@ -357,7 +357,7 @@ cat ~/.near/betanet/validator_key.json |grep "public_key"
 ```
 #Create a new account to deploy contract to
 - Set my_validator to the name you want publicly displayed
-- --mastAccount is your account you signed up to StakeWars2 with
+- --masterAccount is your account you signed up to StakeWars2 with
 ```bash
 near create_account my_validator --masterAccount=owner
 ```
@@ -408,7 +408,6 @@ Add additional gas by adding the parameter: --gas 10000000000000000
 
 #### "Error": "wasm execution failed with error: FunctionCallError(MethodResolveError(MethodNotFound))"
 Your function call is incorrect or your contract is not updated
-
 
 
 
