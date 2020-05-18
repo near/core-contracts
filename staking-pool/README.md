@@ -300,34 +300,40 @@ pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) ->
 ```
 
 ## Migrating from an existing validator or contract
-This provides instructions to migrate your staked validator or a validator contract to the new contract for Stakewars2
+This provides instructions to migrate your staked validator or a validator contract to a new contract
 
-Upgrade to the latest near-shell:
+#### Upgrade to the latest near-shell:
 ```bash
 npm install -g near-shell
 ```
-Login:
+#### Set Environment and Login:
 ```bash
 #If not logged into the browser recover your account with the seed phrase first
+
+#Set the NEAR environment to the target network (betanet,testnet,mainnet)
 export NEAR_ENV=betanet
+
 near login
 ```
 
-Unstake and Withdraw:
+#### Unstake and Withdraw:
 ```bash
 #If you staked to your validator unstake, there is no withdraw
 near stake nearkat.betanet <staking public key> 0
 
-#If you staked to a contract
+#If you staked to a contract get the staked balance
+near view my_validator get_account_staked_balance '{"account_id": "user1"}'
+
+#Unsake by copying and pasting the staked balance
 near call my_validator unstake '{"amount": "100000000000000000000000000"}' --accountId user1
 
-#Wait 3 epochs (9 hours) to withdraw and check if balance is available to withdraw
+#Wait 4 epochs (12 hours) to withdraw and check if balance is available to withdraw
 near view my_validator is_account_unstaked_balance_available '{"account_id": "user1"}'
 
 #If is_account_unstaked_balance_available returns "true" withdraw
 near call my_validator withdraw '{"amount": "100000000000000000000000000"}' --accountId user1
 ```
-#Download new contract with Git:
+#### Download new contract with Git:
 ```bash
 mkdir staking-pool
 
@@ -339,70 +345,70 @@ cd initial-contracts
 
 cd staking-pool
 ```
-#Install Rust:
+#### Install Rust:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-#Add wasm target to your toolchain:
+##### Add wasm target to your toolchain:
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
-#Build:
+#### Build:
 ```bash
 ./build.sh
 ```
-#Get validator key:
+#### Get validator key:
 ```bash
 cat ~/.near/betanet/validator_key.json |grep "public_key"
 ```
-#Create a new account to deploy contract to
+#### Create a new account to deploy contract to
 - Set my_validator to the name you want publicly displayed
 - --masterAccount is your account you signed up to StakeWars2 with
 ```bash
 near create_account my_validator --masterAccount=owner
 ```
-#Deploy the contract to the new account
+#### Deploy the contract to the new account
 ```bash
 near deploy --accountId=my_validator --wasmFile=res/staking_pool.wasm
 ```
-#Initialize staking pool at account `my_validator` for the owner account ID `owner`, given staking pool and 10% reward fee
+#### Initialize staking pool at account `my_validator` for the owner account ID `owner`, given staking pool and 10% reward fee
 ```bash
 near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVLeScmY9YeEyR3Tw9yXfjBPzFLzroTranYtVb", "reward_fee_fraction": {"numerator": 10, "denominator": 100}}' --account_id owner
 ```
 
-#Check the current `seat price` to transfer the correct amount to your delegator(s)
+#### Check the current `seat price` to transfer the correct amount to your delegator(s)
 ```bash
 near validators next| grep "seat price"
 ```
-#Register one or more delegator accounts at https://wallet.betanet.near.org, backup your seed phrase and transfer NEAR to them online
+#### Register one or more delegator accounts at https://wallet.betanet.near.org, backup your seed phrase and transfer NEAR to them online
 
-#Login and authorize the delegator (complete the next 3 steps for each delegator account)
+#### Login and authorize the delegator (complete the next 3 steps for each delegator account)
 ```bash
 export NEAR_ENV=betanet
 near login
 ```
-#Deposit to the valdiator
+#### Deposit to the valdiator
 ```bash
 near call my_validator deposit '{}' --accountId user1 --amount 100
-near login
 ```
-#Stake the deposited amount
+#### Stake the deposited amount
 ```bash
 near call my_validator stake '{"amount": "100000000000000000000000000"}' --accountId user1
-near login
 ```
-#Check that your validator proposal was (Accepted) other wise deposit and stake more
+#### Check that your validator proposal was (Accepted) other wise deposit and stake more
 ```bash
 near proposals | grep my_validator
 #After some time check to make sure your listed
 near validators next | grep my_validator
 ```
-### Common errors and resolutions
+## Common errors and resolutions
+
 #### Error:  TypedError: [-32000] Server error: account <accountId> does not exist while viewing
 You are not logged in
 ```bash
 near login
 ```
+    
 #### Error:  GasExceeded [Error]: Exceeded the prepaid gas
 Add additional gas by adding the parameter: --gas 10000000000000000
 
