@@ -243,87 +243,13 @@ impl LockupContract {
 mod tests {
     use super::*;
 
-    use near_sdk::{testing_env, MockedBlockchain, VMContext};
+    use near_sdk::{testing_env, MockedBlockchain, PromiseResult, VMContext};
     use std::convert::TryInto;
 
+    mod test_utils;
+    use test_utils::*;
+
     pub type AccountId = String;
-
-    pub const LOCKUP_NEAR: u128 = 1000;
-    pub const GENESIS_TIME_IN_DAYS: u64 = 500;
-    pub const YEAR: u64 = 365;
-    pub const ALMOST_HALF_YEAR: u64 = YEAR / 2;
-
-    pub fn system_account() -> AccountId {
-        "system".to_string()
-    }
-
-    pub fn account_owner() -> AccountId {
-        "account_owner".to_string()
-    }
-
-    pub fn non_owner() -> AccountId {
-        "non_owner".to_string()
-    }
-
-    pub fn to_yocto(near_balance: u128) -> u128 {
-        near_balance * 10u128.pow(24)
-    }
-
-    pub fn to_nanos(num_days: u64) -> u64 {
-        num_days * 86400_000_000_000
-    }
-
-    pub fn to_ts(num_days: u64) -> u64 {
-        // 2018-08-01 UTC in nanoseconds
-        1533081600_000_000_000 + to_nanos(num_days)
-    }
-
-    pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
-        assert!(
-            std::cmp::max(left, right) - std::cmp::min(left, right) < max_delta,
-            format!(
-                "Left {} is not even close to Right {} within delta {}",
-                left, right, max_delta
-            )
-        );
-    }
-
-    pub fn assert_almost_eq(left: u128, right: u128) {
-        assert_almost_eq_with_max_delta(left, right, to_yocto(10));
-    }
-
-    pub fn get_context(
-        predecessor_account_id: AccountId,
-        account_balance: u128,
-        account_locked_balance: u128,
-        block_timestamp: u64,
-        is_view: bool,
-    ) -> VMContext {
-        VMContext {
-            current_account_id: account_owner(),
-            signer_account_id: predecessor_account_id.clone(),
-            signer_account_pk: vec![0, 1, 2],
-            predecessor_account_id,
-            input: vec![],
-            block_index: 1,
-            block_timestamp,
-            epoch_height: 1,
-            account_balance,
-            account_locked_balance,
-            storage_usage: 10u64.pow(6),
-            attached_deposit: 0,
-            prepaid_gas: 10u64.pow(15),
-            random_seed: vec![0, 1, 2],
-            is_view,
-            output_data_receivers: vec![],
-        }
-    }
-
-    fn public_key(byte_val: u8) -> Base58PublicKey {
-        let mut pk = vec![byte_val; 33];
-        pk[0] = 0;
-        Base58PublicKey(pk)
-    }
 
     fn lockup_only_setup() -> (VMContext, LockupContract) {
         let context = get_context(
@@ -393,5 +319,261 @@ mod tests {
         assert_eq!(env::account_balance(), to_yocto(LOCKUP_NEAR));
         contract.transfer(to_yocto(100).into(), non_owner());
         assert_almost_eq(env::account_balance(), to_yocto(LOCKUP_NEAR - 100));
+    }
+
+    #[test]
+    #[should_panic(expected = "Staking pool is not selected")]
+    fn test_staking_pool_is_not_selected() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        let amount = to_yocto(LOCKUP_NEAR - 100);
+        testing_env!(context.clone());
+        contract.deposit_to_staking_pool(amount.into());
+    }
+
+    #[test]
+    fn test_staking_pool_success() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"true".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(true, staking_pool.clone());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_staking_pool_account_id(), Some(staking_pool));
+        assert_eq!(contract.get_known_deposited_balance().0, 0);
+        context.is_view = false;
+
+        // Deposit to the staking_pool
+        let amount = to_yocto(LOCKUP_NEAR - 100);
+        testing_env!(context.clone());
+        contract.deposit_to_staking_pool(amount.into());
+        context.account_balance = env::account_balance();
+        assert_eq!(context.account_balance, to_yocto(LOCKUP_NEAR) - amount);
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_deposit(amount.into());
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_known_deposited_balance().0, amount);
+        context.is_view = false;
+
+        // Staking on the staking pool
+        testing_env!(context.clone());
+        contract.stake(amount.into());
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_stake(amount.into());
+
+        // Assuming there are 20 NEAR tokens in rewards. Unstaking.
+        let unstake_amount = amount + to_yocto(20);
+        testing_env!(context.clone());
+        contract.unstake(unstake_amount.into());
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_unstake(unstake_amount.into());
+
+        // Withdrawing
+        testing_env!(context.clone());
+        contract.withdraw_from_staking_pool(unstake_amount.into());
+        context.account_balance += unstake_amount;
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_withdraw(unstake_amount.into());
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_known_deposited_balance().0, 0);
+        context.is_view = false;
+
+        // Unselecting staking pool
+        testing_env!(context.clone());
+        contract.unselect_staking_pool();
+        assert_eq!(contract.get_staking_pool_account_id(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Staking pool is already selected")]
+    fn test_staking_pool_selected_again() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"true".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(true, staking_pool.clone());
+
+        // Selecting another staking pool
+        testing_env!(context.clone());
+        contract.select_staking_pool("staking_pool_2".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "The given staking pool account ID is not whitelisted")]
+    fn test_staking_pool_not_whitelisted() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"false".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(false, staking_pool.clone());
+    }
+
+    #[test]
+    #[should_panic(expected = "Staking pool is not selected")]
+    fn test_staking_pool_unselecting_non_selected() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Unselecting staking pool
+        testing_env!(context.clone());
+        contract.unselect_staking_pool();
+    }
+
+    #[test]
+    #[should_panic(expected = "There is still a deposit on the staking pool")]
+    fn test_staking_pool_unselecting_with_deposit() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"true".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(true, staking_pool.clone());
+
+        // Deposit to the staking_pool
+        let amount = to_yocto(LOCKUP_NEAR - 100);
+        testing_env!(context.clone());
+        contract.deposit_to_staking_pool(amount.into());
+        context.account_balance = env::account_balance();
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_deposit(amount.into());
+
+        // Unselecting staking pool
+        testing_env!(context.clone());
+        contract.unselect_staking_pool();
+    }
+
+    #[test]
+    #[should_panic(expected = "Foundation keys can't be added without vesting schedule")]
+    fn test_init_foundation_key_no_vesting() {
+        let context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
+                lockup_duration: to_nanos(YEAR).into(),
+                vesting_information: None,
+            },
+            AccountId::from("whitelist"),
+            None,
+            public_key(1),
+            Some(public_key(2)),
+            Some(public_key(3)),
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Lockup timestamp should not be given when transfer voting information is present"
+    )]
+    fn test_init_lockup_timestamp_with_transfers_poll() {
+        let context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
+                lockup_duration: to_nanos(YEAR).into(),
+                vesting_information: None,
+            },
+            AccountId::from("whitelist"),
+            Some(AccountId::from("transfers")),
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Lockup timestamp should be given when transfer voting information is absent"
+    )]
+    fn test_init_no_lockup_timestamp_and_no_transfers_poll() {
+        let context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: None,
+                lockup_duration: to_nanos(YEAR).into(),
+                vesting_information: None,
+            },
+            AccountId::from("whitelist"),
+            None,
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
     }
 }

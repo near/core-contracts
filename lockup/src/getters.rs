@@ -3,6 +3,24 @@ use near_sdk::near_bindgen;
 
 #[near_bindgen]
 impl LockupContract {
+    /// Returns the account ID of the staking pool.
+    pub fn get_staking_pool_account_id(&self) -> Option<AccountId> {
+        self.staking_information
+            .as_ref()
+            .map(|info| info.staking_pool_account_id.clone())
+    }
+
+    /// The amount of tokens that were deposited to the staking pool.
+    /// NOTE: The actual balance can be larger than this known deposit balance due to staking
+    /// rewards acquired on the staking pool.
+    pub fn get_known_deposited_balance(&self) -> WrappedBalance {
+        self.staking_information
+            .as_ref()
+            .map(|info| info.deposit_amount.0)
+            .unwrap_or(0)
+            .into()
+    }
+
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
