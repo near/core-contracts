@@ -18,12 +18,18 @@ pub enum MultiSigRequest {
     AddKey {
         public_key: PublicKey,
     },
+    DeleteKey {
+        public_key: PublicKey,
+    },
     FunctionCall {
         contract_id: AccountId,
         method_name: String,
         args: Vec<u8>,
         deposit: Balance,
         gas: Gas,
+    },
+    SetNumConfirmations {
+        num_confirmations: u32,
     },
 }
 
@@ -58,46 +64,75 @@ impl MultiSigContract {
     }
 
     fn add_request(&mut self, request: MultiSigRequest) -> RequestId {
-        self.requests.insert(&self.request_nonce, &request);
-        let confirmations = vec![env::signer_account_pk()].into_iter().collect();
-        self.confirmations
-            .insert(&self.request_nonce, &confirmations);
-        self.request_nonce += 1;
-        self.request_nonce - 1
+        if self.num_confirmations == 1 {
+            self.execute_request(request);
+            0
+        } else {
+            self.requests.insert(&self.request_nonce, &request);
+            let confirmations = vec![env::signer_account_pk()].into_iter().collect();
+            self.confirmations
+                .insert(&self.request_nonce, &confirmations);
+            self.request_nonce += 1;
+            self.request_nonce - 1
+        }
     }
 
     fn execute_request(&mut self, request: MultiSigRequest) {
         match request {
             MultiSigRequest::Transfer { account_id, amount } => {
-                Promise::new(account_id).transfer(amount)
+                Promise::new(account_id).transfer(amount);
             }
-            MultiSigRequest::AddKey { public_key } => Promise::new(env::current_account_id())
-                .add_access_key(
+            MultiSigRequest::AddKey { public_key } => {
+                Promise::new(env::current_account_id()).add_access_key(
                     public_key,
                     DEFAULT_ALLOWANCE,
                     env::current_account_id(),
                     "transfer,function_call,add_key,confirm"
                         .to_string()
                         .into_bytes(),
-                ),
+                );
+            }
+            MultiSigRequest::DeleteKey { public_key } => {
+                Promise::new(env::current_account_id()).delete_key(public_key);
+            }
             MultiSigRequest::FunctionCall {
                 contract_id,
                 method_name,
                 args,
                 deposit,
                 gas,
-            } => Promise::new(contract_id).function_call(
-                method_name.into_bytes(),
-                args,
-                deposit,
-                gas,
-            ),
+            } => {
+                Promise::new(contract_id).function_call(
+                    method_name.into_bytes(),
+                    args,
+                    deposit,
+                    gas,
+                );
+            }
+            MultiSigRequest::SetNumConfirmations { num_confirmations } => {
+                self.num_confirmations = num_confirmations;
+            }
         };
+    }
+
+    /// Request to change number of confirmations.
+    pub fn set_num_confirmations(&mut self, num_confirmations: u32) -> RequestId {
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
+        self.add_request(MultiSigRequest::SetNumConfirmations { num_confirmations })
     }
 
     /// Request to transfer funds from this account to given account.
     pub fn transfer(&mut self, account_id: AccountId, amount: U128) -> RequestId {
         // TOOD: add safety margin for storage allocated balance.
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
         assert!(
             env::account_balance() >= amount.0,
             "Not enough funds to initiate transfer"
@@ -111,7 +146,25 @@ impl MultiSigContract {
     /// Request to add new access key to this contract.
     /// Allows to extend allowed set of keys.
     pub fn add_key(&mut self, public_key: Base58PublicKey) -> RequestId {
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
         self.add_request(MultiSigRequest::AddKey {
+            public_key: public_key.into(),
+        })
+    }
+
+    /// Request to delete existing access key from this contract.
+    /// Allows to remove not used / lost / exposed key.
+    pub fn delete_key(&mut self, public_key: Base58PublicKey) -> RequestId {
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
+        self.add_request(MultiSigRequest::DeleteKey {
             public_key: public_key.into(),
         })
     }
@@ -125,6 +178,11 @@ impl MultiSigContract {
         deposit: Balance,
         gas: Gas,
     ) -> RequestId {
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
         self.add_request(MultiSigRequest::FunctionCall {
             contract_id,
             method_name,
@@ -137,6 +195,11 @@ impl MultiSigContract {
     /// Confirm given request with given signing key.
     /// If with this, there has been enough confirmation, a promise with request will be scheduled.
     pub fn confirm(&mut self, request_id: RequestId) {
+        assert_eq!(
+            env::current_account_id(),
+            env::signer_account_id(),
+            "Signer account must much given account"
+        );
         assert!(
             self.requests.get(&request_id).is_some(),
             "No such request: either wrong number or already confirmed"
@@ -151,7 +214,10 @@ impl MultiSigContract {
             "Already confirmed this request"
         );
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
-            let request = self.requests.remove(&request_id).expect("Failed to remove existing element");
+            let request = self
+                .requests
+                .remove(&request_id)
+                .expect("Failed to remove existing element");
             self.execute_request(request);
             self.confirmations.remove(&request_id);
         } else {
@@ -284,6 +350,15 @@ mod tests {
         c.confirm(request_id);
         // TODO: confirm that funds were transferred out via promise.
         assert_eq!(c.requests.len(), 0);
+    }
+
+    #[test]
+    fn test_change_num_confirmations() {
+        let amount = 1_000;
+        testing_env!(context_with_key(vec![1, 2, 3], amount));
+        let mut c = MultiSigContract::new(1);
+        c.set_num_confirmations(2);
+        assert_eq!(c.num_confirmations, 2);
     }
 
     #[test]
