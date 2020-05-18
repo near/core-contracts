@@ -5,7 +5,8 @@ use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, U128};
 use near_sdk::{env, near_bindgen, AccountId, Balance, Gas, Promise, PublicKey};
 
-const DEFAULT_ALLOWANCE: u128 = 1_000_000_000_000_000_000_000;
+/// Unlimited allowance for multisig keys.
+const DEFAULT_ALLOWANCE: u128 = 0;
 
 pub type RequestId = u32;
 
