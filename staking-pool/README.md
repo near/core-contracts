@@ -307,9 +307,11 @@ This provides instructions to migrate your staked validator or a validator contr
 npm install -g near-shell
 ```
 #### Set Environment and Login:
-```bash
-#If not logged into the browser recover your account with the seed phrase first
 
+##### If not logged into the browser, recover your account with the seed phrase first
+https://wallet.betanet.nearprotocol.com/create/
+
+```bash
 #Set the NEAR environment to the target network (betanet,testnet,mainnet)
 export NEAR_ENV=betanet
 
@@ -412,7 +414,7 @@ near login
 #### Error:  GasExceeded [Error]: Exceeded the prepaid gas
 Add additional gas by adding the parameter: --gas 10000000000000000
 
-#### "Error": "wasm execution failed with error: FunctionCallError(MethodResolveError(MethodNotFound))"
+#### Error: "wasm execution failed with error: FunctionCallError(MethodResolveError(MethodNotFound))"
 Your function call is incorrect or your contract is not updated
 
 
