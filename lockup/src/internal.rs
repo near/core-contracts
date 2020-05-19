@@ -21,8 +21,8 @@ impl LockupContract {
     }
 
     pub fn set_termination_status(&mut self, status: TerminationStatus) {
-        if let Some(VestingInformation::Terminating(termination_information)) =
-            self.lockup_information.vesting_information.as_mut()
+        if let VestingInformation::Terminating(termination_information) =
+            &mut self.vesting_information
         {
             termination_information.status = status;
         } else {
@@ -31,7 +31,7 @@ impl LockupContract {
     }
 
     pub fn assert_vesting(&self) {
-        if let Some(VestingInformation::Vesting(_)) = &self.lockup_information.vesting_information {
+        if let VestingInformation::Vesting(_) = &self.vesting_information {
             // OK
         } else {
             env::panic(b"There is no vesting in progress");
@@ -39,9 +39,7 @@ impl LockupContract {
     }
 
     pub fn assert_no_termination(&self) {
-        if let Some(VestingInformation::Terminating(_)) =
-            &self.lockup_information.vesting_information
-        {
+        if let VestingInformation::Terminating(_) = &self.vesting_information {
             env::panic(b"All operations are blocked until vesting termination is completed");
         }
     }

@@ -130,6 +130,9 @@ pub struct LockupContract {
     /// Information about lockup schedule and the amount.
     pub lockup_information: LockupInformation,
 
+    /// Information about vesting.
+    pub vesting_information: VestingInformation,
+
     /// Account ID of the staking pool whitelist contract.
     pub staking_pool_whitelist_account_id: AccountId,
 
@@ -159,6 +162,7 @@ impl Default for LockupContract {
 impl LockupContract {
     /// Initializes lockup contract.
     /// - `lockup_information` - information about the lockup amount and the release timestamp.
+    /// - `vesting_schedule` - if present, describes the vesting schedule.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
     /// - `transfer_poll_account_id` - if `Some` means transfers are disabled and can only be
     /// - `owners_main_public_key` - the public key for the owner's main access key.
@@ -169,6 +173,7 @@ impl LockupContract {
     #[init]
     pub fn new(
         lockup_information: LockupInformation,
+        vesting_schedule: Option<VestingSchedule>,
         staking_pool_whitelist_account_id: AccountId,
         transfer_poll_account_id: Option<AccountId>,
         owners_main_public_key: Base58PublicKey,
@@ -183,7 +188,7 @@ impl LockupContract {
         lockup_information.assert_valid();
         if foundation_public_key.is_some() {
             assert!(
-                lockup_information.vesting_information.is_some(),
+                vesting_schedule.is_some(),
                 "Foundation keys can't be added without vesting schedule"
             )
         }
@@ -202,6 +207,14 @@ impl LockupContract {
                 "Lockup timestamp should be given when transfer voting information is absent"
             );
         }
+        let vesting_information = match vesting_schedule {
+            Some(vesting_schedule) => {
+                vesting_schedule.assert_valid();
+                VestingInformation::Vesting(vesting_schedule)
+            }
+            None => VestingInformation::None,
+        };
+
         let access_keys_information = AccessKeysInformation {
             owners_main_public_key: owners_main_public_key.into(),
             owners_staking_public_key: owners_staking_public_key.map(std::convert::Into::into),
@@ -233,6 +246,7 @@ impl LockupContract {
         }
         Self {
             lockup_information,
+            vesting_information,
             staking_information: None,
             staking_pool_whitelist_account_id,
             transfer_poll_account_id,
@@ -273,8 +287,8 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: None,
             },
+            None,
             AccountId::from("whitelist"),
             None,
             public_key(1),
@@ -594,8 +608,8 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: None,
             },
+            None,
             AccountId::from("whitelist"),
             None,
             public_key(1),
@@ -622,8 +636,8 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: None,
             },
+            None,
             AccountId::from("whitelist"),
             Some(AccountId::from("transfers")),
             public_key(1),
@@ -650,8 +664,8 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: None,
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: None,
             },
+            None,
             AccountId::from("whitelist"),
             None,
             public_key(1),
@@ -675,12 +689,12 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: Some(VestingInformation::Vesting(VestingSchedule {
-                    start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
-                    cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                    end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
-                })),
             },
+            Some(VestingSchedule {
+                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
+                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
+            }),
             AccountId::from("whitelist"),
             None,
             public_key(1),
@@ -770,12 +784,12 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: Some(VestingInformation::Vesting(VestingSchedule {
-                    start_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                    cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
-                    end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 4).into(),
-                })),
             },
+            Some(VestingSchedule {
+                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
+                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 4).into(),
+            }),
             AccountId::from("whitelist"),
             None,
             public_key(1),
@@ -862,12 +876,12 @@ mod tests {
                 lockup_amount: to_yocto(LOCKUP_NEAR).into(),
                 lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
                 lockup_duration: to_nanos(YEAR).into(),
-                vesting_information: Some(VestingInformation::Vesting(VestingSchedule {
-                    start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
-                    cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                    end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
-                })),
             },
+            Some(VestingSchedule {
+                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
+                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
+            }),
             AccountId::from("whitelist"),
             None,
             public_key(1),

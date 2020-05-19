@@ -3,7 +3,7 @@ use near_sdk::near_bindgen;
 
 #[near_bindgen]
 impl LockupContract {
-    /// Returns the account ID of the staking pool.
+    /// Returns the account ID of the selected staking pool.
     pub fn get_staking_pool_account_id(&self) -> Option<AccountId> {
         self.staking_information
             .as_ref()
@@ -23,8 +23,7 @@ impl LockupContract {
 
     /// Returns the current termination status or `None` in case of no termination.
     pub fn get_termination_status(&self) -> Option<TerminationStatus> {
-        if let Some(VestingInformation::Terminating(termination_information)) =
-            &self.lockup_information.vesting_information
+        if let VestingInformation::Terminating(termination_information) = &self.vesting_information
         {
             Some(termination_information.status)
         } else {
@@ -35,10 +34,9 @@ impl LockupContract {
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
-        if let Some(VestingInformation::Terminating(TerminationInformation {
-            unvested_amount,
-            ..
-        })) = &self.lockup_information.vesting_information
+        if let VestingInformation::Terminating(TerminationInformation {
+            unvested_amount, ..
+        }) = &self.vesting_information
         {
             *unvested_amount
         } else {
@@ -73,43 +71,41 @@ impl LockupContract {
     pub fn get_unvested_amount(&self) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount.0;
-        if let Some(vesting_information) = &self.lockup_information.vesting_information {
-            match vesting_information {
-                VestingInformation::Vesting(vesting_schedule) => {
-                    if block_timestamp < vesting_schedule.cliff_timestamp.0 {
-                        // Before the cliff, nothing is vested
-                        lockup_amount.into()
-                    } else if block_timestamp >= vesting_schedule.end_timestamp.0 {
-                        // After the end, everything is vested
-                        0.into()
-                    } else {
-                        // cannot overflow since block_timestamp < vesting_schedule.end_timestamp
-                        let time_left =
-                            U256::from(vesting_schedule.end_timestamp.0 - block_timestamp);
-                        // The total time is positive. Checked at the contract initialization.
-                        let total_time = U256::from(
-                            vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0,
-                        );
-                        let unvested_amount = U256::from(lockup_amount) * time_left / total_time;
-                        // The unvested amount can't be larger than lockup_amount because the
-                        // time_left is smaller than total_time.
-                        unvested_amount.as_u128().into()
-                    }
-                }
-                VestingInformation::Terminating(termination_information) => {
-                    termination_information.unvested_amount
+        match &self.vesting_information {
+            VestingInformation::None => {
+                // Everything is vested and unlocked
+                0.into()
+            }
+            VestingInformation::Vesting(vesting_schedule) => {
+                if block_timestamp < vesting_schedule.cliff_timestamp.0 {
+                    // Before the cliff, nothing is vested
+                    lockup_amount.into()
+                } else if block_timestamp >= vesting_schedule.end_timestamp.0 {
+                    // After the end, everything is vested
+                    0.into()
+                } else {
+                    // cannot overflow since block_timestamp < vesting_schedule.end_timestamp
+                    let time_left = U256::from(vesting_schedule.end_timestamp.0 - block_timestamp);
+                    // The total time is positive. Checked at the contract initialization.
+                    let total_time = U256::from(
+                        vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0,
+                    );
+                    let unvested_amount = U256::from(lockup_amount) * time_left / total_time;
+                    // The unvested amount can't be larger than lockup_amount because the
+                    // time_left is smaller than total_time.
+                    unvested_amount.as_u128().into()
                 }
             }
-        } else {
-            // Everything is vested and unlocked
-            0.into()
+            VestingInformation::Terminating(termination_information) => {
+                termination_information.unvested_amount
+            }
         }
     }
 
     /// The balance of the account owner. It includes vested and extra tokens that may have been
     /// deposited to this account.
     /// NOTE: Some of this tokens may be deposited to the staking pool.
-    /// Also it doesn't account for tokens locked for the contract storage.
+    /// This method also doesn't account for tokens locked for the contract storage.
     pub fn get_owners_balance(&self) -> WrappedBalance {
         (env::account_balance() + self.get_known_deposited_balance().0)
             .saturating_sub(self.get_locked_amount().0)

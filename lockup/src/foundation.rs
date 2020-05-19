@@ -3,10 +3,6 @@ use near_sdk::{near_bindgen, AccountId, Promise};
 
 #[near_bindgen]
 impl LockupContract {
-    /************************/
-    /* Foundation's Methods */
-    /************************/
-
     /// FOUNDATION'S METHOD
     /// Terminates vesting schedule and locks the remaining unvested amount.
     pub fn terminate_vesting(&mut self) {
@@ -34,11 +30,10 @@ impl LockupContract {
             TerminationStatus::ReadyToWithdraw
         };
 
-        self.lockup_information.vesting_information =
-            Some(VestingInformation::Terminating(TerminationInformation {
-                unvested_amount,
-                status,
-            }));
+        self.vesting_information = VestingInformation::Terminating(TerminationInformation {
+            unvested_amount,
+            status,
+        });
     }
 
     /// FOUNDATION'S METHOD

@@ -10,6 +10,7 @@ construct_uint! {
     // See https://github.com/wasmerio/wasmer/issues/1429
     pub struct U256(8);
 }
+
 /// Timestamp in nanosecond wrapped into a struct for JSON serialization as a string.
 pub type WrappedTimestamp = U64;
 /// Duration in nanosecond wrapped into a struct for JSON serialization as a string.
@@ -30,11 +31,6 @@ pub struct LockupInformation {
     /// The timestamp when the transfers were enabled.
     /// If None, the transfers are not enabled yet.
     pub lockup_timestamp: Option<WrappedTimestamp>,
-
-    /// Information about vesting if the lockup schedule includes vesting.
-    /// `Some` means there is vesting information available.
-    /// `None` means the lockup balance is unaffected by vesting.
-    pub vesting_information: Option<VestingInformation>,
 }
 
 impl LockupInformation {
@@ -43,13 +39,6 @@ impl LockupInformation {
             self.lockup_amount.0 > 0,
             "Lockup amount has to be positive number"
         );
-        match &self.vesting_information {
-            Some(VestingInformation::Vesting(vesting_schedule)) => vesting_schedule.assert_valid(),
-            Some(VestingInformation::Terminating(_termination_information)) => {
-                panic!("The contract should not be initialized in termination stage")
-            }
-            None => (),
-        };
     }
 }
 
@@ -77,6 +66,7 @@ pub struct StakingInformation {
     pub deposit_amount: WrappedBalance,
 }
 
+/// Contains information about vesting schedule.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
@@ -106,11 +96,12 @@ impl VestingSchedule {
     }
 }
 
-/// Contains information about vesting for contracts that contain vesting schedule and termination information.
+/// Contains information about vesting that contains vesting schedule and termination information.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub enum VestingInformation {
+    /// No vesting.
+    None,
     /// The vesting is going on schedule.
-    /// Once the vesting is completed `VestingInformation` is removed.
     Vesting(VestingSchedule),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.

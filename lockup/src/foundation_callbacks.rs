@@ -211,11 +211,11 @@ impl LockupContract {
             if unvested_amount > amount.0 {
                 // There is still unvested balance remaining.
                 let remaining_balance = unvested_amount - amount.0;
-                self.lockup_information.vesting_information =
-                    Some(VestingInformation::Terminating(TerminationInformation {
+                self.vesting_information =
+                    VestingInformation::Terminating(TerminationInformation {
                         unvested_amount: remaining_balance.into(),
                         status: TerminationStatus::ReadyToWithdraw,
-                    }));
+                    });
                 env::log(
                     format!(
                         "Termination Step: There is still terminated unvested balance of {} remaining to be withdrawn",
@@ -224,7 +224,7 @@ impl LockupContract {
                         .as_bytes(),
                 );
             } else {
-                self.lockup_information.vesting_information = None;
+                self.vesting_information = VestingInformation::None;
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }
         } else {
