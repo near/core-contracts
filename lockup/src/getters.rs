@@ -86,8 +86,7 @@ impl LockupContract {
                     }
                 }
                 VestingInformation::Terminating(termination_information) => {
-                    // It's safe to subtract, because terminated amount can't be larger.
-                    (lockup_amount - termination_information.unvested_amount.0).into()
+                    termination_information.unvested_amount
                 }
             }
         } else {

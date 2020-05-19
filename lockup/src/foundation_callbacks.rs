@@ -2,6 +2,7 @@ use crate::*;
 use near_sdk::{near_bindgen, PromiseOrValue};
 use std::convert::Into;
 
+#[near_bindgen]
 impl LockupContract {
     /// Called after the request to get the current staked balance to unstake everything for vesting
     /// schedule termination.
@@ -47,7 +48,7 @@ impl LockupContract {
             env::log(b"Termination Step: Nothing to unstake. Moving to the next status.");
             self.set_staking_pool_status(TransactionStatus::Idle);
             self.set_termination_status(TerminationStatus::EverythingUnstaked);
-            true.into()
+            PromiseOrValue::Value(true)
         }
     }
 
@@ -122,7 +123,7 @@ impl LockupContract {
             )
             .then(
                 ext_self_foundation::on_staking_pool_withdraw_for_termination(
-                    staked_balance,
+                    unstaked_balance,
                     &env::current_account_id(),
                     NO_DEPOSIT,
                     gas::foundation_callbacks::ON_STAKING_POOL_WITHDRAW_FOR_TERMINATION,
@@ -133,7 +134,7 @@ impl LockupContract {
             env::log(b"Termination Step: Nothing to withdraw from the staking pool. Ready to withdraw from the account.");
             self.set_staking_pool_status(TransactionStatus::Idle);
             self.set_termination_status(TerminationStatus::ReadyToWithdraw);
-            true.into()
+            PromiseOrValue::Value(true)
         }
     }
 
@@ -206,13 +207,13 @@ impl LockupContract {
                 let remaining_balance = unvested_amount - amount.0;
                 self.lockup_information.vesting_information =
                     Some(VestingInformation::Terminating(TerminationInformation {
-                        unvested_amount: remaining_balance,
-                        status: TransactionStatus::ReadyToWithdraw,
+                        unvested_amount: remaining_balance.into(),
+                        status: TerminationStatus::ReadyToWithdraw,
                     }));
                 env::log(
                     format!(
                         "Termination Step: There is still terminated unvested balance of {} remaining to be withdrawn",
-                        remaining_balance, receiver_id
+                        remaining_balance
                     )
                         .as_bytes(),
                 );
@@ -221,7 +222,7 @@ impl LockupContract {
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }
         } else {
-            self.set_termination_status(TransactionStatus::ReadyToWithdraw);
+            self.set_termination_status(TerminationStatus::ReadyToWithdraw);
             env::log(
                 format!(
                     "Termination Step: The withdrawal of the terminated unvested amount of {} to @{} failed",
