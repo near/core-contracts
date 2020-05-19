@@ -21,6 +21,17 @@ impl LockupContract {
             .into()
     }
 
+    /// Returns the current termination status or `None` in case of no termination.
+    pub fn get_termination_status(&self) -> Option<TerminationStatus> {
+        if let Some(VestingInformation::Terminating(termination_information)) =
+            &self.lockup_information.vesting_information
+        {
+            Some(termination_information.status)
+        } else {
+            None
+        }
+    }
+
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {

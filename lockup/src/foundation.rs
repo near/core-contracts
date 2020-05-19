@@ -51,15 +51,18 @@ impl LockupContract {
         let status = self.get_termination_status();
 
         match status {
-            TerminationStatus::UnstakingInProgress
-            | TerminationStatus::WithdrawingFromStakingPoolInProgress
-            | TerminationStatus::WithdrawingFromAccountInProgress => {
+            None => {
+                env::panic(b"There are no termination in progress");
+            }
+            Some(TerminationStatus::UnstakingInProgress)
+            | Some(TerminationStatus::WithdrawingFromStakingPoolInProgress)
+            | Some(TerminationStatus::WithdrawingFromAccountInProgress) => {
                 env::panic(b"Another transaction is already in progress.");
             }
-            TerminationStatus::ReadyToWithdraw => {
+            Some(TerminationStatus::ReadyToWithdraw) => {
                 env::panic(b"The account is ready to withdraw unvested balance.")
             }
-            TerminationStatus::VestingTerminatedWithDeficit => {
+            Some(TerminationStatus::VestingTerminatedWithDeficit) => {
                 // Need to unstake
                 self.set_termination_status(TerminationStatus::UnstakingInProgress);
                 self.set_staking_pool_status(TransactionStatus::Busy);
@@ -87,7 +90,7 @@ impl LockupContract {
                     ),
                 )
             }
-            TerminationStatus::EverythingUnstaked => {
+            Some(TerminationStatus::EverythingUnstaked) => {
                 // Need to withdraw everything
                 self.set_termination_status(
                     TerminationStatus::WithdrawingFromStakingPoolInProgress,
@@ -130,7 +133,7 @@ impl LockupContract {
         );
         assert_eq!(
             self.get_termination_status(),
-            TerminationStatus::ReadyToWithdraw,
+            Some(TerminationStatus::ReadyToWithdraw),
             "Termination status is not ready to withdraw"
         );
 

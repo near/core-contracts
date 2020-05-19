@@ -50,9 +50,9 @@ const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
 
-/// The contract keeps at least 30 NEAR in the account to avoid being transferred out to cover
+/// The contract keeps at least 35 NEAR in the account to avoid being transferred out to cover
 /// contract code storage and some internal state.
-const MIN_BALANCE_FOR_STORAGE: u128 = 30_000_000_000_000_000_000_000_000;
+const MIN_BALANCE_FOR_STORAGE: u128 = 35_000_000_000_000_000_000_000_000;
 
 #[ext_contract(ext_staking_pool)]
 pub trait ExtStakingPool {
@@ -692,16 +692,21 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(500));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(250));
         assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
 
         // Terminating
@@ -715,11 +720,16 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(250));
         assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(250));
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
             to_yocto(0)
+        );
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::ReadyToWithdraw)
         );
 
         // Withdrawing
@@ -741,5 +751,283 @@ mod tests {
         );
         assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(0));
+        assert_eq!(contract.get_termination_status(), None);
+    }
+
+    #[test]
+    fn test_termination_before_cliff() {
+        let lockup_amount = to_yocto(1000);
+        let mut context = get_context(
+            system_account(),
+            lockup_amount,
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        let mut contract = LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
+                lockup_duration: to_nanos(YEAR).into(),
+                vesting_information: Some(VestingInformation::Vesting(VestingSchedule {
+                    start_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+                    cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
+                    end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 4).into(),
+                })),
+            },
+            AccountId::from("whitelist"),
+            None,
+            public_key(1),
+            Some(public_key(2)),
+            Some(public_key(3)),
+        );
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, lockup_amount);
+
+        // Terminating
+        context.is_view = false;
+        context.predecessor_account_id = account_owner();
+        context.signer_account_pk = public_key(3).into();
+        testing_env!(context.clone());
+        contract.terminate_vesting();
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, lockup_amount);
+        assert_eq!(contract.get_terminated_unvested_balance().0, lockup_amount);
+        assert_eq!(
+            contract.get_terminated_unvested_balance_deficit().0,
+            MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::ReadyToWithdraw)
+        );
+
+        // Withdrawing
+        context.is_view = false;
+        testing_env!(context.clone());
+        let receiver_id = "near".to_string();
+        contract.termination_withdraw(receiver_id.clone());
+        context.account_balance = env::account_balance();
+        assert_eq!(context.account_balance, MIN_BALANCE_FOR_STORAGE);
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_withdraw_unvested_amount(
+            (lockup_amount - MIN_BALANCE_FOR_STORAGE).into(),
+            receiver_id,
+        );
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_unvested_amount().0, MIN_BALANCE_FOR_STORAGE);
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(
+            contract.get_terminated_unvested_balance().0,
+            MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(
+            contract.get_terminated_unvested_balance_deficit().0,
+            MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::ReadyToWithdraw)
+        );
+    }
+
+    #[test]
+    fn test_termination_with_staking() {
+        let lockup_amount = to_yocto(1000);
+        let mut context = get_context(
+            system_account(),
+            lockup_amount,
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        let mut contract = LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
+                lockup_duration: to_nanos(YEAR).into(),
+                vesting_information: Some(VestingInformation::Vesting(VestingSchedule {
+                    start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
+                    cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+                    end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
+                })),
+            },
+            AccountId::from("whitelist"),
+            None,
+            public_key(1),
+            Some(public_key(2)),
+            Some(public_key(3)),
+        );
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        context.is_view = false;
+
+        context.predecessor_account_id = account_owner();
+        context.signer_account_pk = public_key(2).into();
+        testing_env!(context.clone());
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"true".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(true, staking_pool.clone());
+
+        // Deposit to the staking_pool
+        let stake_amount = to_yocto(LOCKUP_NEAR - 100);
+        testing_env!(context.clone());
+        contract.deposit_to_staking_pool(stake_amount.into());
+        context.account_balance = env::account_balance();
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_deposit(stake_amount.into());
+
+        // Staking on the staking pool
+        testing_env!(context.clone());
+        contract.stake(stake_amount.into());
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_stake(stake_amount.into());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_known_deposited_balance().0, stake_amount);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        context.is_view = false;
+
+        // Foundation terminating
+        context.is_view = false;
+        context.signer_account_pk = public_key(3).into();
+        testing_env!(context.clone());
+        contract.terminate_vesting();
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
+        assert_eq!(
+            contract.get_terminated_unvested_balance_deficit().0,
+            to_yocto(650) + MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::VestingTerminatedWithDeficit)
+        );
+
+        // Proceeding with unstaking from the pool due to termination.
+        context.is_view = false;
+        testing_env!(context.clone());
+        contract.termination_prepare_to_withdraw();
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::UnstakingInProgress)
+        );
+
+        let stake_amount_with_rewards = stake_amount + to_yocto(50);
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(format!("{}", stake_amount_with_rewards).into_bytes()),
+        );
+        contract.on_get_account_staked_balance_to_unstake(stake_amount_with_rewards.into());
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_unstake_for_termination(stake_amount_with_rewards.into());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::EverythingUnstaked)
+        );
+
+        // Proceeding with withdrawing from the pool due to termination.
+        context.is_view = false;
+        testing_env!(context.clone());
+        contract.termination_prepare_to_withdraw();
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::WithdrawingFromStakingPoolInProgress)
+        );
+
+        let withdraw_amount_with_extra_rewards = stake_amount_with_rewards + to_yocto(1);
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(
+                format!("{}", withdraw_amount_with_extra_rewards).into_bytes(),
+            ),
+        );
+        contract
+            .on_get_account_unstaked_balance_to_withdraw(withdraw_amount_with_extra_rewards.into());
+        context.account_balance += withdraw_amount_with_extra_rewards;
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract
+            .on_staking_pool_withdraw_for_termination(withdraw_amount_with_extra_rewards.into());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(51));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(51));
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
+        assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
+        assert_eq!(contract.get_known_deposited_balance().0, 0);
+        assert_eq!(
+            contract.get_termination_status(),
+            Some(TerminationStatus::ReadyToWithdraw)
+        );
+
+        // Withdrawing
+        context.is_view = false;
+        testing_env!(context.clone());
+        let receiver_id = "near".to_string();
+        contract.termination_withdraw(receiver_id.clone());
+        context.account_balance = env::account_balance();
+        assert_eq!(context.account_balance, to_yocto(250 + 51));
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_withdraw_unvested_amount(to_yocto(750).into(), receiver_id);
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(51));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(51));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount().0, 0);
+        assert_eq!(contract.get_terminated_unvested_balance().0, 0);
+        assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
+        assert_eq!(contract.get_termination_status(), None);
     }
 }

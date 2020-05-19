@@ -201,6 +201,12 @@ impl LockupContract {
                 )
                     .as_bytes(),
             );
+            // Decreasing lockup amount after withdrawal.
+            self.lockup_information.lockup_amount.0 = self
+                .lockup_information
+                .lockup_amount
+                .0
+                .saturating_sub(amount.0);
             let unvested_amount = self.get_terminated_unvested_balance().0;
             if unvested_amount > amount.0 {
                 // There is still unvested balance remaining.

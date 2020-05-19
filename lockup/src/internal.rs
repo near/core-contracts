@@ -71,16 +71,6 @@ impl LockupContract {
         }
     }
 
-    pub fn get_termination_status(&self) -> TerminationStatus {
-        if let Some(VestingInformation::Terminating(termination_information)) =
-            &self.lockup_information.vesting_information
-        {
-            termination_information.status
-        } else {
-            env::panic(b"There are no termination in progress");
-        }
-    }
-
     pub fn assert_staking_pool_is_idle(&self) {
         assert!(
             self.staking_information.is_some(),
