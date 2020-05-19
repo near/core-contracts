@@ -347,7 +347,8 @@ cd initial-contracts
 
 cd staking-pool
 ```
-#### Install Rust:
+#### Build contract with Rust (This step is optional since the contract is compiled):
+##### Install Rust:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -355,7 +356,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
-#### Build:
+##### Build:
 ```bash
 ./build.sh
 ```
@@ -407,6 +408,15 @@ near proposals | grep my_validator
 near validators next | grep my_validator
 ```
 ## Common errors and resolutions
+
+#### ERROR while adding wasm32 to toolchain: error[E0463]: can't find crate for `core`
+You might have a nightly version of cargo, rustc, rustup, update to stable
+```bash
+rustup update stable
+
+#Install target with stable version of Rustup
+rustup +stable target add wasm32-unknown-unknown
+```
 
 #### Error:  TypedError: [-32000] Server error: account <accountId> does not exist while viewing
 You are not logged in
