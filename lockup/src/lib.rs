@@ -1029,5 +1029,16 @@ mod tests {
         assert_eq!(contract.get_terminated_unvested_balance().0, 0);
         assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
         assert_eq!(contract.get_termination_status(), None);
+
+        // Checking the balance becomes unlocked later
+        context.is_view = true;
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(301));
+        assert_eq!(
+            contract.get_liquid_owners_balance().0,
+            to_yocto(301) - MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(contract.get_locked_amount().0, 0);
     }
 }
