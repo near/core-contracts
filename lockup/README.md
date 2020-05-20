@@ -52,6 +52,11 @@ Once the unvested balance is withdrawn completely, the contract returns to the r
 
 ## Technical details
 
+The contract can be used for the following purposes:
+- Lock funds for the lockup period without vesting schedule. All funds will be unlocked at once once the lockup period passed.
+- Lock funds for the lockup period with vesting schedule.
+  - If the foundation access key is given during initialization, the NEAR Foundation can terminate vesting schedule.
+
 
 
 Formally the contract includes:
@@ -105,10 +110,12 @@ The initialization method has the following interface.
 
 ```rust
 /// Initializes lockup contract.
-/// - `lockup_information` - information about the lockup amount and the release timestamp.
+/// - `lockup_duration` - the duration in nanoseconds of the lockup period.
+/// - `lockup_start_information` - the information when the lockup period starts, either
+///    transfers are already enabled, then it contains the timestamp, or the transfers are
+///    currently disabled and it contains the account ID of the transfer poll contract.
 /// - `vesting_schedule` - if present, describes the vesting schedule.
 /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-/// - `transfer_poll_account_id` - if `Some` means transfers are disabled and can only be
 /// - `owners_main_public_key` - the public key for the owner's main access key.
 /// - `owners_staking_public_key` - the public key for the owner's access key for staking
 ///    pool operations (optional).
@@ -116,29 +123,28 @@ The initialization method has the following interface.
 ///    terminate vesting schedule.
 #[init]
 pub fn new(
-    lockup_information: LockupInformation,
+    lockup_duration: WrappedDuration,
+    lockup_start_information: LockupStartInformation,
     vesting_schedule: Option<VestingSchedule>,
     staking_pool_whitelist_account_id: AccountId,
-    transfer_poll_account_id: Option<AccountId>,
     owners_main_public_key: Base58PublicKey,
     owners_staking_public_key: Option<Base58PublicKey>,
     foundation_public_key: Option<Base58PublicKey>,
 ) -> Self;
 ```
 
-It requires to provide `LockupInformation`
+It requires to provide `LockupStartInformation` and `VestingSchedule`
 
 ```rust
-/// Contains information about token lockups.
-pub struct LockupInformation {
-    /// The amount in yacto-NEAR tokens locked for this account.
-    pub lockup_amount: WrappedBalance,
-    /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
-    /// lockup amount of tokens.
-    pub lockup_duration: WrappedDuration,
-    /// The timestamp when the transfers were enabled.
-    /// If None, the transfers are not enabled yet.
-    pub lockup_timestamp: Option<WrappedTimestamp>,
+/// Contains information when the lockup period starts.
+pub enum LockupStartInformation {
+    /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
+    TransfersEnabled { lockup_timestamp: WrappedTimestamp },
+    /// The account ID of the transfers poll contract, to check if the transfers are enabled.
+    /// The lockup period will start when the transfer voted to be enabled.
+    /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
+    /// are enabled, they can't be disabled and don't need to be checked again.
+    TransfersDisabled { transfer_poll_account_id: AccountId },
 }
 
 /// Contains information about vesting schedule.

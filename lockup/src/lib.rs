@@ -141,13 +141,6 @@ pub struct LockupContract {
     /// `None` means there is no staking pool selected.
     pub staking_information: Option<StakingInformation>,
 
-    /// The account ID of the transfer poll contract. At the launch of the network transfers are
-    /// disabled for all lockup contracts, once transfers are enabled, they can't be disabled and
-    /// don't need to be checked again.
-    /// `Some` account ID means transfers are disabled.
-    /// `None` means the transfers are enabled.
-    pub transfer_poll_account_id: Option<AccountId>,
-
     /// Information about access keys associated with the account.
     pub access_keys_information: AccessKeysInformation,
 }
@@ -161,10 +154,12 @@ impl Default for LockupContract {
 #[near_bindgen]
 impl LockupContract {
     /// Initializes lockup contract.
-    /// - `lockup_information` - information about the lockup amount and the release timestamp.
+    /// - `lockup_duration` - the duration in nanoseconds of the lockup period.
+    /// - `lockup_start_information` - the information when the lockup period starts, either
+    ///    transfers are already enabled, then it contains the timestamp, or the transfers are
+    ///    currently disabled and it contains the account ID of the transfer poll contract.
     /// - `vesting_schedule` - if present, describes the vesting schedule.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-    /// - `transfer_poll_account_id` - if `Some` means transfers are disabled and can only be
     /// - `owners_main_public_key` - the public key for the owner's main access key.
     /// - `owners_staking_public_key` - the public key for the owner's access key for staking
     ///    pool operations (optional).
@@ -172,10 +167,10 @@ impl LockupContract {
     ///    terminate vesting schedule.
     #[init]
     pub fn new(
-        lockup_information: LockupInformation,
+        lockup_duration: WrappedDuration,
+        lockup_start_information: LockupStartInformation,
         vesting_schedule: Option<VestingSchedule>,
         staking_pool_whitelist_account_id: AccountId,
-        transfer_poll_account_id: Option<AccountId>,
         owners_main_public_key: Base58PublicKey,
         owners_staking_public_key: Option<Base58PublicKey>,
         foundation_public_key: Option<Base58PublicKey>,
@@ -185,28 +180,26 @@ impl LockupContract {
             env::is_valid_account_id(staking_pool_whitelist_account_id.as_bytes()),
             "The staking pool whitelist account ID is invalid"
         );
-        lockup_information.assert_valid();
         if foundation_public_key.is_some() {
             assert!(
                 vesting_schedule.is_some(),
                 "Foundation keys can't be added without vesting schedule"
             )
         }
-        if let Some(transfer_poll_account_id) = &transfer_poll_account_id {
+        if let LockupStartInformation::TransfersDisabled {
+            transfer_poll_account_id,
+        } = &lockup_start_information
+        {
             assert!(
                 env::is_valid_account_id(transfer_poll_account_id.as_bytes()),
                 "The transfer poll account ID is invalid"
             );
-            assert!(
-                lockup_information.lockup_timestamp.is_none(),
-                "Lockup timestamp should not be given when transfer voting information is present"
-            );
-        } else {
-            assert!(
-                lockup_information.lockup_timestamp.is_some(),
-                "Lockup timestamp should be given when transfer voting information is absent"
-            );
         }
+        let lockup_information = LockupInformation {
+            lockup_amount: env::account_balance().into(),
+            lockup_duration,
+            lockup_start_information,
+        };
         let vesting_information = match vesting_schedule {
             Some(vesting_schedule) => {
                 vesting_schedule.assert_valid();
@@ -249,7 +242,6 @@ impl LockupContract {
             vesting_information,
             staking_information: None,
             staking_pool_whitelist_account_id,
-            transfer_poll_account_id,
             access_keys_information,
         }
     }
@@ -283,14 +275,12 @@ mod tests {
         // - Lockup for 1 year.
         // - Owner has 2 keys
         let contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersEnabled {
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
             },
             None,
             AccountId::from("whitelist"),
-            None,
             public_key(1),
             Some(public_key(2)),
             None,
@@ -317,32 +307,6 @@ mod tests {
         testing_env!(context.clone());
 
         assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
-    }
-
-    #[test]
-    #[should_panic(expected = "The lockup amount can't exceed the initial account balance")]
-    fn test_lockup_amount_is_larger_than_balance() {
-        let context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
-        testing_env!(context);
-        LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR + 1).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
-            },
-            None,
-            AccountId::from("whitelist"),
-            None,
-            public_key(1),
-            Some(public_key(2)),
-            None,
-        );
     }
 
     #[test]
@@ -380,14 +344,12 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: None,
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersDisabled {
+                transfer_poll_account_id: AccountId::from("transfers"),
             },
             None,
             AccountId::from("whitelist"),
-            Some(AccountId::from("transfers")),
             public_key(1),
             Some(public_key(2)),
             None,
@@ -413,14 +375,12 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: None,
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersDisabled {
+                transfer_poll_account_id: AccountId::from("transfers"),
             },
             None,
             AccountId::from("whitelist"),
-            Some(AccountId::from("transfers")),
             public_key(1),
             Some(public_key(2)),
             None,
@@ -478,14 +438,12 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: None,
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersDisabled {
+                transfer_poll_account_id: AccountId::from("transfers"),
             },
             None,
             AccountId::from("whitelist"),
-            Some(AccountId::from("transfers")),
             public_key(1),
             Some(public_key(2)),
             None,
@@ -800,73 +758,15 @@ mod tests {
         );
         testing_env!(context.clone());
         LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersEnabled {
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
             },
             None,
             AccountId::from("whitelist"),
-            None,
             public_key(1),
             Some(public_key(2)),
             Some(public_key(3)),
-        );
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Lockup timestamp should not be given when transfer voting information is present"
-    )]
-    fn test_init_lockup_timestamp_with_transfers_poll() {
-        let context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
-        testing_env!(context.clone());
-        LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
-            },
-            None,
-            AccountId::from("whitelist"),
-            Some(AccountId::from("transfers")),
-            public_key(1),
-            Some(public_key(2)),
-            None,
-        );
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Lockup timestamp should be given when transfer voting information is absent"
-    )]
-    fn test_init_no_lockup_timestamp_and_no_transfers_poll() {
-        let context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
-        testing_env!(context.clone());
-        LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: None,
-                lockup_duration: to_nanos(YEAR).into(),
-            },
-            None,
-            AccountId::from("whitelist"),
-            None,
-            public_key(1),
-            Some(public_key(2)),
-            None,
         );
     }
 
@@ -881,10 +781,9 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersEnabled {
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
             },
             Some(VestingSchedule {
                 start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
@@ -892,7 +791,6 @@ mod tests {
                 end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
             }),
             AccountId::from("whitelist"),
-            None,
             public_key(1),
             Some(public_key(2)),
             Some(public_key(3)),
@@ -976,10 +874,9 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersEnabled {
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
             },
             Some(VestingSchedule {
                 start_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
@@ -987,7 +884,6 @@ mod tests {
                 end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 4).into(),
             }),
             AccountId::from("whitelist"),
-            None,
             public_key(1),
             Some(public_key(2)),
             Some(public_key(3)),
@@ -1068,10 +964,9 @@ mod tests {
         );
         testing_env!(context.clone());
         let mut contract = LockupContract::new(
-            LockupInformation {
-                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
-                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
-                lockup_duration: to_nanos(YEAR).into(),
+            to_nanos(YEAR).into(),
+            LockupStartInformation::TransfersEnabled {
+                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
             },
             Some(VestingSchedule {
                 start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
@@ -1079,7 +974,6 @@ mod tests {
                 end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
             }),
             AccountId::from("whitelist"),
-            None,
             public_key(1),
             Some(public_key(2)),
             Some(public_key(3)),

@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::{env, AccountId, BlockHeight, PublicKey};
+use near_sdk::{AccountId, BlockHeight, PublicKey};
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -28,22 +28,20 @@ pub struct LockupInformation {
     /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
     /// lockup amount of tokens.
     pub lockup_duration: WrappedDuration,
-    /// The timestamp when the transfers were enabled.
-    /// If None, the transfers are not enabled yet.
-    pub lockup_timestamp: Option<WrappedTimestamp>,
+    /// The information to indicate when the lockup period starts.
+    pub lockup_start_information: LockupStartInformation,
 }
 
-impl LockupInformation {
-    pub fn assert_valid(&self) {
-        assert!(
-            self.lockup_amount.0 > 0,
-            "Lockup amount has to be positive number"
-        );
-        assert!(
-            self.lockup_amount.0 <= env::account_balance(),
-            "The lockup amount can't exceed the initial account balance"
-        );
-    }
+/// Contains information when the lockup period starts.
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+pub enum LockupStartInformation {
+    /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
+    TransfersEnabled { lockup_timestamp: WrappedTimestamp },
+    /// The account ID of the transfers poll contract, to check if the transfers are enabled.
+    /// The lockup period will start when the transfer voted to be enabled.
+    /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
+    /// are enabled, they can't be disabled and don't need to be checked again.
+    TransfersDisabled { transfer_poll_account_id: AccountId },
 }
 
 /// Describes the status of transactions with the staking pool contract or terminated unvesting

@@ -187,10 +187,16 @@ impl LockupContract {
         self.assert_transfers_disabled();
 
         if let Some(poll_result) = poll_result {
-            let timestamp = poll_result.timestamp;
-            env::log(format!("Transfers were successfully enabled at {}", timestamp.0).as_bytes());
-            self.transfer_poll_account_id = None;
-            self.lockup_information.lockup_timestamp = Some(timestamp);
+            let lockup_timestamp = poll_result.timestamp;
+            env::log(
+                format!(
+                    "Transfers were successfully enabled at {}",
+                    lockup_timestamp.0
+                )
+                .as_bytes(),
+            );
+            self.lockup_information.lockup_start_information =
+                LockupStartInformation::TransfersEnabled { lockup_timestamp };
             true
         } else {
             env::log(b"The transfers are not enabled yet");

@@ -55,7 +55,9 @@ impl LockupContract {
 
     /// Get the amount of tokens that are locked in this account due to lockup or vesting.
     pub fn get_locked_amount(&self) -> WrappedBalance {
-        if let Some(lockup_timestamp) = self.lockup_information.lockup_timestamp {
+        if let LockupStartInformation::TransfersEnabled { lockup_timestamp } =
+            &self.lockup_information.lockup_start_information
+        {
             let lockup_timestamp = lockup_timestamp
                 .0
                 .saturating_add(self.lockup_information.lockup_duration.0);
@@ -119,6 +121,9 @@ impl LockupContract {
 
     /// Returns `true` if transfers are enabled, `false` otherwise.
     pub fn are_transfers_enabled(&self) -> bool {
-        self.transfer_poll_account_id.is_none()
+        match &self.lockup_information.lockup_start_information {
+            LockupStartInformation::TransfersEnabled { .. } => true,
+            LockupStartInformation::TransfersDisabled { .. } => false,
+        }
     }
 }
