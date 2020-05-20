@@ -52,6 +52,8 @@ Once the unvested balance is withdrawn completely, the contract returns to the r
 
 ## Technical details
 
+The contract is designed to restrict transfers
+
 The contract can be used for the following purposes:
 - Lock funds for the lockup period without vesting schedule. All funds will be unlocked at once once the lockup period passed.
 - Lock funds for the lockup period with vesting schedule.
@@ -116,10 +118,8 @@ The initialization method has the following interface.
 ///    currently disabled and it contains the account ID of the transfer poll contract.
 /// - `vesting_schedule` - if present, describes the vesting schedule.
 /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-/// - `owners_main_public_key` - the public key for the owner's main access key.
-/// - `owners_staking_public_key` - the public key for the owner's access key for staking
-///    pool operations (optional).
-/// - `foundation_public_key` - the public key for NEAR foundation's access key to be able to
+/// - `initial_owners_main_public_key` - the public key for the owner's main access key.
+/// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
 ///    terminate vesting schedule.
 #[init]
 pub fn new(
@@ -127,9 +127,8 @@ pub fn new(
     lockup_start_information: LockupStartInformation,
     vesting_schedule: Option<VestingSchedule>,
     staking_pool_whitelist_account_id: AccountId,
-    owners_main_public_key: Base58PublicKey,
-    owners_staking_public_key: Option<Base58PublicKey>,
-    foundation_public_key: Option<Base58PublicKey>,
+    initial_owners_main_public_key: Base58PublicKey,
+    foundation_account_id: Option<AccountId>,
 ) -> Self;
 ```
 
@@ -162,9 +161,9 @@ pub struct VestingSchedule {
 
 ### Owner's methods
 
-Owner's methods are split into 2 groups. Methods that can be called by the main access key and methods that can be called by the staking access keys.
-The staking access key can be changed with the main access key, so it's okay to store it in the less secure location, e.g. Staking Pool UI in the browser.
-On the other hand, the main access key has to be kept secret and secure, because it can't be changed and if it's lost or compromised, the owner can't recover the balance.
+Owner's methods are split into 2 groups. Methods that can be called with the main access keys and methods that can be called with the staking access keys.
+The staking access key can be changed with any main access key, so it's okay to store it in the less secure location, e.g. Staking Pool UI in the browser.
+On the other hand, all main access keys have to be kept secret and secure, because they have full control over the owner's account.
 
 #### Main Access Key methods
 
@@ -180,8 +179,16 @@ pub fn check_transfers_vote(&mut self) -> Promise;
 pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise;
 
 /// OWNER'S METHOD
-/// Changes owner's staking access key to the new given public key.
-pub fn change_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
+/// Adds a new owner's staking access key with the given public key.
+pub fn add_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
+
+/// OWNER'S METHOD
+/// Adds a new owner's main access key with the given public key.
+pub fn add_main_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
+
+/// OWNER'S METHOD
+/// Removes an existing owner's access key with the given public key.
+pub fn remove_access_key(&mut self, old_public_key: Base58PublicKey) -> Promise;
 
 /// OWNER'S METHOD
 /// Adds full access key with the given public key to the account once the contract is fully
@@ -222,7 +229,8 @@ pub fn unstake(&mut self, amount: WrappedBalance) -> Promise;
 
 ### Foundation methods
 
-In case of employee vesting, the NEAR Foundation controls the access key towards the termination methods.
+In case of employee vesting, the NEAR Foundation will be able to call them from the foundation account and be able to
+terminate vesting schedule.
 
 ```rust
 /// FOUNDATION'S METHOD

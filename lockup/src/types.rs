@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::{AccountId, BlockHeight, PublicKey};
+use near_sdk::{AccountId, BlockHeight};
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -152,41 +152,4 @@ pub struct PollResult {
     pub timestamp: WrappedTimestamp,
     /// The block height when the proposal was voted in.
     pub block_height: BlockHeight,
-}
-
-/// Contains information about voting on enabling transfers.
-#[derive(BorshDeserialize, BorshSerialize)]
-pub struct AccessKeysInformation {
-    /// The public key of the owner's main access key.
-    pub owners_main_public_key: PublicKey,
-
-    /// The public key of the owner's staking pool access keys.
-    pub owners_staking_public_key: Option<PublicKey>,
-
-    /// The public key of the the foundation's access keys.
-    pub foundation_public_key: Option<PublicKey>,
-}
-
-impl AccessKeysInformation {
-    /// This methods validates that all access keys are different.
-    pub fn assert_valid(&self) {
-        if let Some(owners_staking_public_key) = &self.owners_staking_public_key {
-            assert_ne!(
-                owners_staking_public_key, &self.owners_main_public_key,
-                "The public key for the staking access keys should be different from the public key of the main access key"
-            );
-            if let Some(foundation_public_key) = &self.foundation_public_key {
-                assert_ne!(
-                    owners_staking_public_key, foundation_public_key,
-                    "The public key for the staking access keys should be different from the public key of the foundation access key"
-                );
-            }
-        }
-        if let Some(foundation_public_key) = &self.foundation_public_key {
-            assert_ne!(
-                foundation_public_key, &self.owners_main_public_key,
-                "The public key for the foundation access keys should be different from the public key of the main access key"
-            );
-        }
-    }
 }

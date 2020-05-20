@@ -6,7 +6,7 @@ impl LockupContract {
     /// FOUNDATION'S METHOD
     /// Terminates vesting schedule and locks the remaining unvested amount.
     pub fn terminate_vesting(&mut self) {
-        assert_self();
+        self.assert_called_by_foundation();
         self.assert_vesting();
         let unvested_amount = self.get_unvested_amount();
         assert!(unvested_amount.0 > 0, "The account is fully vested");
@@ -40,7 +40,7 @@ impl LockupContract {
     /// When the vesting is terminated and there are deficit of the tokens on the account, the
     /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
     pub fn termination_prepare_to_withdraw(&mut self) -> Promise {
-        assert_self();
+        self.assert_called_by_foundation();
         self.assert_staking_pool_is_idle();
 
         let status = self.get_termination_status();
@@ -121,7 +121,7 @@ impl LockupContract {
     /// FOUNDATION'S METHOD
     /// Withdraws the unvested amount from the early termination of the vesting schedule.
     pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise {
-        assert_self();
+        self.assert_called_by_foundation();
         assert!(
             env::is_valid_account_id(receiver_id.as_bytes()),
             "The receiver account ID is invalid"

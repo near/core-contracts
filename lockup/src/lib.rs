@@ -2,7 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
-use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise};
+use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PublicKey};
 
 pub mod types;
 pub use crate::types::*;
@@ -37,15 +37,10 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 const OWNER_STAKING_KEY_ALLOWED_METHODS: &[u8] =
     b"select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake";
 
-/// Method names allowed to be called by the owner's access key for managing staking access keys and
-/// transfers.
+/// Method names allowed to be called by the owner's access key for managing access keys and
+/// transferring tokens.
 const OWNER_MAIN_KEY_ALLOWED_METHODS: &[u8] =
-    b"change_staking_access_key,check_transfers_vote,transfer,add_full_access_key";
-
-/// Method names allowed to be called by the NEAR Foundation access key in case of vesting schedule that
-/// can be terminated by foundation.
-const FOUNDATION_KEY_ALLOWED_METHODS: &[u8] =
-    b"terminate_vesting,termination_prepare_to_withdraw,termination_withdraw";
+    b"check_transfers_vote,transfer,add_full_access_key,add_staking_access_key,add_main_access_key,remove_access_key";
 
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
@@ -141,8 +136,8 @@ pub struct LockupContract {
     /// `None` means there is no staking pool selected.
     pub staking_information: Option<StakingInformation>,
 
-    /// Information about access keys associated with the account.
-    pub access_keys_information: AccessKeysInformation,
+    /// The account ID that the NEAR Foundation, that has the ability to terminate vesting.
+    pub foundation_account_id: Option<AccountId>,
 }
 
 impl Default for LockupContract {
@@ -160,10 +155,8 @@ impl LockupContract {
     ///    currently disabled and it contains the account ID of the transfer poll contract.
     /// - `vesting_schedule` - if present, describes the vesting schedule.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-    /// - `owners_main_public_key` - the public key for the owner's main access key.
-    /// - `owners_staking_public_key` - the public key for the owner's access key for staking
-    ///    pool operations (optional).
-    /// - `foundation_public_key` - the public key for NEAR foundation's access key to be able to
+    /// - `initial_owners_main_public_key` - the public key for the owner's main access key.
+    /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
     ///    terminate vesting schedule.
     #[init]
     pub fn new(
@@ -171,16 +164,15 @@ impl LockupContract {
         lockup_start_information: LockupStartInformation,
         vesting_schedule: Option<VestingSchedule>,
         staking_pool_whitelist_account_id: AccountId,
-        owners_main_public_key: Base58PublicKey,
-        owners_staking_public_key: Option<Base58PublicKey>,
-        foundation_public_key: Option<Base58PublicKey>,
+        initial_owners_main_public_key: Base58PublicKey,
+        foundation_account_id: Option<AccountId>,
     ) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
         assert!(
             env::is_valid_account_id(staking_pool_whitelist_account_id.as_bytes()),
             "The staking pool whitelist account ID is invalid"
         );
-        if foundation_public_key.is_some() {
+        if foundation_account_id.is_some() {
             assert!(
                 vesting_schedule.is_some(),
                 "Foundation keys can't be added without vesting schedule"
@@ -208,41 +200,20 @@ impl LockupContract {
             None => VestingInformation::None,
         };
 
-        let access_keys_information = AccessKeysInformation {
-            owners_main_public_key: owners_main_public_key.into(),
-            owners_staking_public_key: owners_staking_public_key.map(std::convert::Into::into),
-            foundation_public_key: foundation_public_key.map(std::convert::Into::into),
-        };
-        access_keys_information.assert_valid();
+        let initial_owners_main_public_key: PublicKey = initial_owners_main_public_key.into();
         let account_id = env::current_account_id();
         Promise::new(account_id.clone()).add_access_key(
-            access_keys_information.owners_main_public_key.clone(),
+            initial_owners_main_public_key,
             0,
-            account_id.clone(),
+            account_id,
             OWNER_MAIN_KEY_ALLOWED_METHODS.to_vec(),
         );
-        if let Some(public_key) = &access_keys_information.owners_staking_public_key {
-            Promise::new(account_id.clone()).add_access_key(
-                public_key.clone(),
-                0,
-                account_id.clone(),
-                OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
-            );
-        }
-        if let Some(public_key) = &access_keys_information.foundation_public_key {
-            Promise::new(account_id.clone()).add_access_key(
-                public_key.clone(),
-                0,
-                account_id,
-                FOUNDATION_KEY_ALLOWED_METHODS.to_vec(),
-            );
-        }
         Self {
             lockup_information,
             vesting_information,
             staking_information: None,
             staking_pool_whitelist_account_id,
-            access_keys_information,
+            foundation_account_id,
         }
     }
 }
@@ -282,7 +253,6 @@ mod tests {
             None,
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
             None,
         );
         (context, contract)
@@ -317,7 +287,7 @@ mod tests {
         context.signer_account_pk = public_key(1).try_into().unwrap();
         testing_env!(context.clone());
 
-        contract.change_staking_access_key(public_key(4));
+        contract.add_staking_access_key(public_key(4));
     }
 
     #[test]
@@ -351,7 +321,6 @@ mod tests {
             None,
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
             None,
         );
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
@@ -382,7 +351,6 @@ mod tests {
             None,
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
             None,
         );
         context.is_view = true;
@@ -445,7 +413,6 @@ mod tests {
             None,
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
             None,
         );
         context.is_view = true;
@@ -765,8 +732,7 @@ mod tests {
             None,
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
-            Some(public_key(3)),
+            Some(account_foundation()),
         );
     }
 
@@ -792,8 +758,7 @@ mod tests {
             }),
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
-            Some(public_key(3)),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -819,7 +784,7 @@ mod tests {
 
         // Terminating
         context.is_view = false;
-        context.predecessor_account_id = account_owner();
+        context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
         contract.terminate_vesting();
@@ -847,6 +812,7 @@ mod tests {
         contract.termination_withdraw(receiver_id.clone());
         context.account_balance = env::account_balance();
 
+        context.predecessor_account_id = account_owner();
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
         contract.on_withdraw_unvested_amount(to_yocto(250).into(), receiver_id);
 
@@ -885,8 +851,7 @@ mod tests {
             }),
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
-            Some(public_key(3)),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -898,7 +863,7 @@ mod tests {
 
         // Terminating
         context.is_view = false;
-        context.predecessor_account_id = account_owner();
+        context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
         contract.terminate_vesting();
@@ -922,11 +887,12 @@ mod tests {
         // Withdrawing
         context.is_view = false;
         testing_env!(context.clone());
-        let receiver_id = "near".to_string();
+        let receiver_id = account_foundation();
         contract.termination_withdraw(receiver_id.clone());
         context.account_balance = env::account_balance();
         assert_eq!(context.account_balance, MIN_BALANCE_FOR_STORAGE);
 
+        context.predecessor_account_id = account_owner();
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
         contract.on_withdraw_unvested_amount(
             (lockup_amount - MIN_BALANCE_FOR_STORAGE).into(),
@@ -975,8 +941,7 @@ mod tests {
             }),
             AccountId::from("whitelist"),
             public_key(1),
-            Some(public_key(2)),
-            Some(public_key(3)),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -1029,6 +994,7 @@ mod tests {
 
         // Foundation terminating
         context.is_view = false;
+        context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
         contract.terminate_vesting();
@@ -1059,6 +1025,7 @@ mod tests {
         );
 
         let stake_amount_with_rewards = stake_amount + to_yocto(50);
+        context.predecessor_account_id = account_owner();
         testing_env_with_promise_results(
             context.clone(),
             PromiseResult::Successful(format!("{}", stake_amount_with_rewards).into_bytes()),
@@ -1077,6 +1044,7 @@ mod tests {
 
         // Proceeding with withdrawing from the pool due to termination.
         context.is_view = false;
+        context.predecessor_account_id = account_foundation();
         testing_env!(context.clone());
         contract.termination_prepare_to_withdraw();
         assert_eq!(
@@ -1085,6 +1053,7 @@ mod tests {
         );
 
         let withdraw_amount_with_extra_rewards = stake_amount_with_rewards + to_yocto(1);
+        context.predecessor_account_id = account_owner();
         testing_env_with_promise_results(
             context.clone(),
             PromiseResult::Successful(
@@ -1115,12 +1084,14 @@ mod tests {
 
         // Withdrawing
         context.is_view = false;
+        context.predecessor_account_id = account_foundation();
         testing_env!(context.clone());
-        let receiver_id = "near".to_string();
+        let receiver_id = account_foundation();
         contract.termination_withdraw(receiver_id.clone());
         context.account_balance = env::account_balance();
         assert_eq!(context.account_balance, to_yocto(250 + 51));
 
+        context.predecessor_account_id = account_owner();
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
         contract.on_withdraw_unvested_amount(to_yocto(750).into(), receiver_id);
 
@@ -1135,7 +1106,6 @@ mod tests {
         assert_eq!(contract.get_termination_status(), None);
 
         // Checking the balance becomes unlocked later
-        context.is_view = true;
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(301));

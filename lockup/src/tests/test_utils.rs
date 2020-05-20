@@ -17,6 +17,10 @@ pub fn non_owner() -> AccountId {
     "non_owner".to_string()
 }
 
+pub fn account_foundation() -> AccountId {
+    "near".to_string()
+}
+
 pub fn to_yocto(near_balance: u128) -> u128 {
     near_balance * 10u128.pow(24)
 }

@@ -288,32 +288,45 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
-    /// Changes owner's staking access key to the new given public key.
-    pub fn change_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
+    /// Adds a new owner's staking access key with the given public key.
+    pub fn add_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
         assert_self();
 
-        let current_staking_public_key = self
-            .access_keys_information
-            .owners_staking_public_key
-            .take();
-
-        env::log(b"Changing owner's staking pool access key");
-
-        let new_public_key: PublicKey = new_public_key.into();
-        self.access_keys_information.owners_staking_public_key = Some(new_public_key.clone());
-        self.access_keys_information.assert_valid();
+        env::log(b"Adding a new owner's staking access key");
 
         let account_id = env::current_account_id();
-        let mut promise = Promise::new(account_id.clone());
-        if let Some(old_public_key) = current_staking_public_key {
-            promise = promise.delete_key(old_public_key);
-        }
-        promise.add_access_key(
-            new_public_key,
+        Promise::new(account_id.clone()).add_access_key(
+            new_public_key.into(),
             0,
             account_id,
             OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
         )
+    }
+
+    /// OWNER'S METHOD
+    /// Adds a new owner's main access key with the given public key.
+    pub fn add_main_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
+        assert_self();
+
+        env::log(b"Adding a new owner's main access key");
+
+        let account_id = env::current_account_id();
+        Promise::new(account_id.clone()).add_access_key(
+            new_public_key.into(),
+            0,
+            account_id,
+            OWNER_MAIN_KEY_ALLOWED_METHODS.to_vec(),
+        )
+    }
+
+    /// OWNER'S METHOD
+    /// Removes an existing owner's access key with the given public key.
+    pub fn remove_access_key(&mut self, old_public_key: Base58PublicKey) -> Promise {
+        assert_self();
+
+        env::log(b"Removing an existing owner's access key");
+
+        Promise::new(env::current_account_id()).delete_key(old_public_key.into())
     }
 
     /// OWNER'S METHOD
@@ -327,11 +340,10 @@ impl LockupContract {
         self.assert_no_termination();
         assert_eq!(self.get_locked_amount().0, 0);
 
-        env::log(b"Adding full access key");
+        env::log(b"Adding a full access key");
 
         let new_public_key: PublicKey = new_public_key.into();
 
-        let account_id = env::current_account_id();
-        Promise::new(account_id.clone()).add_full_access_key(new_public_key)
+        Promise::new(env::current_account_id()).add_full_access_key(new_public_key)
     }
 }
