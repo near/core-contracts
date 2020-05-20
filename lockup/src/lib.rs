@@ -320,6 +320,32 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "The lockup amount can't exceed the initial account balance")]
+    fn test_lockup_amount_is_larger_than_balance() {
+        let context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context);
+        LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR + 1).into(),
+                lockup_timestamp: Some(to_ts(GENESIS_TIME_IN_DAYS).into()),
+                lockup_duration: to_nanos(YEAR).into(),
+            },
+            None,
+            AccountId::from("whitelist"),
+            None,
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
+    }
+
+    #[test]
     fn test_change_staking_access_key() {
         let (mut context, mut contract) = lockup_only_setup();
         context.predecessor_account_id = account_owner();

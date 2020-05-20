@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::{AccountId, BlockHeight, PublicKey};
+use near_sdk::{env, AccountId, BlockHeight, PublicKey};
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -38,6 +38,10 @@ impl LockupInformation {
         assert!(
             self.lockup_amount.0 > 0,
             "Lockup amount has to be positive number"
+        );
+        assert!(
+            self.lockup_amount.0 <= env::account_balance(),
+            "The lockup amount can't exceed the initial account balance"
         );
     }
 }
