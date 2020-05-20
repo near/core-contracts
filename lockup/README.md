@@ -172,6 +172,12 @@ pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Pr
 /// OWNER'S METHOD
 /// Changes owner's staking access key to the new given public key.
 pub fn change_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
+
+/// OWNER'S METHOD
+/// Adds full access key with the given public key to the account once the contract is fully
+/// vested, lockup duration has expired and transfers are enabled.
+/// This will allow owner to use this account as a regular account and remove the contract.
+pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
 ```
 
 #### Staking Access Key methods
@@ -259,4 +265,7 @@ pub fn get_owners_balance(&self) -> WrappedBalance;
 
 /// The amount of tokens the owner can transfer now from the account.
 pub fn get_liquid_owners_balance(&self) -> WrappedBalance;
+
+/// Returns `true` if transfers are enabled, `false` otherwise.
+pub fn are_transfers_enabled(&self) -> bool;
 ```

@@ -45,15 +45,12 @@ impl LockupContract {
     }
 
     pub fn assert_transfers_enabled(&self) {
-        assert!(
-            self.transfer_poll_account_id.is_none(),
-            "Transfers are disabled"
-        );
+        assert!(self.are_transfers_enabled(), "Transfers are disabled");
     }
 
     pub fn assert_transfers_disabled(&self) {
         assert!(
-            self.transfer_poll_account_id.is_some(),
+            !self.are_transfers_enabled(),
             "Transfers are already enabled"
         );
     }

@@ -40,7 +40,7 @@ const OWNER_STAKING_KEY_ALLOWED_METHODS: &[u8] =
 /// Method names allowed to be called by the owner's access key for managing staking access keys and
 /// transfers.
 const OWNER_MAIN_KEY_ALLOWED_METHODS: &[u8] =
-    b"change_staking_access_key,check_transfers_vote,transfer";
+    b"change_staking_access_key,check_transfers_vote,transfer,add_full_access_key";
 
 /// Method names allowed to be called by the NEAR Foundation access key in case of vesting schedule that
 /// can be terminated by foundation.
@@ -317,6 +317,176 @@ mod tests {
         testing_env!(context.clone());
 
         assert_almost_eq(contract.get_owners_balance().0, to_yocto(LOCKUP_NEAR));
+    }
+
+    #[test]
+    fn test_change_staking_access_key() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        testing_env!(context.clone());
+
+        contract.change_staking_access_key(public_key(4));
+    }
+
+    #[test]
+    fn test_add_full_access_key() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        testing_env!(context.clone());
+
+        contract.add_full_access_key(public_key(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "Transfers are disabled")]
+    fn test_transfers_not_enabled() {
+        let mut context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        let mut contract = LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: None,
+                lockup_duration: to_nanos(YEAR).into(),
+            },
+            None,
+            AccountId::from("whitelist"),
+            Some(AccountId::from("transfers")),
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        context.is_view = false;
+        testing_env!(context.clone());
+
+        contract.transfer(to_yocto(100).into(), non_owner());
+    }
+
+    #[test]
+    fn test_enable_transfers() {
+        let mut context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        let mut contract = LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: None,
+                lockup_duration: to_nanos(YEAR).into(),
+            },
+            None,
+            AccountId::from("whitelist"),
+            Some(AccountId::from("transfers")),
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert!(!contract.are_transfers_enabled());
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        context.is_view = false;
+        testing_env!(context.clone());
+
+        contract.check_transfers_vote();
+
+        let poll_result = Some(PollResult {
+            proposal_id: 0,
+            timestamp: to_ts(GENESIS_TIME_IN_DAYS + 10).into(),
+            block_height: 0,
+        });
+        // NOTE: Unit tests don't need to read the content of the promise result. So here we don't
+        // have to pass serialized result from the transfer poll.
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        assert!(contract.on_get_result_from_transfer_poll(poll_result));
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        // Not unlocked yet
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert!(contract.are_transfers_enabled());
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 10);
+        testing_env!(context.clone());
+        // Not unlocked yet
+        assert_eq!(
+            contract.get_owners_balance().0,
+            to_yocto(LOCKUP_NEAR).into()
+        );
+
+        context.is_view = false;
+        testing_env!(context.clone());
+        contract.transfer(to_yocto(100).into(), non_owner());
+    }
+
+    #[test]
+    fn test_check_transfers_vote_false() {
+        let mut context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS),
+            false,
+        );
+        testing_env!(context.clone());
+        let mut contract = LockupContract::new(
+            LockupInformation {
+                lockup_amount: to_yocto(LOCKUP_NEAR).into(),
+                lockup_timestamp: None,
+                lockup_duration: to_nanos(YEAR).into(),
+            },
+            None,
+            AccountId::from("whitelist"),
+            Some(AccountId::from("transfers")),
+            public_key(1),
+            Some(public_key(2)),
+            None,
+        );
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert!(!contract.are_transfers_enabled());
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        context.is_view = false;
+        testing_env!(context.clone());
+
+        contract.check_transfers_vote();
+
+        let poll_result = None;
+        // NOTE: Unit tests don't need to read the content of the promise result. So here we don't
+        // have to pass serialized result from the transfer poll.
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        assert!(!contract.on_get_result_from_transfer_poll(poll_result));
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        // Not enabled
+        assert!(!contract.are_transfers_enabled());
     }
 
     #[test]

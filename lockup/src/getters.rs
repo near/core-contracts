@@ -116,4 +116,9 @@ impl LockupContract {
     pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
         std::cmp::min(self.get_owners_balance().0, self.get_account_balance().0).into()
     }
+
+    /// Returns `true` if transfers are enabled, `false` otherwise.
+    pub fn are_transfers_enabled(&self) -> bool {
+        self.transfer_poll_account_id.is_none()
+    }
 }

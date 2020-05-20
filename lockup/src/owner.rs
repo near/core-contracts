@@ -310,4 +310,23 @@ impl LockupContract {
             OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
         )
     }
+
+    /// OWNER'S METHOD
+    /// Adds full access key with the given public key to the account once the contract is fully
+    /// vested, lockup duration has expired and transfers are enabled.
+    /// This will allow owner to use this account as a regular account and remove the contract.
+    pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
+        assert_self();
+        self.assert_transfers_enabled();
+        self.assert_no_staking_or_idle();
+        self.assert_no_termination();
+        assert_eq!(self.get_locked_amount().0, 0);
+
+        env::log(b"Adding full access key");
+
+        let new_public_key: PublicKey = new_public_key.into();
+
+        let account_id = env::current_account_id();
+        Promise::new(account_id.clone()).add_full_access_key(new_public_key)
+    }
 }
