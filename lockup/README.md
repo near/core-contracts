@@ -36,7 +36,7 @@ The contract doesn't allow to directly stake from this account, so the owner can
 The owner can choose the staking pool where to delegate tokens.
 The staking pool contract and the account has to be approved and whitelisted by the foundation, to prevent lockup tokens from being lost, locked or stolen.
 This staking pool must be an approved account, which is validated by a whitelisting contract.
-Once the staking pool holds tokens, the owner of the staking pool is able to use them to vote on the network governence issues, such as enabling transfers.
+Once the staking pool holds tokens, the owner of the staking pool is able to use them to vote on the network governance issues, such as enabling transfers.
 So it's important for the owner to pick the staking pool that fits the best.
 
 ### Early Vesting Termination
@@ -52,44 +52,21 @@ Once the unvested balance is withdrawn completely, the contract returns to the r
 
 ## Technical details
 
-The contract is designed to restrict transfers
-
 The contract can be used for the following purposes:
-- Lock funds for the lockup period without vesting schedule. All funds will be unlocked at once once the lockup period passed.
-- Lock funds for the lockup period with vesting schedule.
-  - If the foundation access key is given during initialization, the NEAR Foundation can terminate vesting schedule.
+- Lock funds until the transfers are voted to be enabled.
+- Lock funds for the lockup period without a vesting schedule. All funds will be unlocked at once once the lockup period passed.
+- Lock funds for the lockup period with a vesting schedule.
+  - If the NEAR Foundation account ID is provided during initialization, the NEAR Foundation can terminate vesting schedule.
+  - If the NEAR Foundation account ID is not provided, the vesting schedule can't be terminated.
 
+### Guarantees
 
-
-Formally the contract includes:
-
-1. Lockup information.
-2. A whitelisted staking pool's account ID.
-3. A transfer poll account ID.
-4. Employee (Owner)'s public key and optionally their staking public key.
-5. Optionally the public key of the Foundation.
-
-
-### Lockup Information
-This includes:
-1. Amount of tokens to lockup.
-2. Length of lockup.
-3. Optional timestamp of when transfers started.
-4. Optional vesting information
-
-#### Vesting Information
-Either:
-1. Vesting Schedule:
-  A) Start timestamp time in nano-seconds.
-  B) Cliff timestamp
-  C) End timestamp
-
-2. Termination Status:
-  A)
-  B)
-
-
-
+With the guarantees from the staking pool contracts, whitelist and voting contract, the lockup contract provides the following guarantees:
+- The contract can't lose funds using staking access key or block main access key. (Except for tokens spent on gas)
+- The owner can't prevent foundation from withdrawing the unvested balance in case of termination.
+- The owner can't withdraw funds locked due to lockup period, disabled transfers or vesting schedule.
+- The owner can withdraw rewards from staking pool, before funds are unlocked, unless the vesting termination prevents it.
+- The owner should be able to add a full access key to the account, once all funds are vested, unlocked and transfers are enabled.
 
 ## Interface
 
@@ -287,3 +264,108 @@ pub fn get_liquid_owners_balance(&self) -> WrappedBalance;
 /// Returns `true` if transfers are enabled, `false` otherwise.
 pub fn are_transfers_enabled(&self) -> bool;
 ```
+
+## API examples
+
+### Initialization
+
+Initialize contract, assuming it's called from `near` account.
+The onwer account ID is `owner1`. Lockup Duration is 365 days.
+Transfers are currently disabled and can be enabled by checking transfer voting poll contract at `transfers-poll`.
+Vesting is 4 years starting from `2018-09-01` to `2022-09-01` Pacific time.
+Staking pool whitelist contract is at `staking-pool-whitelist`.
+The owner's main public key is ED25519 curve `KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7` in base58.
+The foundation account ID that can terminate vesting is `near`.
+
+
+```json
+{
+    "lockup_duration": "31536000000000000",
+    "lockup_start_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "vesting_schedule": {
+        "start_timestamp": "1535760000000000000",
+        "cliff_timestamp": "1567296000000000000",
+        "end_timestamp": "1661990400000000000"
+    },
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+    "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7",
+    "foundation_account_id": "near"
+}
+```
+
+```bash
+near call owner1 new '{"lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7", "foundation_account_id": "near"}' --accountId=near
+```
+
+### Add staking access key
+
+```bash
+near call owner1 add_staking_access_key '{"new_public_key": "PJLZtSkhsC6kkwBTxoka7nWFrffryy2TmizoApkCSjV"}' --accountId=owner1
+```
+
+### Select staking pool
+
+```bash
+near call owner1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1
+```
+
+### Deposit to the staking pool
+
+Deposit `1000` NEAR tokens.
+
+```bash
+near call owner1 deposit_to_staking_pool '{"amount": "1000000000000000000000000000"}' --accountId=owner1
+```
+
+### Stake on the staking pool
+
+Stake `1000` NEAR tokens.
+
+```bash
+near call owner1 stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1
+```
+
+### Unstake from the staking pool
+
+Let's say the owner checked staked balance by calling view method on the staking pool directly and decided to unstake.
+Unstake `1010` NEAR tokens.
+
+```bash
+near call owner1 unstake '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+```
+
+### Withdraw from the staking pool
+
+Wait 4 epochs (about 48 hours) and now can withdraw `1010` NEAR tokens from the staking pool.
+
+```bash
+near call owner1 withdraw_from_staking_pool '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+```
+
+### Check transfers vote
+
+```bash
+near call owner1 check_transfers_vote '{}' --accountId=owner1
+```
+
+Let's assume transfers are enabled now.
+
+
+### Check liquid balance and transfer 10 NEAR
+
+```bash
+near view owner1 get_liquid_owners_balance '{}' --accountId=owner1
+```
+
+Transfer 10 NEAR to `owner-sub-account`.
+
+```bash
+near view owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
+```
+
+
+
