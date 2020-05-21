@@ -364,7 +364,7 @@ near view owner1 get_liquid_owners_balance '{}' --accountId=owner1
 Transfer 10 NEAR to `owner-sub-account`.
 
 ```bash
-near view owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
+near call owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
 ```
 
 
