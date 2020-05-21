@@ -33,7 +33,7 @@ pub struct LockupInformation {
 }
 
 /// Contains information when the lockup period starts.
-#[derive(Debug, BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub enum LockupStartInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
     TransfersEnabled { lockup_timestamp: WrappedTimestamp },
