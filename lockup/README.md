@@ -2,26 +2,26 @@
 
 ## Overview
 
-This contract acts as an escrow that locks and holds owner's funds for the lockup period. The lockup period either starts
+This contract acts as an escrow that locks and holds an owner's funds for a lockup period. A lockup period either starts
 at the given timestamp or from the moment transfers are enabled by voting.
 If transfers are not enabled yet, the contract keeps the account ID of the transfer poll contract.
 When the transfer poll is resolved, it returns the timestamp when it was resolved and it's used as the beginning of the
 lockup period.
 
 Once all funds are unlocked (including vesting) and transfers are enabled, the owner can add a full access key to the
-account. This will allow the owner to turn this account into a regular account, remove the contract, or delete the account
+account. This will allow the owner to turn this account into a regular account, claim the remaining funds, and remove the contract 
+or delete the account.
 and claim the remaining funds.
 
 ### Vesting
 
-The contract can also contain a vesting schedule.
-In this case, this contract serves as a vesting agreement between the NEAR Foundation (Foundation) and an employee (owner of contract).
-Vesting schedule is described by 3 timestamps in nanoseconds:
-- `start_timestamp` - The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
-- `cliff_timestamp` - The timestamp in nanosecond when the first part of lockup tokens becomes vested.
+The contract can contain a vesting schedule and serve as a vesting agreement between the NEAR Foundation (Foundation) and an employee (owner of contract).
+Vesting schedule is described by three timestamps in nanoseconds:
+- `start_timestamp` - When the vesting starts. E.g. the start date of employment.
+- `cliff_timestamp` - When the first part of lockup tokens becomes vested.
  The remaining tokens will vest continuously until they are fully vested.
  Example: a 1 year of employment at which moment the 1/4 of tokens become vested.
-- `end_timestamp` - The timestamp in nanosecond when the vesting ends.
+- `end_timestamp` -  When the vesting ends.
 
 In addition to the lockup period that starts from the moment the transfers are enabled, vesting schedule also locks
 all funds until `cliff_timestamp`.
@@ -366,6 +366,5 @@ Transfer 10 NEAR to `owner-sub-account`.
 ```bash
 near call owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
 ```
-
 
 
