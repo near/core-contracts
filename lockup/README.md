@@ -8,7 +8,7 @@ If transfers are not enabled yet, the contract keeps the account ID of the trans
 When the transfer poll is resolved, it returns the timestamp when it was resolved and it's used as the beginning of the
 lockup period.
 
-Once all tokens are unlocked (including vesting) and transfers are enabled, the owner can add a full access key to the
+Once all tokens are unlocked, everything is vested, and transfers are enabled, the owner can add a full access key to the
 account. This will allow the owner to turn this account into a regular account, claim the remaining tokens, and remove the contract
 or delete the account.
 
