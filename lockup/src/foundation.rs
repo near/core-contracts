@@ -75,11 +75,7 @@ impl LockupContract {
                 )
                 .then(
                     ext_self_foundation::on_get_account_staked_balance_to_unstake(
-                        &self
-                            .staking_information
-                            .as_ref()
-                            .unwrap()
-                            .staking_pool_account_id,
+                        &env::current_account_id(),
                         NO_DEPOSIT,
                         gas::foundation_callbacks::ON_GET_ACCOUNT_STAKED_BALANCE_TO_UNSTAKE,
                     ),
@@ -105,11 +101,7 @@ impl LockupContract {
                 )
                 .then(
                     ext_self_foundation::on_get_account_unstaked_balance_to_withdraw(
-                        &self
-                            .staking_information
-                            .as_ref()
-                            .unwrap()
-                            .staking_pool_account_id,
+                        &env::current_account_id(),
                         NO_DEPOSIT,
                         gas::foundation_callbacks::ON_GET_ACCOUNT_UNSTAKED_BALANCE_TO_WITHDRAW,
                     ),
