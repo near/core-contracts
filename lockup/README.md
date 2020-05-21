@@ -201,6 +201,13 @@ pub fn stake(&mut self, amount: WrappedBalance) -> Promise;
 /// OWNER'S METHOD
 /// Unstakes the given amount at the staking pool
 pub fn unstake(&mut self, amount: WrappedBalance) -> Promise;
+
+/// OWNER'S METHOD
+/// Retrieves total balance from the staking pool and remembers it internally.
+/// This method is helpful when the owner received some rewards for staking and wants to
+/// transfer them back to this account for withdrawal. In order to know the actual liquid
+/// balance on the account, this contract needs to query the staking pool.
+pub fn refresh_staking_pool_balance(&mut self) -> Promise;
 ```
 
 ### Foundation methods
@@ -232,6 +239,7 @@ pub fn get_staking_pool_account_id(&self) -> Option<AccountId>;
 /// The amount of tokens that were deposited to the staking pool.
 /// NOTE: The actual balance can be larger than this known deposit balance due to staking
 /// rewards acquired on the staking pool.
+/// To refresh the amount the owner can call `refresh_staking_pool_balance`.
 pub fn get_known_deposited_balance(&self) -> WrappedBalance;
 
 /// Returns the current termination status or `None` in case of no termination.
@@ -247,6 +255,9 @@ pub fn get_terminated_unvested_balance_deficit(&self) -> WrappedBalance;
 
 /// Get the amount of tokens that are locked in this account due to lockup or vesting.
 pub fn get_locked_amount(&self) -> WrappedBalance;
+
+/// Get the amount of tokens that are already vested, but still locked due to lockup.
+pub fn get_locked_vested_amount(&self) -> WrappedBalance;
 
 /// Get the amount of tokens that are locked in this account due to vesting.
 pub fn get_unvested_amount(&self) -> WrappedBalance;
@@ -276,6 +287,7 @@ Staking pool whitelist contract is at `staking-pool-whitelist`.
 The owner's main public key is ED25519 curve `KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7` in base58.
 The foundation account ID that can terminate vesting is `near`.
 
+Arguments in JSON format
 
 ```json
 {
@@ -296,23 +308,27 @@ The foundation account ID that can terminate vesting is `near`.
 }
 ```
 
+Command
+
 ```bash
 near call owner1 new '{"lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7", "foundation_account_id": "near"}' --accountId=near
 ```
 
-### Add staking access key
+### Staking flow
+
+#### Add staking access key
 
 ```bash
 near call owner1 add_staking_access_key '{"new_public_key": "PJLZtSkhsC6kkwBTxoka7nWFrffryy2TmizoApkCSjV"}' --accountId=owner1
 ```
 
-### Select staking pool
+#### Select staking pool
 
 ```bash
 near call owner1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1
 ```
 
-### Deposit to the staking pool
+#### Deposit to the staking pool
 
 Deposit `1000` NEAR tokens.
 
@@ -320,7 +336,7 @@ Deposit `1000` NEAR tokens.
 near call owner1 deposit_to_staking_pool '{"amount": "1000000000000000000000000000"}' --accountId=owner1
 ```
 
-### Stake on the staking pool
+#### Stake on the staking pool
 
 Stake `1000` NEAR tokens.
 
@@ -328,7 +344,26 @@ Stake `1000` NEAR tokens.
 near call owner1 stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1
 ```
 
-### Unstake from the staking pool
+#### Refresh the current total balance on the staking pool
+
+When the owner has accumulated some rewards on the staking pool, the contract doesn't let the owner to withdraw them yet.
+It's because the contract doesn't know about the accumulated rewards.
+In order for the contract to get the new total balance, the owner has to call `refresh_staking_pool_balance`.
+
+```bash
+near call owner1 refresh_staking_pool_balance '{}' --accountId=owner1
+```
+
+#### Checking owner's balance
+
+If the owner has accumulated 10 NEAR in the rewards, after refreshing the staking pool balance, the owner should see
+the local balance to increase as well.
+
+```bash
+near view owner1 get_owners_balance '{}'
+```
+
+#### Unstake from the staking pool
 
 Let's say the owner checked staked balance by calling view method on the staking pool directly and decided to unstake.
 Unstake `1010` NEAR tokens.
@@ -337,7 +372,7 @@ Unstake `1010` NEAR tokens.
 near call owner1 unstake '{"amount": "1010000000000000000000000000"}' --accountId=owner1
 ```
 
-### Withdraw from the staking pool
+#### Withdraw from the staking pool
 
 Wait 4 epochs (about 48 hours) and now can withdraw `1010` NEAR tokens from the staking pool.
 
@@ -345,7 +380,7 @@ Wait 4 epochs (about 48 hours) and now can withdraw `1010` NEAR tokens from the 
 near call owner1 withdraw_from_staking_pool '{"amount": "1010000000000000000000000000"}' --accountId=owner1
 ```
 
-### Check transfers vote
+#### Check transfers vote
 
 ```bash
 near call owner1 check_transfers_vote '{}' --accountId=owner1
@@ -354,10 +389,10 @@ near call owner1 check_transfers_vote '{}' --accountId=owner1
 Let's assume transfers are enabled now.
 
 
-### Check liquid balance and transfer 10 NEAR
+#### Check liquid balance and transfer 10 NEAR
 
 ```bash
-near view owner1 get_liquid_owners_balance '{}' --accountId=owner1
+near view owner1 get_liquid_owners_balance '{}'
 ```
 
 Transfer 10 NEAR to `owner-sub-account`.
@@ -366,4 +401,59 @@ Transfer 10 NEAR to `owner-sub-account`.
 near call owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
 ```
 
+### Vesting termination by NEAR Foundation
+
+If the employee was terminated, the foundation needs to terminate vesting.
+
+#### Initiate termination
+
+To initiate termination NEAR Foundation has to issue the following command:
+
+```bash
+near call owner1 terminate_vesting '' --accountId=near
+```
+
+This will block the account until the termination process is completed.
+
+#### Monitoring status
+
+To check the current status of the termination process, the foundation and the owner can call:
+
+```bash
+near view owner1 get_termination_status '{}'
+```
+
+#### Withdrawing deficit from the staking pool
+
+If the owner staked with some staking pool and the unvested amount is larger than the current liquid balance, then
+it creates the deficit (otherwise the foundation can proceed with withdrawal).
+
+The current termination status should be `VestingTerminatedWithDeficit`.
+
+The NEAR Foundation needs to first unstake tokens in the staking pool and then once tokens
+become liquid, withdraw them from the staking pool to the contract. This is done by calling `termination_prepare_to_withdraw`.
+These calls require quite a bit of callbacks, so the amount of gas has to be slightly more than default of `100 * 10^12`.
+
+```bash
+near call owner1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+```
+
+The first will unstake everything from the staking pool. This should advance the termination status to `EverythingUnstaked`.
+In 4 epochs, or about 48 hours, the Foundation can call the same command again:
+
+```bash
+near call owner1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+```
+
+If everything went okay, the status should be advanced to `ReadyToWithdraw`.
+
+### Withdrawing from the account
+
+Once the termination status is `ReadyToWithdraw`. The Foundation can proceed with withdrawing the unvested balance.
+
+```bash
+near call owner1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
+```
+
+In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
 

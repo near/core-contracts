@@ -33,6 +33,11 @@ pub mod staking_pool {
     /// staking pool.
     /// Requires BASE for local processing.
     pub const GET_ACCOUNT_UNSTAKED_BALANCE: u64 = super::BASE_GAS;
+
+    /// The amount of gas required to get the current total balance of this account from the
+    /// staking pool.
+    /// Requires BASE for local processing.
+    pub const GET_ACCOUNT_TOTAL_BALANCE: u64 = super::BASE_GAS;
 }
 
 pub mod transfer_poll {
@@ -70,6 +75,11 @@ pub mod owner_callbacks {
     /// transfer voting call to the voting contract.
     /// Requires BASE for local updates.
     pub const ON_VOTING_GET_RESULT: u64 = super::BASE_GAS;
+
+    /// Gas attached to the inner callback for processing result of the call to get the current
+    /// total balance from the staking pool.
+    /// Requires BASE for local updates.
+    pub const ON_GET_ACCOUNT_TOTAL_BALANCE: u64 = super::BASE_GAS;
 }
 
 pub mod foundation_callbacks {

@@ -35,7 +35,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 /// Method names allowed to be called by the owner's access keys for staking with the staking pool.
 const OWNER_STAKING_KEY_ALLOWED_METHODS: &[u8] =
-    b"select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake";
+    b"select_staking_pool,unselect_staking_pool,deposit_to_staking_pool,withdraw_from_staking_pool,stake,unstake,refresh_staking_pool_balance";
 
 /// Method names allowed to be called by the owner's access key for managing access keys and
 /// transferring tokens.
@@ -54,6 +54,8 @@ pub trait ExtStakingPool {
     fn get_account_staked_balance(&self, account_id: AccountId) -> WrappedBalance;
 
     fn get_account_unstaked_balance(&self, account_id: AccountId) -> WrappedBalance;
+
+    fn get_account_total_balance(&self, account_id: AccountId) -> WrappedBalance;
 
     fn deposit(&mut self);
 
@@ -94,6 +96,8 @@ pub trait ExtLockupContractOwner {
         &mut self,
         #[callback] poll_result: Option<PollResult>,
     ) -> bool;
+
+    fn on_get_account_total_balance(&mut self, #[callback] total_balance: WrappedBalance);
 }
 
 #[ext_contract(ext_self_foundation)]
@@ -266,6 +270,7 @@ mod tests {
         testing_env!(context.clone());
 
         assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(LOCKUP_NEAR));
 
         // Checking values in 1 day after genesis time
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 1);
@@ -544,6 +549,78 @@ mod tests {
     }
 
     #[test]
+    fn test_staking_pool_refresh_balance() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(2).try_into().unwrap();
+
+        // Selecting staking pool
+        let staking_pool = "staking_pool".to_string();
+        testing_env!(context.clone());
+        contract.select_staking_pool(staking_pool.clone());
+
+        testing_env_with_promise_results(
+            context.clone(),
+            PromiseResult::Successful(b"true".to_vec()),
+        );
+        contract.on_whitelist_is_whitelisted(true, staking_pool.clone());
+
+        // Deposit to the staking_pool
+        let amount = to_yocto(LOCKUP_NEAR - 100);
+        testing_env!(context.clone());
+        contract.deposit_to_staking_pool(amount.into());
+        context.account_balance = env::account_balance();
+        assert_eq!(context.account_balance, to_yocto(LOCKUP_NEAR) - amount);
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_deposit(amount.into());
+
+        // Staking on the staking pool
+        testing_env!(context.clone());
+        contract.stake(amount.into());
+
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_staking_pool_stake(amount.into());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_known_deposited_balance().0, amount);
+        context.is_view = false;
+
+        // Assuming there are 20 NEAR tokens in rewards. Refreshing balance.
+        let total_balance = amount + to_yocto(20);
+        testing_env!(context.clone());
+        contract.refresh_staking_pool_balance();
+
+        // In unit tests, the following call ignores the promise value, because it's passed directly.
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        contract.on_get_account_total_balance(total_balance.into());
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_known_deposited_balance().0, total_balance);
+        assert_eq!(contract.get_owners_balance().0, to_yocto(20));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(20));
+        context.is_view = false;
+
+        // Withdrawing these tokens
+        testing_env!(context.clone());
+        let transfer_amount = to_yocto(15);
+        contract.transfer(transfer_amount.into(), non_owner());
+        context.account_balance = env::account_balance();
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_known_deposited_balance().0, total_balance);
+        assert_eq!(contract.get_owners_balance().0, to_yocto(5));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(5));
+        context.is_view = false;
+    }
+
+    #[test]
     #[should_panic(expected = "Staking pool is already selected")]
     fn test_staking_pool_selected_again() {
         let (mut context, mut contract) = lockup_only_setup();
@@ -765,6 +842,7 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
         assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
 
@@ -772,6 +850,7 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
         assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
 
@@ -860,6 +939,7 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
         assert_eq!(contract.get_unvested_amount().0, lockup_amount);
+        assert_eq!(contract.get_locked_vested_amount().0, 0);
 
         // Terminating
         context.is_view = false;
@@ -874,6 +954,7 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
         assert_eq!(contract.get_unvested_amount().0, lockup_amount);
+        assert_eq!(contract.get_locked_vested_amount().0, 0);
         assert_eq!(contract.get_terminated_unvested_balance().0, lockup_amount);
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -904,6 +985,7 @@ mod tests {
         assert_eq!(contract.get_unvested_amount().0, MIN_BALANCE_FOR_STORAGE);
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, 0);
         assert_eq!(
             contract.get_terminated_unvested_balance().0,
             MIN_BALANCE_FOR_STORAGE
@@ -950,6 +1032,7 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
         assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         context.is_view = false;
 
         context.predecessor_account_id = account_owner();
@@ -989,6 +1072,7 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_known_deposited_balance().0, stake_amount);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
         context.is_view = false;
 
@@ -1005,6 +1089,7 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
         assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -1075,6 +1160,7 @@ mod tests {
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
         assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
         assert_eq!(contract.get_known_deposited_balance().0, 0);
         assert_eq!(
@@ -1100,6 +1186,7 @@ mod tests {
         assert_eq!(contract.get_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
         assert_eq!(contract.get_unvested_amount().0, 0);
         assert_eq!(contract.get_terminated_unvested_balance().0, 0);
         assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
@@ -1113,6 +1200,7 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(301) - MIN_BALANCE_FOR_STORAGE
         );
+        assert_eq!(contract.get_locked_vested_amount().0, 0);
         assert_eq!(contract.get_locked_amount().0, 0);
     }
 }

@@ -203,4 +203,20 @@ impl LockupContract {
             false
         }
     }
+
+    /// Called after the request to get the current total balance from the staking pool.
+    pub fn on_get_account_total_balance(&mut self, #[callback] total_balance: WrappedBalance) {
+        assert_self();
+        self.set_staking_pool_status(TransactionStatus::Idle);
+
+        env::log(
+            format!(
+                "The current total balance on the staking pool is {}",
+                total_balance.0
+            )
+            .as_bytes(),
+        );
+
+        self.staking_information.as_mut().unwrap().deposit_amount = total_balance;
+    }
 }

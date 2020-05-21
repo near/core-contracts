@@ -13,6 +13,7 @@ impl LockupContract {
     /// The amount of tokens that were deposited to the staking pool.
     /// NOTE: The actual balance can be larger than this known deposit balance due to staking
     /// rewards acquired on the staking pool.
+    /// To refresh the amount the owner can call `refresh_staking_pool_balance`.
     pub fn get_known_deposited_balance(&self) -> WrappedBalance {
         self.staking_information
             .as_ref()
@@ -67,6 +68,11 @@ impl LockupContract {
         }
         // The entire balance is still locked before the lockup timestamp.
         self.lockup_information.lockup_amount
+    }
+
+    /// Get the amount of tokens that are already vested, but still locked due to lockup.
+    pub fn get_locked_vested_amount(&self) -> WrappedBalance {
+        (self.get_locked_amount().0 - self.get_unvested_amount().0).into()
     }
 
     /// Get the amount of tokens that are locked in this account due to vesting.
