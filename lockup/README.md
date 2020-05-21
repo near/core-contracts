@@ -25,13 +25,13 @@ Vesting schedule is described by 3 timestamps in nanoseconds:
 
 In addition to the lockup period that starts from the moment the transfers are enabled, vesting schedule also locks
 all funds until `cliff_timestamp`.
-Once the `cliff_timestamp` passed, the funds are vested linearly from the `start_timestamp` to the `end_timestamp`.
+Once the `cliff_timestamp` passed, the funds are vested on a pro rata basis from the `start_timestamp` to the `end_timestamp`.
 
 ### Staking
 
 NEAR is the proof of stake network. The owner of the lockup contract might hold large percentage of the network tokens.
 The owner may want to stake these tokens (including locked tokens) to help secure the network and also earn staking rewards that are distributed to network validator.
-The contract doesn't allow to directly stake from this account, so the owner can delegate tokens to a staking pool contract (see https://github.com/near/initial-contracts/tree/master/staking-pool).
+This contract doesn't allow to directly stake from this account, so the owner can delegate tokens to a staking pool contract (see https://github.com/near/initial-contracts/tree/master/staking-pool).
 
 The owner can choose the staking pool where to delegate tokens.
 The staking pool contract and the account has to be approved and whitelisted by the foundation, to prevent lockup tokens from being lost, locked or stolen.
