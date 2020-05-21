@@ -8,7 +8,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Default)]
-pub struct WhitelistContract {}
+pub struct FakeVotingContract {}
 
 #[derive(Serialize)]
 pub struct PollResult {
@@ -21,7 +21,7 @@ pub struct PollResult {
 }
 
 #[near_bindgen]
-impl WhitelistContract {
+impl FakeVotingContract {
     pub fn get_result(&self) -> Option<PollResult> {
         Some(PollResult {
             proposal_id: 0,
@@ -47,7 +47,7 @@ mod tests {
             .finish();
         testing_env!(context.clone());
 
-        let contract: WhitelistContract = Default::default();
+        let contract: FakeVotingContract = Default::default();
 
         // Check initial whitelist
         context.is_view = true;
