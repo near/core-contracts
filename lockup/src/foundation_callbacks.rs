@@ -225,6 +225,7 @@ impl LockupContract {
                 );
             } else {
                 self.vesting_information = VestingInformation::None;
+                self.foundation_account_id = None;
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }
         } else {
