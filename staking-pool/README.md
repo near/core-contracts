@@ -400,10 +400,6 @@ near login
 ```bash
 near call my_validator deposit '{}' --accountId user1 --amount 100
 ```
-#### Stake the deposited amount to the validator contract
-```bash
-near call my_validator stake '{"amount": "100000000000000000000000000"}' --accountId user1
-```
 #### Check that your validator proposal was (Accepted) or deposit and stake more NEAR
 ```bash
 near proposals | grep my_validator
