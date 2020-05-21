@@ -279,7 +279,9 @@ impl LockupContract {
         self.assert_no_termination();
         assert!(
             self.get_liquid_owners_balance().0 >= amount.0,
-            "The available liquid balance is smaller than the requested transfer amount"
+            "The available liquid balance {} is smaller than the requested transfer amount {}",
+            self.get_liquid_owners_balance().0,
+            amount.0,
         );
 
         env::log(format!("Transferring {} to account @{}", amount.0, receiver_id).as_bytes());

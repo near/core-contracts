@@ -23,7 +23,7 @@ pub type ProposalId = u64;
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub struct LockupInformation {
-    /// The amount in yacto-NEAR tokens locked for this account.
+    /// The amount in yocto-NEAR tokens locked for this account.
     pub lockup_amount: WrappedBalance,
     /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
     /// lockup amount of tokens.
