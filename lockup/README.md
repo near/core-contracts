@@ -2,30 +2,29 @@
 
 ## Overview
 
-This contract acts as an escrow that locks and holds owner's funds for the lockup period. The lockup period either starts
+This contract acts as an escrow that locks and holds an owner's tokens for a lockup period. A lockup period either starts
 at the given timestamp or from the moment transfers are enabled by voting.
 If transfers are not enabled yet, the contract keeps the account ID of the transfer poll contract.
 When the transfer poll is resolved, it returns the timestamp when it was resolved and it's used as the beginning of the
 lockup period.
 
-Once all funds are unlocked (including vesting) and transfers are enabled, the owner can add a full access key to the
-account. This will allow the owner to turn this account into a regular account, remove the contract, or delete the account
-and claim the remaining funds.
+Once all tokens are unlocked (including vesting) and transfers are enabled, the owner can add a full access key to the
+account. This will allow the owner to turn this account into a regular account, claim the remaining tokens, and remove the contract
+or delete the account.
 
 ### Vesting
 
-The contract can also contain a vesting schedule.
-In this case, this contract serves as a vesting agreement between the NEAR Foundation (Foundation) and an employee (owner of contract).
-Vesting schedule is described by 3 timestamps in nanoseconds:
-- `start_timestamp` - The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
-- `cliff_timestamp` - The timestamp in nanosecond when the first part of lockup tokens becomes vested.
+The contract can contain a vesting schedule and serve as a vesting agreement between the NEAR Foundation (Foundation) and an employee (owner of contract).
+Vesting schedule is described by three timestamps in nanoseconds:
+- `start_timestamp` - When the vesting starts. E.g. the start date of employment.
+- `cliff_timestamp` - When the first part of lockup tokens becomes vested.
  The remaining tokens will vest continuously until they are fully vested.
  Example: a 1 year of employment at which moment the 1/4 of tokens become vested.
-- `end_timestamp` - The timestamp in nanosecond when the vesting ends.
+- `end_timestamp` -  When the vesting ends.
 
 In addition to the lockup period that starts from the moment the transfers are enabled, vesting schedule also locks
-all funds until `cliff_timestamp`.
-Once the `cliff_timestamp` passed, the funds are vested on a pro rata basis from the `start_timestamp` to the `end_timestamp`.
+all tokens until `cliff_timestamp`.
+Once the `cliff_timestamp` passed, the tokens are vested on a pro rata basis from the `start_timestamp` to the `end_timestamp`.
 
 ### Staking
 
@@ -42,31 +41,31 @@ So it's important for the owner to pick the staking pool that fits the best.
 ### Early Vesting Termination
 
 In case of vesting schedule, the contract supports the ability for the NEAR Foundation to terminate vesting at any point before it completes.
-If the vesting is terminated before the cliff all tokens are refunded to the Foundation. Otherwise the remaining unvested funds are refunded.
+If the vesting is terminated before the cliff all tokens are refunded to the Foundation. Otherwise the remaining unvested tokens are refunded.
 
-In the event of termination, the vesting stops and the remaining unvested funds are locked until they are withdrawn by the Foundation.
+In the event of termination, the vesting stops and the remaining unvested tokens are locked until they are withdrawn by the Foundation.
 During termination, the owner can't issue any action towards the staking pool or issue transfers.
 If the amount of tokens on the contract account is less than the remaining unvested balance, the Foundation will try to unstake and withdraw everything from the staking pool.
-Once the funds are withdrawn from the staking pool, the Foundation will proceed with withdrawing the unvested balance from the contract.
+Once the tokens are withdrawn from the staking pool, the Foundation will proceed with withdrawing the unvested balance from the contract.
 Once the unvested balance is withdrawn completely, the contract returns to the regular state, and the owner can stake and transfer again.
 
 ## Technical details
 
 The contract can be used for the following purposes:
-- Lock funds until the transfers are voted to be enabled.
-- Lock funds for the lockup period without a vesting schedule. All funds will be unlocked at once once the lockup period passed.
-- Lock funds for the lockup period with a vesting schedule.
+- Lock tokens until the transfers are voted to be enabled.
+- Lock tokens for the lockup period without a vesting schedule. All tokens will be unlocked at once once the lockup period passed.
+- Lock tokens for the lockup period with a vesting schedule.
   - If the NEAR Foundation account ID is provided during initialization, the NEAR Foundation can terminate vesting schedule.
   - If the NEAR Foundation account ID is not provided, the vesting schedule can't be terminated.
 
 ### Guarantees
 
 With the guarantees from the staking pool contracts, whitelist and voting contract, the lockup contract provides the following guarantees:
-- The contract can't lose funds using staking access key or block main access key. (Except for tokens spent on gas)
+- The contract can't lose tokens using staking access key or block main access key. (Except for tokens spent on gas)
 - The owner can't prevent foundation from withdrawing the unvested balance in case of termination.
-- The owner can't withdraw funds locked due to lockup period, disabled transfers or vesting schedule.
-- The owner can withdraw rewards from staking pool, before funds are unlocked, unless the vesting termination prevents it.
-- The owner should be able to add a full access key to the account, once all funds are vested, unlocked and transfers are enabled.
+- The owner can't withdraw tokens locked due to lockup period, disabled transfers or vesting schedule.
+- The owner can withdraw rewards from staking pool, before tokens are unlocked, unless the vesting termination prevents it.
+- The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
 
 ## Interface
 
@@ -366,6 +365,5 @@ Transfer 10 NEAR to `owner-sub-account`.
 ```bash
 near call owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
 ```
-
 
 
