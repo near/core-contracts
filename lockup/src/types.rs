@@ -23,7 +23,7 @@ pub type ProposalId = u64;
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub struct LockupInformation {
-    /// The amount in yacto-NEAR tokens locked for this account.
+    /// The amount in yocto-NEAR tokens locked for this account.
     pub lockup_amount: WrappedBalance,
     /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
     /// lockup amount of tokens.
@@ -33,7 +33,7 @@ pub struct LockupInformation {
 }
 
 /// Contains information when the lockup period starts.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 pub enum LockupStartInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
     TransfersEnabled { lockup_timestamp: WrappedTimestamp },
