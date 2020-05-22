@@ -2,6 +2,7 @@
 
 extern crate lockup_contract;
 
+use borsh::BorshSerialize;
 use lockup_contract::types::LockupStartInformation;
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
@@ -12,10 +13,11 @@ use near_primitives::{
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
-use near_sdk::json_types::{Base58PublicKey, U128, U64};
+use near_sdk::json_types::{Base58PublicKey, U64};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::json;
+use std::convert::TryInto;
 
 pub const LOCKUP_ACCOUNT_ID: &str = "holder";
 
@@ -34,7 +36,10 @@ pub fn public_key(byte_val: u8) -> Base58PublicKey {
 }
 
 lazy_static::lazy_static! {
-    static ref POOL_WASM_BYTES: &'static [u8] = include_bytes!("../res/lockup_contract.wasm").as_ref();
+    static ref LOCKUP_WASM_BYTES: &'static [u8] = include_bytes!("../res/lockup_contract.wasm").as_ref();
+    static ref STAKING_POOL_WASM_BYTES: &'static [u8] = include_bytes!("res/staking_pool.wasm").as_ref();
+    static ref FAKE_VOTING_WASM_BYTES: &'static [u8] = include_bytes!("res/fake_voting.wasm").as_ref();
+    static ref WHITELIST_WASM_BYTES: &'static [u8] = include_bytes!("res/whitelist.wasm").as_ref();
 }
 
 type TxResult = Result<ExecutionOutcome, ExecutionOutcome>;
@@ -53,15 +58,13 @@ pub struct InitLockupArgs {
     pub lockup_duration: U64,
     pub lockup_start_information: LockupStartInformation,
     pub staking_pool_whitelist_account_id: AccountId,
-    pub transfer_poll_account_id: Option<AccountId>,
     pub initial_owners_main_public_key: Base58PublicKey,
-    pub owners_staking_public_key: Option<Base58PublicKey>,
     pub foundation_account_id: Option<AccountId>,
 }
 
 pub struct ExternalUser {
-    account_id: AccountId,
-    signer: InMemorySigner,
+    pub account_id: AccountId,
+    pub signer: InMemorySigner,
 }
 
 impl ExternalUser {
@@ -123,18 +126,28 @@ impl ExternalUser {
     pub fn transfer(
         &self,
         runtime: &mut RuntimeStandalone,
+        receiver_id: &str,
         amount: Balance,
-        receiver_id: AccountId,
     ) -> TxResult {
         let tx = self
-            .new_tx(runtime, LOCKUP_ACCOUNT_ID.into())
-            .function_call(
-                "transfer".into(),
-                serde_json::to_vec(&json!({"amount": U128(amount), "receiver_id": receiver_id}))
-                    .unwrap(),
-                10000000000000000,
-                0,
-            )
+            .new_tx(runtime, receiver_id.to_string())
+            .transfer(amount)
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn function_call(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        receiver_id: &str,
+        method: &str,
+        args: &[u8],
+    ) -> TxResult {
+        let tx = self
+            .new_tx(runtime, receiver_id.to_string())
+            .function_call(method.into(), args.to_vec(), 10000000000000000, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -150,12 +163,76 @@ impl ExternalUser {
         let tx = self
             .new_tx(runtime, LOCKUP_ACCOUNT_ID.into())
             .create_account()
-            .transfer(ntoy(30) + amount)
-            .deploy_contract(POOL_WASM_BYTES.to_vec())
+            .transfer(ntoy(35) + amount)
+            .deploy_contract(LOCKUP_WASM_BYTES.to_vec())
             .function_call(
                 "new".into(),
                 serde_json::to_vec(args).unwrap(),
                 10000000000000000,
+                0,
+            )
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn init_whitelist(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        staking_pool_whitelist_account_id: AccountId,
+    ) -> TxResult {
+        let tx = self
+            .new_tx(runtime, staking_pool_whitelist_account_id)
+            .create_account()
+            .transfer(ntoy(30))
+            .deploy_contract(WHITELIST_WASM_BYTES.to_vec())
+            .function_call(
+                "new".into(),
+                serde_json::to_vec(&json!({"foundation_account_id": self.account_id()})).unwrap(),
+                1000000000000000,
+                0,
+            )
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn init_staking_pool(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        staking_pool_account_id: AccountId,
+    ) -> TxResult {
+        let new_signer = InMemorySigner::from_seed(
+            &staking_pool_account_id,
+            KeyType::ED25519,
+            &staking_pool_account_id,
+        );
+        let stake_public_key: Base58PublicKey = new_signer
+            .public_key()
+            .try_to_vec()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        let tx = self
+            .new_tx(runtime, staking_pool_account_id)
+            .create_account()
+            .transfer(ntoy(40))
+            .deploy_contract(STAKING_POOL_WASM_BYTES.to_vec())
+            .function_call(
+                "new".into(),
+                serde_json::to_vec(&json!({
+                    "owner_id": self.account_id(),
+                    "stake_public_key": stake_public_key,
+                    "reward_fee_fraction": {
+                        "numerator": 10,
+                        "denominator": 100
+                    }
+                }))
+                .unwrap(),
+                1000000000000000,
                 0,
             )
             .sign(&self.signer);
@@ -188,19 +265,19 @@ pub fn wait_epoch(runtime: &mut RuntimeStandalone) {
 }
 
 pub fn call_lockup<I: ToString, O: DeserializeOwned>(
-    runtime: &mut RuntimeStandalone,
+    runtime: &RuntimeStandalone,
     method: &str,
     args: I,
 ) -> O {
     call_view(runtime, &LOCKUP_ACCOUNT_ID.into(), method, args)
 }
 
-pub fn lockup_account(runtime: &mut RuntimeStandalone) -> Account {
+pub fn lockup_account(runtime: &RuntimeStandalone) -> Account {
     runtime.view_account(&LOCKUP_ACCOUNT_ID.into()).unwrap()
 }
 
 pub fn call_view<I: ToString, O: DeserializeOwned>(
-    runtime: &mut RuntimeStandalone,
+    runtime: &RuntimeStandalone,
     account_id: &AccountId,
     method: &str,
     args: I,
