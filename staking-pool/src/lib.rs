@@ -41,7 +41,7 @@ mod test_utils;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 /// Inner account data of a delegate.
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, PartialEq)]
 pub struct Account {
     /// The unstaked balance. It represents the amount the account has on this contract that
     /// can either be staked or withdrawn.
@@ -608,7 +608,7 @@ impl StakingContract {
     }
 
     /// Inner method to get the given account or a new default value account.
-    fn get_account(&self, account_id: &AccountId) -> Account {
+    pub fn get_account(&self, account_id: &AccountId) -> Account {
         self.accounts
             .get(&hash_account_id(account_id))
             .unwrap_or_default()

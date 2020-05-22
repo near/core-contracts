@@ -16,6 +16,8 @@ use serde_json::json;
 use std::convert::TryInto;
 use utils::{call_lockup, new_root, ntoy, InitLockupArgs};
 
+use serde::Deserialize;
+
 #[quickcheck]
 fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
     let (mut r, foundation, initial_owners_main_public_key, _) = basic_setup();
@@ -229,6 +231,23 @@ fn staking() {
     let res: U128 = call_lockup(&r, "get_owners_balance", "");
     assert_eq!(res.0, new_total_balance - staking_amount);
 
+    #[derive(Deserialize, Debug)]
+    pub struct Account {
+        pub unstaked: Balance,
+        pub stake_shares: u128,
+        pub unstaked_available_epoch_height: u128,
+    }
+
+    let res: Account = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+
+    dbg!(res);
+
+    println!("Epoch before unstake {}", r.current_block().epoch_height);
     // Unstaking everything
     let res = owner_staking_account
         .function_call(
@@ -255,15 +274,36 @@ fn staking() {
     );
     assert!(res.0 >= new_total_balance);
 
-    for _ in 0..4 {
-        wait_epoch(&mut r);
-    }
+    // for _ in 0..1 {
+    //     // Should fail since stacking allow to withdraw unstakes funds after fourth epochs
+    //     // owner_staking_account
+    //     //     .function_call(
+    //     //         &mut r,
+    //     //         LOCKUP_ACCOUNT_ID,
+    //     //         "withdraw_from_staking_pool",
+    //     //         &serde_json::to_vec(&json!({ "amount": U128(new_total_balance) })).unwrap(),
+    //     //     )
+    //     //     .unwrap_err();
+    // wait_epoch(&mut r);
+    // }
 
     // The standalone runtime doesn't unlock locked balance. Need to manually intervene.
     let mut pool = r.view_account(&staking_pool_account_id).unwrap();
     pool.amount += pool.locked;
     pool.locked = 0;
     r.force_account_update(staking_pool_account_id.clone(), &pool);
+
+    println!("Epoch after unstake {}", r.current_block().epoch_height);
+
+    /// Inner account data of a delegate.
+    let res: Account = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+
+    dbg!(res);
 
     // Withdrawing everything from the staking pool
     let res = owner_staking_account
