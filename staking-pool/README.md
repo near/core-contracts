@@ -363,10 +363,6 @@ rustup target add wasm32-unknown-unknown
 ```bash
 ./build.sh
 ```
-#### Get validator key:
-```bash
-cat ~/.near/betanet/validator_key.json |grep "public_key"
-```
 #### Create a new account to deploy contract to
 - Set my_validator to the name you want publicly displayed
 - --masterAccount is your account you signed up to StakeWars2 with
@@ -377,11 +373,32 @@ near create_account my_validator --masterAccount=owner
 ```bash
 near deploy --accountId=my_validator --wasmFile=res/staking_pool.wasm
 ```
+#### Create a new node:
+
+**Note** after you NEAR is unstaked stop your node and create a new one to run as the contract account
+
+##### Stop your node
+```bash
+nearup stop
+```
+##### Move your ~/.near/betanet folder, to remove references to any previous validator node
+```bash
+mv ~/.near/betanet ~/.near/betanet_old
+```
+##### Launch your new node
+With the command nearup betanet. Modify the launch command according to your actual validator configuration (e.g. using --nodocker and --binary-path)
+
+##### Set your validator ID. 
+Put your staking pool account (the one we called my_validator in the steps above)
+
+##### Copy your validator public key, or issue the command (before the next step)
+```bash
+cat ~/.near/betanet/validator_key.json |grep "public_key"
+```
 #### Initialize staking pool at account `my_validator` for the owner account ID `owner`, given staking pool and 10% reward fee
 ```bash
 near call my_validator new '{"owner_id": "owner", "stake_public_key": "CE3QAXyVLeScmY9YeEyR3Tw9yXfjBPzFLzroTranYtVb", "reward_fee_fraction": {"numerator": 10, "denominator": 100}}' --account_id owner
 ```
-
 #### Check the current `seat price` to transfer the correct amount to your delegator(s)
 ```bash
 near validators next| grep "seat price"
@@ -393,12 +410,15 @@ near validators next| grep "seat price"
 
 #### Login and authorize the delegator
 ```bash
-export NEAR_ENV=betanet
 near login
 ```
 #### Deposit NEAR from the delegator account to the valdiator contract
 ```bash
 near call my_validator deposit '{}' --accountId user1 --amount 100
+```
+#### Stake the deposited amount to the validator contract
+```bash
+near call my_validator stake '{"amount": "100000000000000000000000000"}' --accountId user1
 ```
 #### Check that your validator proposal was (Accepted) or deposit and stake more NEAR
 ```bash
