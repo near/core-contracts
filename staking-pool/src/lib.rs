@@ -428,7 +428,7 @@ impl StakingContract {
 
     /// Returns the staking public key
     pub fn get_stake_public_key(&self) -> Base58PublicKey {
-        Base58PublicKey(self.stake_public_key.clone())
+        self.stake_public_key.clone().try_into().unwrap()
     }
 
     /*******************/
