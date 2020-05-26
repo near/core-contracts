@@ -3,25 +3,25 @@
 The purpose of this contract is to maintain the whitelist of the staking pool contracts account IDs that are approved
 by NEAR Foundation.
 
-In order for the lockup contracts to be able delegate to a staking pool, the staking pool should provide spec guarantees.
-The staking pool should guarantee that the delegated tokens can't be lost or locked, such as the lockup contract should be
-able to recover delegated tokens back to the lockup from a staking pool. In order to enforce this, only the whitelisted
+In order for the lockup contracts to be able delegate to a staking pool, the staking pool should faithfully implement the spec.
+The staking pool should guarantee that the delegated tokens can not be lost or locked, such as the lockup contract should be
+able to recover delegated tokens back to the lockup from a staking pool. In order to enforce this, only approved (whitelisted)
 staking pool contracts and accounts can receive delegated tokens.
 
-If NEAR Foundation has to approve every single staking pool account it might lead to a bottleneck and to the centralization
-of the decision making. To address this NEAR Foundation can whitelist the account IDs of the staking pool factory contracts.
+If NEAR Foundation has to approve every single staking pool account it might lead to a bottleneck and centralization
+To address this NEAR Foundation can whitelist the account IDs of staking pool factory contracts.
 
-The approved (whitelisted) staking pool factory contract will be able to whitelist staking pools contract accounts.
-The idea behind a factory contract is that it can create and setup a staking pool contract in a secure way and a permissionless way.
-This allows anyone on the network to be able to create a staking pool contract for themselves without going through NEAR
-Foundation approval. This is important to maintain the decentralization of the decision making and network governance.
+The whitelisted staking pool factory contract will be able to whitelist accounts of staking pool contracts.
+A factory contract creates and initializes a staking pool contract in a secure and permissionless way.
+This allows anyone on the network to be able to create a staking pool contract for themselves without needing approval from the NEAR
+Foundation. This is important to maintain the decentralization of the decision making and network governance.
 
 To be able to address mistakes, NEAR Foundation has the ability to remove staking pools and staking pool factories from the whitelists.
 
 ## Requirements and guarantees
 
 - The account of the whitelist contract should not contain any access keys, to avoid it from being deleted.
-- If the account run out of tokens for storage, any account can fund it. In theory the gas rebates may cover the storage in the long term.
+- If the account runs out of tokens for storage, any account can fund it. In theory the gas rebates may cover the storage in the long term.
 - `is_whitelisted` call doesn't panic, unless it's given insufficient amount of gas or the invalid account ID.
 - The contract maintains two separate whitelists, one for staking pools and one for factories.
 
