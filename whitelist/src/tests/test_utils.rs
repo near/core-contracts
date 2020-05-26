@@ -10,6 +10,9 @@ pub fn account_whitelist() -> AccountId {
 pub fn account_pool() -> AccountId {
     "pool".to_string()
 }
+pub fn account_factory() -> AccountId {
+    "factory".to_string()
+}
 
 pub struct VMContextBuilder {
     context: VMContext,
