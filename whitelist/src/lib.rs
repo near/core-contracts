@@ -293,7 +293,7 @@ mod tests {
         testing_env!(context.clone());
         assert!(contract.add_factory(account_factory()));
 
-        // Check the factory is zwhitelisted now
+        // Check the factory is whitelisted now
         context.is_view = true;
         testing_env!(context.clone());
         assert!(contract.is_factory_whitelisted(account_factory()));
