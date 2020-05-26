@@ -4,5 +4,4 @@
 
 - [Staking Pool / Delegation contract](./staking-pool/)
 - [[WIP] Lockup / Vesting contract](./lockup/)
-* [[WIP] Multisig contract](./multisig/)
-
+- [Multisig contract](./multisig/)

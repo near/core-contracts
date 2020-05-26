@@ -70,7 +70,7 @@ impl MultiSigContract {
         assert_eq!(
             env::current_account_id(),
             env::predecessor_account_id(),
-            "Signer account must much given account"
+            "Predecessor account must much current account"
         );
         self.requests.insert(&self.request_nonce, &request);
         let confirmations = HashSet::new();
@@ -78,6 +78,25 @@ impl MultiSigContract {
             .insert(&self.request_nonce, &confirmations);
         self.request_nonce += 1;
         self.request_nonce - 1
+    }
+
+    /// Remove given request and associated confirmations.
+    pub fn delete_request(&mut self, request_id: RequestId) {
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Predecessor account must much current account"
+        );
+        assert!(
+            self.requests.get(&request_id).is_some(),
+            "No such request: either wrong number or already confirmed"
+        );
+        assert!(
+            self.confirmations.get(&request_id).is_some(),
+            "Internal error: confirmations mismatch requests"
+        );
+        self.requests.remove(&request_id);
+        self.confirmations.remove(&request_id);
     }
 
     fn execute_request(&mut self, request: MultiSigRequest) -> PromiseOrValue<bool> {
@@ -125,7 +144,7 @@ impl MultiSigContract {
         assert_eq!(
             env::current_account_id(),
             env::predecessor_account_id(),
-            "Signer account must much given account"
+            "Predecessor account must much current account"
         );
         assert!(
             self.requests.get(&request_id).is_some(),
@@ -300,7 +319,20 @@ mod tests {
         let mut c = MultiSigContract::new(3);
         let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
         assert_eq!(c.requests.len(), 1);
+        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 0);
+        c.confirm(request_id);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
         c.confirm(request_id);
+    }
+
+    #[test]
+    fn test_delete_request() {
+        let amount = 1_000;
+        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        let mut c = MultiSigContract::new(3);
+        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
+        c.delete_request(request_id);
+        assert_eq!(c.requests.len(), 0);
+        assert_eq!(c.confirmations.len(), 0);
     }
 }
