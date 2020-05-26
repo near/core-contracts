@@ -6,7 +6,7 @@ by NEAR Foundation.
 In order for the lockup contracts to be able delegate to a staking pool, the staking pool should faithfully implement the spec.
 The staking pool should guarantee that the delegated tokens can not be lost or locked, such as the lockup contract should be
 able to recover delegated tokens back to the lockup from a staking pool. In order to enforce this, only approved (whitelisted)
-staking pool contracts and accounts can receive delegated tokens.
+accounts of staking pool contracts can receive delegated tokens from lockup contracts.
 
 If NEAR Foundation has to approve every single staking pool account it might lead to a bottleneck and centralization
 To address this NEAR Foundation can whitelist the account IDs of staking pool factory contracts.
