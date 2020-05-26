@@ -1,26 +1,27 @@
 use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::{AccountId, Balance, env, Gas, near_bindgen, Promise, PublicKey, PromiseOrValue};
 use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, U128};
-use near_sdk::{env, near_bindgen, AccountId, Balance, Gas, Promise, PublicKey};
+use serde::{Deserialize, Serialize};
 
 /// Unlimited allowance for multisig keys.
 const DEFAULT_ALLOWANCE: u128 = 0;
 
 pub type RequestId = u32;
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub enum MultiSigRequest {
     Transfer {
-        account_id: AccountId,
-        amount: Balance,
+        receiver_id: AccountId,
+        amount: U128,
     },
     AddKey {
-        public_key: PublicKey,
+        public_key: Base58PublicKey,
     },
     DeleteKey {
-        public_key: PublicKey,
+        public_key: Base58PublicKey,
     },
     FunctionCall {
         contract_id: AccountId,
@@ -64,37 +65,38 @@ impl MultiSigContract {
         }
     }
 
-    fn add_request(&mut self, request: MultiSigRequest) -> RequestId {
-        if self.num_confirmations == 1 {
-            self.execute_request(request);
-            0
-        } else {
-            self.requests.insert(&self.request_nonce, &request);
-            let confirmations = vec![env::signer_account_pk()].into_iter().collect();
-            self.confirmations
-                .insert(&self.request_nonce, &confirmations);
-            self.request_nonce += 1;
-            self.request_nonce - 1
-        }
+    /// Add request for multisig.
+    pub fn add_request(&mut self, request: MultiSigRequest) -> RequestId {
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Signer account must much given account"
+        );
+        self.requests.insert(&self.request_nonce, &request);
+        let confirmations = HashSet::new();
+        self.confirmations
+            .insert(&self.request_nonce, &confirmations);
+        self.request_nonce += 1;
+        self.request_nonce - 1
     }
 
-    fn execute_request(&mut self, request: MultiSigRequest) {
+    fn execute_request(&mut self, request: MultiSigRequest) -> PromiseOrValue<bool> {
         match request {
-            MultiSigRequest::Transfer { account_id, amount } => {
-                Promise::new(account_id).transfer(amount);
+            MultiSigRequest::Transfer { receiver_id, amount } => {
+                PromiseOrValue::Promise(Promise::new(receiver_id).transfer(amount.into()))
             }
             MultiSigRequest::AddKey { public_key } => {
-                Promise::new(env::current_account_id()).add_access_key(
-                    public_key,
+                PromiseOrValue::Promise(Promise::new(env::current_account_id()).add_access_key(
+                    public_key.into(),
                     DEFAULT_ALLOWANCE,
                     env::current_account_id(),
                     "transfer,function_call,add_key,confirm"
                         .to_string()
                         .into_bytes(),
-                );
+                ))
             }
             MultiSigRequest::DeleteKey { public_key } => {
-                Promise::new(env::current_account_id()).delete_key(public_key);
+                PromiseOrValue::Promise(Promise::new(env::current_account_id()).delete_key(public_key.into()))
             }
             MultiSigRequest::FunctionCall {
                 contract_id,
@@ -103,102 +105,26 @@ impl MultiSigContract {
                 deposit,
                 gas,
             } => {
-                Promise::new(contract_id).function_call(
+                PromiseOrValue::Promise(Promise::new(contract_id).function_call(
                     method_name.into_bytes(),
                     args,
                     deposit,
                     gas,
-                );
+                ))
             }
             MultiSigRequest::SetNumConfirmations { num_confirmations } => {
                 self.num_confirmations = num_confirmations;
+                PromiseOrValue::Value(true)
             }
-        };
-    }
-
-    /// Request to change number of confirmations.
-    pub fn set_num_confirmations(&mut self, num_confirmations: u32) -> RequestId {
-        assert_eq!(
-            env::current_account_id(),
-            env::signer_account_id(),
-            "Signer account must much given account"
-        );
-        self.add_request(MultiSigRequest::SetNumConfirmations { num_confirmations })
-    }
-
-    /// Request to transfer funds from this account to given account.
-    pub fn transfer(&mut self, account_id: AccountId, amount: U128) -> RequestId {
-        // TOOD: add safety margin for storage allocated balance.
-        assert_eq!(
-            env::current_account_id(),
-            env::signer_account_id(),
-            "Signer account must much given account"
-        );
-        assert!(
-            env::account_balance() >= amount.0,
-            "Not enough funds to initiate transfer"
-        );
-        self.add_request(MultiSigRequest::Transfer {
-            account_id,
-            amount: amount.0,
-        })
-    }
-
-    /// Request to add new access key to this contract.
-    /// Allows to extend allowed set of keys.
-    pub fn add_key(&mut self, public_key: Base58PublicKey) -> RequestId {
-        assert_eq!(
-            env::current_account_id(),
-            env::signer_account_id(),
-            "Signer account must much given account"
-        );
-        self.add_request(MultiSigRequest::AddKey {
-            public_key: public_key.into(),
-        })
-    }
-
-    /// Request to delete existing access key from this contract.
-    /// Allows to remove not used / lost / exposed key.
-    pub fn delete_key(&mut self, public_key: Base58PublicKey) -> RequestId {
-        assert_eq!(
-            env::current_account_id(),
-            env::signer_account_id(),
-            "Signer account must much given account"
-        );
-        self.add_request(MultiSigRequest::DeleteKey {
-            public_key: public_key.into(),
-        })
-    }
-
-    /// Request to call given contract's method with given argument / deposit / gas.
-    pub fn function_call(
-        &mut self,
-        contract_id: AccountId,
-        method_name: String,
-        args: Vec<u8>,
-        deposit: Balance,
-        gas: Gas,
-    ) -> RequestId {
-        assert_eq!(
-            env::current_account_id(),
-            env::signer_account_id(),
-            "Signer account must much given account"
-        );
-        self.add_request(MultiSigRequest::FunctionCall {
-            contract_id,
-            method_name,
-            args,
-            deposit,
-            gas,
-        })
+        }
     }
 
     /// Confirm given request with given signing key.
     /// If with this, there has been enough confirmation, a promise with request will be scheduled.
-    pub fn confirm(&mut self, request_id: RequestId) {
+    pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
         assert_eq!(
             env::current_account_id(),
-            env::signer_account_id(),
+            env::predecessor_account_id(),
             "Signer account must much given account"
         );
         assert!(
@@ -212,25 +138,27 @@ impl MultiSigContract {
         let mut confirmations = self.confirmations.get(&request_id).unwrap();
         assert!(
             !confirmations.contains(&env::signer_account_pk()),
-            "Already confirmed this request"
+            "Already confirmed this request with this key"
         );
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
             let request = self
                 .requests
                 .remove(&request_id)
                 .expect("Failed to remove existing element");
-            self.execute_request(request);
+            let result = self.execute_request(request);
             self.confirmations.remove(&request_id);
+            result
         } else {
             confirmations.insert(env::signer_account_pk());
             self.confirmations.insert(&request_id, &confirmations);
+            PromiseOrValue::Value(true)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::{MockedBlockchain, testing_env};
     use near_sdk::{AccountId, VMContext};
     use near_sdk::{Balance, BlockHeight, EpochHeight};
 
@@ -341,7 +269,8 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.transfer(bob(), amount.into());
+        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
+        c.confirm(request_id);
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
         testing_env!(context_with_key(vec![3, 2, 1], amount));
@@ -358,7 +287,8 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(1);
-        c.set_num_confirmations(2);
+        let request_id = c.add_request(MultiSigRequest::SetNumConfirmations { num_confirmations: 2 });
+        c.confirm(request_id);
         assert_eq!(c.num_confirmations, 2);
     }
 
@@ -368,7 +298,7 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.transfer(bob(), amount.into());
+        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
         c.confirm(request_id);
