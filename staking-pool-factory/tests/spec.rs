@@ -88,7 +88,7 @@ fn create_staking_pool() {
     let owner_staking_account = foundation
         .create_external(&mut r, owner_staking_account_id.clone(), ntoy(30))
         .unwrap();
-    let staking_access_key: Base58PublicKey = owner_staking_account
+    let staking_key: Base58PublicKey = owner_staking_account
         .signer()
         .public_key
         .try_to_vec()
@@ -104,7 +104,7 @@ fn create_staking_pool() {
             &serde_json::to_vec(&json!({
                 "staking_pool_id": staking_pool_id.clone(),
                 "owner_id": owner_staking_account_id.clone(),
-                "stake_public_key": staking_access_key.clone(),
+                "stake_public_key": staking_key.clone(),
                 "reward_fee_fraction": {
                     "numerator": 10,
                     "denominator": 100,
@@ -128,6 +128,10 @@ fn create_staking_pool() {
         .unwrap(),
     );
     assert!(is_whitelisted);
+
+    let actual_staking_key: Base58PublicKey =
+        call_view(&r, &staking_pool_account_id, "get_staking_key", "");
+    assert_eq!(actual_staking_key.0, staking_key.0);
 }
 
 fn basic_setup() -> (RuntimeStandalone, ExternalUser, ExternalUser) {

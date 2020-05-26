@@ -9,24 +9,13 @@ use near_primitives::{
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
-use near_sdk::json_types::Base58PublicKey;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
 pub const FACTORY_ACCOUNT_ID: &str = "factory";
 
-pub fn days(num_days: u64) -> u64 {
-    num_days * 86400_000_000_000
-}
-
 pub fn ntoy(near_amount: Balance) -> Balance {
     near_amount * 10u128.pow(24)
-}
-
-pub fn public_key(byte_val: u8) -> Base58PublicKey {
-    let mut pk = vec![byte_val; 33];
-    pk[0] = 0;
-    Base58PublicKey(pk)
 }
 
 lazy_static::lazy_static! {
