@@ -202,6 +202,9 @@ near view my_validator get_reward_fee_fraction '{}'
 
 # Owners balance
 near view my_validator get_account_total_balance '{"account_id": "owner"}'
+
+# Staking key
+near view my_validator get_staking_key '{}'
 ```
 
 To un-delegate, first run `unstake`:
@@ -279,6 +282,10 @@ pub fn get_owner_id(&self) -> AccountId;
 
 /// Returns the current reward fee as a fraction.
 pub fn get_reward_fee_fraction(&self) -> RewardFeeFraction;
+
+/// Returns the staking public key
+pub fn get_staking_key(&self) -> Base58PublicKey;
+
 
 /*******************/
 /* Owner's methods */
