@@ -500,7 +500,9 @@ impl StakingContract {
         self.last_epoch_height = epoch_height;
 
         // New total amount (both locked and unlocked balances).
-        // NOTE: We need to subtract `attached_deposit` in case `ping` called from `deposit` call.
+        // NOTE: We need to subtract `attached_deposit` in case `ping` called from `deposit` call
+        // since the attached deposit gets included in the `account_balance`, and we have not
+        // accounted it yet.
         let total_balance =
             env::account_locked_balance() + env::account_balance() - env::attached_deposit();
 
