@@ -53,6 +53,17 @@ fn create_staking_pool() {
         )
         .unwrap();
 
+    let is_pool_whitelisted: bool = call_view(
+        &r,
+        &staking_pool_whitelist_account_id,
+        "is_whitelisted",
+        &serde_json::to_string(
+            &json!({ "staking_pool_account_id": staking_pool_account_id.clone() }),
+        )
+        .unwrap(),
+    );
+    assert!(!is_pool_whitelisted);
+
     let is_factory_whitelisted: bool = call_view(
         &r,
         &staking_pool_whitelist_account_id,
@@ -60,7 +71,7 @@ fn create_staking_pool() {
         &serde_json::to_string(&json!({ "factory_account_id": FACTORY_ACCOUNT_ID.to_string() }))
             .unwrap(),
     );
-    assert!(!is_factory_whitelisted);
+    assert!(is_factory_whitelisted);
 
     // Creating staking pool
     foundation
@@ -91,7 +102,7 @@ fn create_staking_pool() {
             FACTORY_ACCOUNT_ID,
             "create_staking_pool",
             &serde_json::to_vec(&json!({
-                "staking_pool_id":staking_pool_id.clone(),
+                "staking_pool_id": staking_pool_id.clone(),
                 "owner_id": owner_staking_account_id.clone(),
                 "stake_public_key": staking_access_key.clone(),
                 "reward_fee_fraction": {
@@ -122,7 +133,7 @@ fn create_staking_pool() {
 fn basic_setup() -> (RuntimeStandalone, ExternalUser, ExternalUser) {
     let (mut r, foundation) = new_root("foundation".into());
 
-    let mut owner = foundation
+    let owner = foundation
         .create_external(&mut r, "owner".into(), ntoy(100))
         .unwrap();
 

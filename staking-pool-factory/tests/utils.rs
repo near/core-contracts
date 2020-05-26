@@ -146,7 +146,7 @@ impl ExternalUser {
         let tx = self
             .new_tx(runtime, FACTORY_ACCOUNT_ID.into())
             .create_account()
-            .transfer(ntoy(35))
+            .transfer(ntoy(60))
             .deploy_contract(FACTORY_WASM_BYTES.to_vec())
             .function_call(
                 "new".into(),
