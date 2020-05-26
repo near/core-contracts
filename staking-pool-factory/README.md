@@ -43,59 +43,7 @@ pub fn create_staking_pool(
     owner_id: AccountId,
     stake_public_key: Base58PublicKey,
     reward_fee_fraction: RewardFeeFraction,
-) -> Promise {
-    assert!(
-        env::attached_deposit() >= MIN_ATTACHED_BALANCE,
-        "Not enough attached deposit to complete staking pool creation"
-    );
-
-    assert!(
-        staking_pool_id.find('.').is_none(),
-        "The staking pool ID can't contain `.`"
-    );
-
-    let staking_pool_account_id = format!("{}.{}", staking_pool_id, env::current_account_id());
-    assert!(
-        env::is_valid_account_id(staking_pool_account_id.as_bytes()),
-        "The staking pool account ID is invalid"
-    );
-
-    assert!(
-        env::is_valid_account_id(owner_id.as_bytes()),
-        "The owner account ID is invalid"
-    );
-    reward_fee_fraction.assert_valid();
-
-    assert!(
-        self.staking_pool_account_ids
-            .insert(&staking_pool_account_id),
-        "The staking pool account ID already exists"
-    );
-
-    Promise::new(staking_pool_account_id.clone())
-        .create_account()
-        .transfer(env::attached_deposit())
-        .deploy_contract(include_bytes!("../../staking-pool/res/staking_pool.wasm").to_vec())
-        .function_call(
-            b"new".to_vec(),
-            serde_json::to_vec(&StakingPoolArgs {
-                owner_id,
-                stake_public_key,
-                reward_fee_fraction,
-            })
-            .unwrap(),
-            NO_DEPOSIT,
-            gas::STAKING_POOL_NEW,
-        )
-        .then(ext_self::on_staking_pool_create(
-            staking_pool_account_id,
-            env::attached_deposit().into(),
-            env::predecessor_account_id(),
-            &env::current_account_id(),
-            NO_DEPOSIT,
-            gas::CALLBACK,
-        ))
-}
+) -> Promise;
 
 /// Callback after a staking pool was created.
 /// Returns the promise to whitelist the staking pool contract if the pool creation succeeded.
@@ -105,39 +53,5 @@ pub fn on_staking_pool_create(
     staking_pool_account_id: AccountId,
     attached_deposit: U128,
     predecessor_account_id: AccountId,
-) -> PromiseOrValue<bool> {
-    assert_self();
-
-    let staking_pool_created = is_promise_success();
-
-    if staking_pool_created {
-        env::log(
-            format!(
-                "The staking pool @{} was successfully created. Whitelisting...",
-                staking_pool_account_id
-            )
-            .as_bytes(),
-        );
-        ext_whitelist::add_staking_pool(
-            staking_pool_account_id,
-            &self.staking_pool_whitelist_account_id,
-            NO_DEPOSIT,
-            gas::WHITELIST_STAKING_POOL,
-        )
-        .into()
-    } else {
-        self.staking_pool_account_ids
-            .remove(&staking_pool_account_id);
-        env::log(
-            format!(
-                "The staking pool @{} creation has failed. Returning attached deposit of {} to @{}",
-                staking_pool_account_id,
-                attached_deposit.0,
-                predecessor_account_id
-            ).as_bytes()
-        );
-        Promise::new(predecessor_account_id).transfer(attached_deposit.0);
-        PromiseOrValue::Value(false)
-    }
-}
+) -> PromiseOrValue<bool>;
 ```
