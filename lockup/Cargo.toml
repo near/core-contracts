@@ -24,5 +24,12 @@ debug = false
 panic = "abort"
 overflow-checks = true
 
-[workspace]
-members = []
+[dev-dependencies]
+lazy_static = "1.4.0"
+quickcheck = "0.9"
+quickcheck_macros = "0.9"
+log = "0.4"
+env_logger = { version = "0.7.1", default-features = false }
+near-crypto = { git = "https://github.com/nearprotocol/nearcore.git" }
+near-primitives = { git = "https://github.com/nearprotocol/nearcore.git" }
+near-runtime-standalone = { git = "https://github.com/nearprotocol/nearcore.git" }
