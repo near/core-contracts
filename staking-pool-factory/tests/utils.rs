@@ -54,7 +54,7 @@ impl ExternalUser {
         &self.signer
     }
 
-    pub fn account(&self, runtime: &mut RuntimeStandalone) -> Account {
+    pub fn account(&self, runtime: &RuntimeStandalone) -> Account {
         runtime
             .view_account(&self.account_id)
             .expect("Account should be there")
@@ -199,18 +199,18 @@ pub fn view_factory<I: ToString, O: DeserializeOwned>(
     method: &str,
     args: I,
 ) -> O {
-    call_view(runtime, &FACTORY_ACCOUNT_ID.into(), method, args)
+    call_view(runtime, &FACTORY_ACCOUNT_ID, method, args)
 }
 
 pub fn call_view<I: ToString, O: DeserializeOwned>(
     runtime: &RuntimeStandalone,
-    account_id: &AccountId,
+    account_id: &str,
     method: &str,
     args: I,
 ) -> O {
     let args = args.to_string();
     let result = runtime
-        .view_method_call(account_id, method, args.as_bytes())
+        .view_method_call(&account_id.to_string(), method, args.as_bytes())
         .unwrap()
         .0;
     let output: O = serde_json::from_reader(result.as_slice()).unwrap();
