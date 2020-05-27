@@ -60,8 +60,8 @@ impl MultiSigContract {
         Self {
             num_confirmations,
             request_nonce: 0,
-            requests: Default::default(),
-            confirmations: Default::default(),
+            requests: Map::new(b"r".to_vec()),
+            confirmations: Map::new(b"c".to_vec()),
         }
     }
 
@@ -104,32 +104,30 @@ impl MultiSigContract {
             MultiSigRequest::Transfer {
                 receiver_id,
                 amount,
-            } => PromiseOrValue::Promise(Promise::new(receiver_id).transfer(amount.into())),
-            MultiSigRequest::AddKey { public_key } => PromiseOrValue::Promise(
+            } => Promise::new(receiver_id).transfer(amount.into()).into(),
+            MultiSigRequest::AddKey { public_key } =>
                 Promise::new(env::current_account_id()).add_access_key(
                     public_key.into(),
                     DEFAULT_ALLOWANCE,
                     env::current_account_id(),
-                    "transfer,function_call,add_key,confirm"
+                    "add_request,delete_request,confirm"
                         .to_string()
                         .into_bytes(),
-                ),
-            ),
-            MultiSigRequest::DeleteKey { public_key } => PromiseOrValue::Promise(
-                Promise::new(env::current_account_id()).delete_key(public_key.into()),
-            ),
+                ).into(),
+            MultiSigRequest::DeleteKey { public_key } =>
+                Promise::new(env::current_account_id()).delete_key(public_key.into()).into(),
             MultiSigRequest::FunctionCall {
                 contract_id,
                 method_name,
                 args,
                 deposit,
                 gas,
-            } => PromiseOrValue::Promise(Promise::new(contract_id).function_call(
+            } => Promise::new(contract_id).function_call(
                 method_name.into_bytes(),
                 args.into(),
                 deposit.into(),
                 gas.into(),
-            )),
+            ).into(),
             MultiSigRequest::SetNumConfirmations { num_confirmations } => {
                 self.num_confirmations = num_confirmations;
                 PromiseOrValue::Value(true)
@@ -163,9 +161,8 @@ impl MultiSigContract {
                 .requests
                 .remove(&request_id)
                 .expect("Failed to remove existing element");
-            let result = self.execute_request(request);
             self.confirmations.remove(&request_id);
-            result
+            self.execute_request(request)
         } else {
             confirmations.insert(env::signer_account_pk());
             self.confirmations.insert(&request_id, &confirmations);
