@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, U128, U64};
@@ -5,7 +7,6 @@ use near_sdk::{
     env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
 };
 use serde::{Deserialize, Serialize};
-
 use uint::construct_uint;
 
 /// The amount of gas given to complete `internal_after_stake` call.
@@ -426,6 +427,11 @@ impl StakingContract {
         self.reward_fee_fraction.clone()
     }
 
+    /// Returns the staking public key
+    pub fn get_staking_key(&self) -> Base58PublicKey {
+        self.stake_public_key.clone().try_into().unwrap()
+    }
+
     /*******************/
     /* Owner's methods */
     /*******************/
@@ -629,12 +635,13 @@ impl StakingContract {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use near_sdk::{testing_env, MockedBlockchain};
 
     use crate::test_utils::*;
 
     use super::*;
-    use std::convert::TryFrom;
 
     struct Emulator {
         pub contract: StakingContract,
