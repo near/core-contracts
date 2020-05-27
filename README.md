@@ -2,5 +2,5 @@
 
 - [Staking Pool / Delegation contract](./staking-pool/)
 - [Lockup / Vesting contract](./lockup/)
-- [Whitelist for staking pools and staking pool factories](./whitelist/)
+- [Whitelist Contract](./whitelist/)
 - [Staking Pool Factory](./staking-pool-factory/)
