@@ -1,14 +1,14 @@
 # Staking Pool Factory Contract
 
-This contract allows to deploy new staking pool contract and automatically whitelist them.
+This contract deploys and automatically whitelists new staking pool contracts.
 It allows any user to create an new whitelisted staking pool.
 
-The staking pool factory contract keeps the hardcoded binary of the staking pool contract within itself.
+The staking pool factory contract packages the binary of the staking pool contract within its own binary.
 To create a new staking pool a user should issue a function call transaction and attach the required minimum deposit.
 The entire deposit will be transferred to the newly created staking pool contract in order to cover the required storage.
 
 When a user issues a function call towards the factory to create a new staking pool the factory internally checks that
-the staking pool account ID doesn't exists, validates arguments for the staking pool initialization and then issues a
+the staking pool account ID does not exists, validates arguments for the staking pool initialization and then issues a
 receipt that creates the staking pool. Once the receipt executes, the factory checks the status of the execution in the
 callback. If the staking pool was created successfully, the factory then whitelists the newly created staking pool.
 Otherwise, the factory returns the attached deposit back the users and returns `false`.
