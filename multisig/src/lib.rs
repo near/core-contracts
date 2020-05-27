@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::{AccountId, env, Gas, near_bindgen, Promise, PublicKey, PromiseOrValue};
 use near_sdk::collections::Map;
-use near_sdk::json_types::{Base58PublicKey, U128, Base64VecU8};
+use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
+use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
 use serde::{Deserialize, Serialize};
 
 /// Unlimited allowance for multisig keys.
@@ -28,7 +28,7 @@ pub enum MultiSigRequest {
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
-        gas: Gas,
+        gas: U64,
     },
     SetNumConfirmations {
         num_confirmations: u32,
@@ -101,36 +101,35 @@ impl MultiSigContract {
 
     fn execute_request(&mut self, request: MultiSigRequest) -> PromiseOrValue<bool> {
         match request {
-            MultiSigRequest::Transfer { receiver_id, amount } => {
-                PromiseOrValue::Promise(Promise::new(receiver_id).transfer(amount.into()))
-            }
-            MultiSigRequest::AddKey { public_key } => {
-                PromiseOrValue::Promise(Promise::new(env::current_account_id()).add_access_key(
+            MultiSigRequest::Transfer {
+                receiver_id,
+                amount,
+            } => PromiseOrValue::Promise(Promise::new(receiver_id).transfer(amount.into())),
+            MultiSigRequest::AddKey { public_key } => PromiseOrValue::Promise(
+                Promise::new(env::current_account_id()).add_access_key(
                     public_key.into(),
                     DEFAULT_ALLOWANCE,
                     env::current_account_id(),
                     "transfer,function_call,add_key,confirm"
                         .to_string()
                         .into_bytes(),
-                ))
-            }
-            MultiSigRequest::DeleteKey { public_key } => {
-                PromiseOrValue::Promise(Promise::new(env::current_account_id()).delete_key(public_key.into()))
-            }
+                ),
+            ),
+            MultiSigRequest::DeleteKey { public_key } => PromiseOrValue::Promise(
+                Promise::new(env::current_account_id()).delete_key(public_key.into()),
+            ),
             MultiSigRequest::FunctionCall {
                 contract_id,
                 method_name,
                 args,
                 deposit,
                 gas,
-            } => {
-                PromiseOrValue::Promise(Promise::new(contract_id).function_call(
-                    method_name.into_bytes(),
-                    args.into(),
-                    deposit.into(),
-                    gas,
-                ))
-            }
+            } => PromiseOrValue::Promise(Promise::new(contract_id).function_call(
+                method_name.into_bytes(),
+                args.into(),
+                deposit.into(),
+                gas.into(),
+            )),
             MultiSigRequest::SetNumConfirmations { num_confirmations } => {
                 self.num_confirmations = num_confirmations;
                 PromiseOrValue::Value(true)
@@ -177,7 +176,7 @@ impl MultiSigContract {
 
 #[cfg(test)]
 mod tests {
-    use near_sdk::{MockedBlockchain, testing_env};
+    use near_sdk::{testing_env, MockedBlockchain};
     use near_sdk::{AccountId, VMContext};
     use near_sdk::{Balance, BlockHeight, EpochHeight};
 
@@ -288,7 +287,10 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
+        let request_id = c.add_request(MultiSigRequest::Transfer {
+            receiver_id: bob(),
+            amount: amount.into(),
+        });
         c.confirm(request_id);
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
@@ -306,7 +308,9 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(1);
-        let request_id = c.add_request(MultiSigRequest::SetNumConfirmations { num_confirmations: 2 });
+        let request_id = c.add_request(MultiSigRequest::SetNumConfirmations {
+            num_confirmations: 2,
+        });
         c.confirm(request_id);
         assert_eq!(c.num_confirmations, 2);
     }
@@ -317,7 +321,10 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
+        let request_id = c.add_request(MultiSigRequest::Transfer {
+            receiver_id: bob(),
+            amount: amount.into(),
+        });
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 0);
         c.confirm(request_id);
@@ -330,7 +337,10 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer { receiver_id: bob(), amount: amount.into() });
+        let request_id = c.add_request(MultiSigRequest::Transfer {
+            receiver_id: bob(),
+            amount: amount.into(),
+        });
         c.delete_request(request_id);
         assert_eq!(c.requests.len(), 0);
         assert_eq!(c.confirmations.len(), 0);
