@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::{AccountId, Balance, env, Gas, near_bindgen, Promise, PublicKey, PromiseOrValue};
+use near_sdk::{AccountId, env, Gas, near_bindgen, Promise, PublicKey, PromiseOrValue};
 use near_sdk::collections::Map;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::{Base58PublicKey, U128, Base64VecU8};
 use serde::{Deserialize, Serialize};
 
 /// Unlimited allowance for multisig keys.
@@ -26,8 +26,8 @@ pub enum MultiSigRequest {
     FunctionCall {
         contract_id: AccountId,
         method_name: String,
-        args: Vec<u8>,
-        deposit: Balance,
+        args: Base64VecU8,
+        deposit: U128,
         gas: Gas,
     },
     SetNumConfirmations {
@@ -126,8 +126,8 @@ impl MultiSigContract {
             } => {
                 PromiseOrValue::Promise(Promise::new(contract_id).function_call(
                     method_name.into_bytes(),
-                    args,
-                    deposit,
+                    args.into(),
+                    deposit.into(),
                     gas,
                 ))
             }

@@ -25,8 +25,8 @@ There are number of different request types that multisig can confirm and execut
  FunctionCall {
         contract_id: AccountId,
         method_name: String,
-        args: Vec<u8>,
-        deposit: Balance,
+        args: Base64VecU8,
+        deposit: U128,
         gas: Gas
     },
  SetNumConfirmations { num_confirmations: u32 }
