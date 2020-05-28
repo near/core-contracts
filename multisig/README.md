@@ -82,7 +82,7 @@ Commands to deploy and initialize a 2 out of 3 multisig contract via `near repl`
 ```javascript
 const fs = require('fs');
 const account = await near.account("illia");
-const contractName = "multisig.illia";
+const contractName = "multisig2.illia";
 const methodNames = ["add_request","delete_request","confirm"];
 const newArgs = {"num_confirmations": 2};
 const result = account.signAndSendTransaction(
@@ -92,13 +92,13 @@ const result = account.signAndSendTransaction(
         nearAPI.transactions.transfer("100000000000000000000000000"),  
         nearAPI.transactions.addKey(
             nearAPI.utils.PublicKey.from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, "0")),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
         nearAPI.transactions.addKey(
             nearAPI.utils.PublicKey.from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, "0")),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
         nearAPI.transactions.addKey(
             nearAPI.utils.PublicKey.from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, "0")),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
         nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
         nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
     ]);
