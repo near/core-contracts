@@ -82,7 +82,7 @@ Commands to deploy and initialize a 2 out of 3 multisig contract via `near repl`
 ```javascript
 const fs = require('fs');
 const account = await near.account("illia");
-const contractName = "multisig2.illia";
+const contractName = "multisig.illia";
 const methodNames = ["add_request","delete_request","confirm"];
 const newArgs = {"num_confirmations": 2};
 const result = account.signAndSendTransaction(
@@ -108,11 +108,11 @@ To create request for transfer funds:
 ```javascript
 const contractName = "multisig.illia";
 const account = await near.account(contractName);
-const requestArgs = {"Transfer": {"receiver_id": "illia", "amount": "1000000000000000000000"}};
+const requestArgs = {"request": {"type": "Transfer", "receiver_id": "illia", "amount": "1000000000000000000000"}};
 const result = account.signAndSendTransaction(
     contractName,
     [
-        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs))),
+        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs)), 10000000000000, "0"),
     ]
 );
 ```
@@ -125,7 +125,22 @@ const confirmArgs = {"request_id": 0};
 const result = account.signAndSendTransaction(
     contractName,
     [
-        nearAPI.transactions.functionCall("confirm", Buffer.from(JSON.stringify(requestArgs))),
+        nearAPI.transactions.functionCall("confirm", Buffer.from(JSON.stringify(confirmArgs)), 10000000000000, "0"),
     ]
 );
+```
+
+To list all requests ids:
+```bash
+near view multisig.illia list_requests
+```
+
+To see information about specific request:
+```bash
+near view multisig.illia get_request '{"request_id": 0}'
+```
+
+To see confirmations for specific request:
+```bash
+near view multisig.illia get_confirmations '{"request_id": 0}'
 ```
