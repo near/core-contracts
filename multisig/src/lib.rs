@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::{AccountId, env, near_bindgen, Promise, PromiseOrValue, PublicKey};
 use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
-use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
 use serde::{Deserialize, Serialize};
 
 /// Unlimited allowance for multisig keys.
@@ -11,7 +11,7 @@ const DEFAULT_ALLOWANCE: u128 = 0;
 
 pub type RequestId = u32;
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub enum MultiSigRequest {
     Transfer {
         receiver_id: AccountId,
@@ -169,15 +169,33 @@ impl MultiSigContract {
             PromiseOrValue::Value(true)
         }
     }
+
+    pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest {
+        self.requests.get(&request_id).expect("No such request")
+    }
+
+    pub fn list_requests(&self) -> Vec<RequestId> {
+        self.requests.keys().collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use near_sdk::{testing_env, MockedBlockchain};
+    use std::fmt::{Debug, Formatter, Error};
+
+    use near_sdk::{MockedBlockchain, testing_env};
     use near_sdk::{AccountId, VMContext};
     use near_sdk::{Balance, BlockHeight, EpochHeight};
 
     use super::*;
+
+    /// Used for asserts_eq.
+    /// TODO: replace with derive when https://github.com/near/near-sdk-rs/issues/165
+    impl Debug for MultiSigRequest {
+        fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), Error> {
+            panic!("Should not trigger");
+        }
+    }
 
     pub fn alice() -> AccountId {
         "alice".to_string()
@@ -284,10 +302,13 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer {
+        let request = MultiSigRequest::Transfer {
             receiver_id: bob(),
             amount: amount.into(),
-        });
+        };
+        let request_id = c.add_request(request.clone());
+        assert_eq!(c.get_request(request_id), request);
+        assert_eq!(c.list_requests(), vec![request_id]);
         c.confirm(request_id);
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
