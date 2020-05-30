@@ -75,17 +75,72 @@ rustup target add wasm32-unknown-unknown
 
 ## Usage
 
+Before deploying the contract, you need to collect all public keys that it will be initialized with.
+
 Commands to deploy and initialize a 2 out of 3 multisig contract via `near repl`:
 
 ```javascript
-const tx = nearlib.transaction.createTransaction(
-[
-    nearlib.transactions.createAccount(),
-    nearlib.transactions.transfer(10),  
-    nearlib.transactions.addKey(`<1st_public_key>`),
-    nearlib.transactions.addKey(`<2nd_public_key>`),
-    nearlib.transactions.addKey(`<3nd_public_key>`),
-    nearlib.transactions.deploy(),
-    nearlib.transactions.functionCall("new", {"num_confirmations": 2}, 0, 10000000000000000),
-]);
+const fs = require('fs');
+const account = await near.account("illia");
+const contractName = "multisig.illia";
+const methodNames = ["add_request","delete_request","confirm"];
+const newArgs = {"num_confirmations": 2};
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.createAccount(),
+        nearAPI.transactions.transfer("100000000000000000000000000"),  
+        nearAPI.transactions.addKey(
+            nearAPI.utils.PublicKey.from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
+        nearAPI.transactions.addKey(
+            nearAPI.utils.PublicKey.from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
+        nearAPI.transactions.addKey(
+            nearAPI.utils.PublicKey.from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95"),
+            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
+        nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
+        nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
+    ]);
+```
+
+To create request for transfer funds:
+```javascript
+const contractName = "multisig.illia";
+const account = await near.account(contractName);
+const requestArgs = {"request": {"type": "Transfer", "receiver_id": "illia", "amount": "1000000000000000000000"}};
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs)), 10000000000000, "0"),
+    ]
+);
+```
+
+To confirm a specific request:
+```javascript
+const contractName = "multisig.illia";
+const account = await near.account(contractName);
+const confirmArgs = {"request_id": 0};
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.functionCall("confirm", Buffer.from(JSON.stringify(confirmArgs)), 10000000000000, "0"),
+    ]
+);
+```
+
+To list all requests ids:
+```bash
+near view multisig.illia list_request_ids
+```
+
+To see information about specific request:
+```bash
+near view multisig.illia get_request '{"request_id": 0}'
+```
+
+To see confirmations for specific request:
+```bash
+near view multisig.illia get_confirmations '{"request_id": 0}'
 ```

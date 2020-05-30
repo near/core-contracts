@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::convert::TryFrom;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
@@ -11,7 +12,8 @@ const DEFAULT_ALLOWANCE: u128 = 0;
 
 pub type RequestId = u32;
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum MultiSigRequest {
     Transfer {
         receiver_id: AccountId,
@@ -105,29 +107,33 @@ impl MultiSigContract {
                 receiver_id,
                 amount,
             } => Promise::new(receiver_id).transfer(amount.into()).into(),
-            MultiSigRequest::AddKey { public_key } =>
-                Promise::new(env::current_account_id()).add_access_key(
+            MultiSigRequest::AddKey { public_key } => Promise::new(env::current_account_id())
+                .add_access_key(
                     public_key.into(),
                     DEFAULT_ALLOWANCE,
                     env::current_account_id(),
                     "add_request,delete_request,confirm"
                         .to_string()
                         .into_bytes(),
-                ).into(),
-            MultiSigRequest::DeleteKey { public_key } =>
-                Promise::new(env::current_account_id()).delete_key(public_key.into()).into(),
+                )
+                .into(),
+            MultiSigRequest::DeleteKey { public_key } => Promise::new(env::current_account_id())
+                .delete_key(public_key.into())
+                .into(),
             MultiSigRequest::FunctionCall {
                 contract_id,
                 method_name,
                 args,
                 deposit,
                 gas,
-            } => Promise::new(contract_id).function_call(
-                method_name.into_bytes(),
-                args.into(),
-                deposit.into(),
-                gas.into(),
-            ).into(),
+            } => Promise::new(contract_id)
+                .function_call(
+                    method_name.into_bytes(),
+                    args.into(),
+                    deposit.into(),
+                    gas.into(),
+                )
+                .into(),
             MultiSigRequest::SetNumConfirmations { num_confirmations } => {
                 self.num_confirmations = num_confirmations;
                 PromiseOrValue::Value(true)
@@ -169,15 +175,42 @@ impl MultiSigContract {
             PromiseOrValue::Value(true)
         }
     }
+
+    pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest {
+        self.requests.get(&request_id).expect("No such request")
+    }
+
+    pub fn list_request_ids(&self) -> Vec<RequestId> {
+        self.requests.keys().collect()
+    }
+
+    pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey> {
+        self.confirmations
+            .get(&request_id)
+            .expect("No such request")
+            .into_iter()
+            .map(|key| Base58PublicKey::try_from(key).expect("Failed to covert key to base58"))
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::{Debug, Error, Formatter};
+
     use near_sdk::{testing_env, MockedBlockchain};
     use near_sdk::{AccountId, VMContext};
     use near_sdk::{Balance, BlockHeight, EpochHeight};
 
     use super::*;
+
+    /// Used for asserts_eq.
+    /// TODO: replace with derive when https://github.com/near/near-sdk-rs/issues/165
+    impl Debug for MultiSigRequest {
+        fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), Error> {
+            panic!("Should not trigger");
+        }
+    }
 
     pub fn alice() -> AccountId {
         "alice".to_string()
@@ -282,19 +315,38 @@ mod tests {
     #[test]
     fn test_multi_3_of_n() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![1, 2, 3], amount));
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
+                .unwrap()
+                .into(),
+            amount
+        ));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer {
+        let request = MultiSigRequest::Transfer {
             receiver_id: bob(),
             amount: amount.into(),
-        });
+        };
+        let request_id = c.add_request(request.clone());
+        assert_eq!(c.get_request(request_id), request);
+        assert_eq!(c.list_request_ids(), vec![request_id]);
         c.confirm(request_id);
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
-        testing_env!(context_with_key(vec![3, 2, 1], amount));
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
+                .unwrap()
+                .into(),
+            amount
+        ));
         c.confirm(request_id);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 2);
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        assert_eq!(c.get_confirmations(request_id).len(), 2);
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95")
+                .unwrap()
+                .into(),
+            amount
+        ));
         c.confirm(request_id);
         // TODO: confirm that funds were transferred out via promise.
         assert_eq!(c.requests.len(), 0);
