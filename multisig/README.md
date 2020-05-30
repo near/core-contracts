@@ -132,7 +132,7 @@ const result = account.signAndSendTransaction(
 
 To list all requests ids:
 ```bash
-near view multisig.illia list_requests
+near view multisig.illia list_request_ids
 ```
 
 To see information about specific request:

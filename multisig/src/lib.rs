@@ -180,7 +180,7 @@ impl MultiSigContract {
         self.requests.get(&request_id).expect("No such request")
     }
 
-    pub fn list_requests(&self) -> Vec<RequestId> {
+    pub fn list_request_ids(&self) -> Vec<RequestId> {
         self.requests.keys().collect()
     }
 
@@ -328,7 +328,7 @@ mod tests {
         };
         let request_id = c.add_request(request.clone());
         assert_eq!(c.get_request(request_id), request);
-        assert_eq!(c.list_requests(), vec![request_id]);
+        assert_eq!(c.list_request_ids(), vec![request_id]);
         c.confirm(request_id);
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
