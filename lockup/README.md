@@ -49,6 +49,14 @@ If the amount of tokens on the contract account is less than the remaining unves
 Once the tokens are withdrawn from the staking pool, the Foundation will proceed with withdrawing the unvested balance from the contract.
 Once the unvested balance is withdrawn completely, the contract returns to the regular state, and the owner can stake and transfer again.
 
+The amount withdrawn in the event of termination by NEAR foundation may be lower than the initial contract amount.
+It's because the contract has to maintain the minimum required balance to cover storage of the contract code and contract state.
+The balance can also be lower due to transaction fees spent by the owner, because owner has access keys on the account of the contract and the transaction fees are paid from the account balance.
+The amount of NEAR tokens locked to maintain the minimum storage balance is 35 NEAR.
+
+If there is still termination balance deficit due to minimum required balance, the owner may decide to fund the deficit on this account to finish the termination process.
+This can be done through a regular transfer action from an account with liquid balance.
+
 ## Technical details
 
 The contract can be used for the following purposes:
