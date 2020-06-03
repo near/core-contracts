@@ -1,19 +1,11 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
 use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight};
-use uint::construct_uint;
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 type Timestamp = u64;
-
-construct_uint! {
-    /// 256-bit unsigned integer.
-    // TODO: Revert back to 4 once wasm/wasmer bug is fixed.
-    // See https://github.com/wasmerio/wasmer/issues/1429
-    pub struct U256(8);
-}
 
 /// Voting contract for unlocking transfers. Once the majority of the stake holders agree to
 /// unlock transfer, the time will be recorded and the voting ends.
@@ -22,8 +14,6 @@ construct_uint! {
 pub struct VotingContract {
     /// How much each validator votes
     votes: Map<AccountId, Balance>,
-    /// Map of account to their current stake
-    account_stake: Map<AccountId, Balance>,
     /// Total voted balance so far.
     total_voted_stake: Balance,
     /// When the voting ended. `None` means the poll is still open.
@@ -44,30 +34,24 @@ impl VotingContract {
     pub fn new() -> Self {
         VotingContract {
             votes: Map::new(b"a".to_vec()),
-            account_stake: Map::new(b"s".to_vec()),
             total_voted_stake: 0,
             result: None,
             last_epoch_height: 0,
         }
     }
 
-    fn resolve_votes(&mut self) {
+    /// Ping to update the votes according to current stake of validators.
+    pub fn ping(&mut self) {
+        assert!(self.result.is_none(), "Voting has already ended");
         let cur_epoch_height = env::epoch_height();
         if cur_epoch_height != self.last_epoch_height {
-            for account_id in self.account_stake.keys().into_iter().collect::<Vec<_>>() {
-                let old_account_stake = self.account_stake.remove(&account_id).unwrap();
+            for account_id in self.votes.keys().into_iter().collect::<Vec<_>>() {
                 let account_current_stake = env::validator_stake(&account_id);
                 let account_voted_stake = self.votes.remove(&account_id).unwrap();
                 if account_current_stake > 0 {
-                    let new_account_voted_stake = (U256::from(account_voted_stake)
-                        * U256::from(account_current_stake)
-                        / U256::from(old_account_stake))
-                    .as_u128();
                     self.total_voted_stake =
-                        self.total_voted_stake + new_account_voted_stake - account_voted_stake;
-                    self.votes.insert(&account_id, &new_account_voted_stake);
-                    self.account_stake
-                        .insert(&account_id, &account_current_stake);
+                        self.total_voted_stake + account_current_stake - account_voted_stake;
+                    self.votes.insert(&account_id, &account_current_stake);
                 }
             }
             self.check_result();
@@ -75,6 +59,7 @@ impl VotingContract {
         }
     }
 
+    /// Check whether the voting has ended.
     fn check_result(&mut self) {
         assert!(
             self.result.is_none(),
@@ -86,31 +71,20 @@ impl VotingContract {
         }
     }
 
-    /// Vote on a specific proposal with the given stake
-    pub fn vote(&mut self, stake: Balance) {
-        if self.result.is_some() {
-            env::panic("voting has already ended".as_bytes());
-        }
-        self.resolve_votes();
+    /// Internal function to handle vote and withdraw.
+    fn vote_internal(&mut self, is_vote: bool) {
+        self.ping();
         if self.result.is_some() {
             return;
         }
         let account_id = env::predecessor_account_id();
-        let account_stake = env::validator_stake(&account_id);
-        assert!(
-            account_stake > 0,
-            "account {} is not a validator",
-            account_id
-        );
-        if stake > account_stake {
-            env::panic(
-                format!(
-                    "account {} has a stake of {} but tries to vote {}",
-                    account_id, account_stake, stake
-                )
-                .as_bytes(),
-            );
-        }
+        let account_stake = if is_vote {
+            let stake = env::validator_stake(&account_id);
+            assert!(stake > 0, "{} is not a validator", account_id);
+            stake
+        } else {
+            0
+        };
         let voted_stake = self.votes.remove(&account_id).unwrap_or_default();
         assert!(
             voted_stake <= self.total_voted_stake,
@@ -118,16 +92,24 @@ impl VotingContract {
             voted_stake,
             self.total_voted_stake
         );
-        if stake == 0 {
-            self.account_stake.remove(&account_id);
-            return;
+        self.total_voted_stake = self.total_voted_stake + account_stake - voted_stake;
+        if account_stake > 0 {
+            self.votes.insert(&account_id, &account_stake);
+            self.check_result();
         }
-        self.votes.insert(&account_id, &stake);
-        self.account_stake.insert(&account_id, &account_stake);
-        self.total_voted_stake = self.total_voted_stake + stake - voted_stake;
-        self.check_result();
     }
 
+    /// Vote for unlocking transfer
+    pub fn vote(&mut self) {
+        self.vote_internal(true)
+    }
+
+    /// Withdraw the vote
+    pub fn withdraw_vote(&mut self) {
+        self.vote_internal(false)
+    }
+
+    /// Get the timestamp of when the voting finishes. `None` means the voting hasn't ended yet.
     pub fn get_result(&self) -> Option<Timestamp> {
         self.result.clone()
     }
@@ -183,19 +165,19 @@ mod tests {
         );
         testing_env!(context, Default::default(), Default::default(), validators);
         let mut contract = VotingContract::new();
-        contract.vote(100);
+        contract.vote();
     }
 
     #[test]
-    #[should_panic(expected = "voting has already ended")]
+    #[should_panic(expected = "Voting has already ended")]
     fn test_vote_again_after_voting_ends() {
         let context = get_context("alice.near".to_string());
         let validators = HashMap::from_iter(vec![("alice.near".to_string(), 100)].into_iter());
         testing_env!(context, Default::default(), Default::default(), validators);
         let mut contract = VotingContract::new();
-        contract.vote(100);
+        contract.vote();
         assert!(contract.result.is_some());
-        contract.vote(1);
+        contract.vote();
     }
 
     #[test]
@@ -213,9 +195,8 @@ mod tests {
                 Default::default(),
                 validators.clone()
             );
-            contract.vote(10);
+            contract.vote();
             assert_eq!(contract.votes.len(), i + 1);
-            assert_eq!(contract.account_stake.len(), i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
             } else {
@@ -238,9 +219,8 @@ mod tests {
                 Default::default(),
                 validators.clone()
             );
-            contract.vote(10);
+            contract.vote();
             assert_eq!(contract.votes.len(), i + 1);
-            assert_eq!(contract.account_stake.len(), i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
             } else {
@@ -264,7 +244,7 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote(40);
+        contract.vote();
         validators.insert("test1".to_string(), 50);
         let context = get_context_with_epoch_height("test2".to_string(), 2);
         testing_env!(
@@ -273,7 +253,7 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote(5);
+        contract.ping();
         assert!(contract.result.is_some());
     }
 
@@ -289,8 +269,7 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote(5);
-        assert_eq!(contract.account_stake.len(), 1);
+        contract.vote();
         assert_eq!(contract.votes.len(), 1);
         let context = get_context_with_epoch_height("test1".to_string(), 2);
         testing_env!(
@@ -299,8 +278,7 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote(0);
-        assert!(contract.account_stake.is_empty());
+        contract.withdraw_vote();
         assert!(contract.votes.is_empty());
     }
 }
