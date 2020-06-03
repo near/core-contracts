@@ -457,3 +457,57 @@ near call owner1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
 
+
+### Initializing Contract
+
+When setting up the contract creating the contract account, deploying the binary, and initializing the state must all be done as an atomic step.  Within a contract this is done with a batch transaction.  An example of this is in our tests:
+
+```rust
+pub fn init_lockup(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        args: &InitLockupArgs,
+        amount: Balance,
+    ) -> TxResult {
+        let tx = self
+            .new_tx(runtime, LOCKUP_ACCOUNT_ID.into())
+            .create_account()
+            .transfer(ntoy(35) + amount)
+            .deploy_contract(LOCKUP_WASM_BYTES.to_vec())
+            .function_call(
+                "new".into(),
+                serde_json::to_vec(args).unwrap(),
+                10000000000000000,
+                0,
+            )
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+```
+
+To do this with near shell, the `near repl` command can be used and the following executed in the REPL.
+
+```js
+const fs = require('fs');
+const account = await near.account("ownerID");
+const contractName = "lockup.ownerID";
+const newArgs = {
+        lockup_duration: new BigInt(1000000000),
+        lockup_start_information: {
+            transfer_poll_account_id: "transfer-poll",
+        },
+        initial_owners_main_public_key: "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy",
+        foundation_account_id: null,
+        staking_pool_whitelist_account_id: "whitelistID",
+}
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.createAccount(),
+        nearAPI.transactions.transfer("100000000000000000000000000"), 
+        nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
+        nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
+    ]);
+```
