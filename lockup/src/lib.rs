@@ -296,6 +296,21 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(
+        expected = "Can not remove owners public key that is used to sign this transaction"
+    )]
+    fn test_remove_signing_key() {
+        let (mut context, mut contract) = lockup_only_setup();
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.predecessor_account_id = account_owner();
+        context.signer_account_id = account_owner();
+        context.signer_account_pk = public_key(1).try_into().unwrap();
+        testing_env!(context.clone());
+
+        contract.remove_access_key(public_key(1));
+    }
+
+    #[test]
     fn test_add_full_access_key() {
         let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);

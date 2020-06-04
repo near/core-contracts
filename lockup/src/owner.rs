@@ -366,6 +366,11 @@ impl LockupContract {
     pub fn remove_access_key(&mut self, old_public_key: Base58PublicKey) -> Promise {
         assert_self();
 
+        assert_ne!(
+            old_public_key.0,
+            env::signer_account_pk(),
+            "Can not remove owners public key that is used to sign this transaction"
+        );
         env::log(b"Removing an existing owner's access key");
 
         Promise::new(env::current_account_id()).delete_key(old_public_key.into())
