@@ -491,8 +491,8 @@ To do this with near shell, the `near repl` command can be used and the followin
 
 ```js
 const fs = require('fs');
-const account = await near.account("ownerID");
-const contractName = "lockup.ownerID";
+const account = await near.account("foundation");
+const contractName = "lockup-owner-id";
 const newArgs = {
         lockup_duration: new BigInt(1000000000),
         lockup_start_information: {
@@ -500,14 +500,14 @@ const newArgs = {
         },
         initial_owners_main_public_key: "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy",
         foundation_account_id: null,
-        staking_pool_whitelist_account_id: "whitelistID",
+        staking_pool_whitelist_account_id: "staking-pools-whitelist",
 }
 const result = account.signAndSendTransaction(
     contractName,
     [
         nearAPI.transactions.createAccount(),
         nearAPI.transactions.transfer("100000000000000000000000000"), 
-        nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
+        nearAPI.transactions.deployContract(fs.readFileSync("res/lockup_contract.wasm")),
         nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
     ]);
 ```
