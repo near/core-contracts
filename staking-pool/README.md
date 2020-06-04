@@ -87,6 +87,11 @@ Calls the internal function to distribute rewards if the blockchain epoch switch
 Before every action the contract calls method `internal_ping`.
 This method distributes rewards towards active delegators when the blockchain epoch switches.
 The rewards might be given due to staking and also because the contract earns gas fee rebates for every function call.
+Note, the if someone accidentally (or intentionally) transfers tokens to the contract (without function call), then
+tokens form the transfer will be distributed to the active stake participants of the contract in the next epoch.
+Note, in a rare scenario, where the owner withdraws tokens and while the call is not processed deletes their account, the
+withdraw transfer will fail and the tokens will be returned to the staking pool. These tokens will also be distributed as
+a reward in the next epoch.
 
 The method first checks that the current epoch is different from the last epoch, and if it's not changed exits the method.
 
@@ -97,7 +102,9 @@ This balance consist of the initial contract balance, and all delegator account 
 When the method is called the contract uses the current total account balance (without attached deposit) and the subtracts the last total account balance.
 The difference is the total reward that has to be distributed.
 
-The fraction of the reward is awarded to the contract owner. The fraction is configurable by the owner, but can't exceed 1.
+The fraction of the reward is awarded to the contract owner. The fraction is configurable by the owner, but can't exceed 100%.
+Note, that it might be unfair for the participants of the pool if the owner changes reward fee. But this owner will lose trust of the
+participants and it will lose future revenue in the long term. This should be enough to prevent owner from abusing reward fee.
 
 The remaining part of the reward is added to the total staked balance. This action increases the price of each "stake" share without
 changing the amount of "stake" shares owned by different accounts. Which is effectively distributing the reward based on the number of shares.
@@ -132,6 +139,8 @@ It also has inner invariants:
 - The owner can't withdraw funds from other delegators.
 - The owner can't delete the staking pool account.
 
+NOTE: Guarantees are based on the no-slashing condition. Once slashing is introduced, the contract will no longer
+provide some guarantees.
 
 ## Pre-requisites
 
@@ -395,7 +404,7 @@ mv ~/.near/betanet ~/.near/betanet_old
 ##### Launch your new node
 With the command nearup betanet. Modify the launch command according to your actual validator configuration (e.g. using --nodocker and --binary-path)
 
-##### Set your validator ID. 
+##### Set your validator ID.
 Put your staking pool account (the one we called my_validator in the steps above)
 
 ##### Copy your validator public key, or issue the command (before the next step)
@@ -449,7 +458,7 @@ You are not logged in
 ```bash
 near login
 ```
-    
+
 #### Error:  GasExceeded [Error]: Exceeded the prepaid gas
 Add additional gas by adding the parameter: --gas 10000000000000000
 

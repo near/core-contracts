@@ -25,14 +25,12 @@ pub type ProposalId = U64;
 /// The sha256 hash of the Account ID
 pub type AccountHash = Vec<u8>;
 
-/// A type to distinguish between a balance and a staking shares for better readability.
+/// A type to distinguish between a balance and "stake" shares for better readability.
 pub type NumStakeShares = Balance;
 
 construct_uint! {
     /// 256-bit unsigned integer.
-    // TODO: Revert back to 4 once wasm/wasmer bug is fixed.
-    // See https://github.com/wasmerio/wasmer/issues/1429
-    pub struct U256(8);
+    pub struct U256(4);
 }
 
 #[cfg(test)]
@@ -70,7 +68,7 @@ impl Default for Account {
 /// The number of epochs required for the locked balance to become unlocked.
 /// NOTE: The actual number of epochs when the funds are unlocked is 3. But there is a corner case
 /// when the unstaking promise can arrive at the next epoch, while the inner state is already
-/// updated in the previous epoch. Which will not unlock the funds for 4 epochs.
+/// updated in the previous epoch. It will not unlock the funds for 4 epochs.
 const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 
 #[near_bindgen]
@@ -144,7 +142,7 @@ impl StakingContract {
     ///
     /// The entire current balance of this contract will be used to stake. This allows contract to
     /// always maintain staking shares that can't be unstaked or withdrawn.
-    /// It prevents inflation the price of the share too much.
+    /// It prevents inflation of the price of the share too much..
     #[init]
     pub fn new(
         owner_id: AccountId,
@@ -212,7 +210,7 @@ impl StakingContract {
     }
 
     /// Withdraws the non staked balance for given account.
-    /// It's only allowed if the `unstake` action was not performed in the recent 3 epochs.
+    /// It's only allowed if the `unstake` action was not performed in the 3 most recent epochs.
     pub fn withdraw(&mut self, amount: U128) {
         let need_to_restake = self.internal_ping();
 
@@ -273,7 +271,7 @@ impl StakingContract {
         let charge_amount = self.staked_amount_from_num_shares_rounded_down(num_shares);
         assert!(
             charge_amount > 0,
-            "Invariant violation. Calculated staked amount be positive, because \"stake\" share price should be at least 1"
+            "Invariant violation. Calculated staked amount must be positive, because \"stake\" share price should be at least 1"
         );
 
         assert!(
@@ -344,7 +342,7 @@ impl StakingContract {
         let receive_amount = self.staked_amount_from_num_shares_rounded_up(num_shares);
         assert!(
             receive_amount > 0,
-            "Invariant violation. Calculated staked amount be positive, because \"stake\" share price should be at least 1"
+            "Invariant violation. Calculated staked amount must be positive, because \"stake\" share price should be at least 1"
         );
 
         account.stake_shares -= num_shares;
@@ -380,8 +378,8 @@ impl StakingContract {
 
     /// Restakes the current `total_staked_balance` again.
     fn restake(&mut self) {
-        // Stakes with the staking public key. If the key is invalid the entire function call
-        // will be rolled back. See https://github.com/nearprotocol/nearcore/issues/2636
+        // Stakes with the staking public key. If the public key is invalid the entire function
+        // call will be rolled back.
         Promise::new(env::current_account_id())
             .stake(self.total_staked_balance, self.stake_public_key.clone());
     }
@@ -498,7 +496,6 @@ impl StakingContract {
     /// Distributes rewards after the new epoch. It's automatically called before every action.
     /// Returns true if the current epoch height is different from the last epoch height.
     fn internal_ping(&mut self) -> bool {
-        // Checking if we need there are rewards to distribute.
         let epoch_height = env::epoch_height();
         if self.last_epoch_height == epoch_height {
             return false;
@@ -525,7 +522,7 @@ impl StakingContract {
             let remaining_reward = total_reward - owners_fee;
             self.total_staked_balance += remaining_reward;
 
-            // Now buying "stake" shares for the contract owner at the new shares price.
+            // Now buying "stake" shares for the contract owner at the new share price.
             let num_shares = self.num_shares_from_staked_amount_rounded_down(owners_fee);
             if num_shares > 0 {
                 // Updating owner's inner account
@@ -537,7 +534,7 @@ impl StakingContract {
                 self.total_stake_shares += num_shares;
             }
             // Increasing the total staked balance by the owners fee, no matter whether the owner
-            // got any shares or not.
+            // received any shares or not.
             self.total_staked_balance += owners_fee;
 
             env::log(
@@ -622,7 +619,7 @@ impl StakingContract {
             .unwrap_or_default()
     }
 
-    /// Inner method to get the save the given account for a given account ID.
+    /// Inner method to save the given account for a given account ID.
     /// If the account balances are 0, the account is deleted instead to release storage.
     fn save_account(&mut self, account_id: &AccountId, account: &Account) {
         if account.unstaked > 0 || account.stake_shares > 0 {

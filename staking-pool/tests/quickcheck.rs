@@ -19,10 +19,12 @@ fn check_invariants(_runtime: &mut RuntimeStandalone, _users: &[AccountId]) {}
 
 #[quickcheck]
 fn qc_should_stake(initial_balance: Balance) -> bool {
-    let (mut runtime, root) = init_pool(23 * 10u128.pow(24));
+    let (mut runtime, root) = init_pool(ntoy(23));
     let bob = root
         .create_external(&mut runtime, "bob".into(), ntoy(100))
         .unwrap();
+
+    let initial_balance = initial_balance + 1;
 
     bob.pool_deposit(&mut runtime, initial_balance).unwrap();
     bob.pool_stake(&mut runtime, initial_balance).unwrap();
@@ -35,7 +37,9 @@ fn qc_should_stake(initial_balance: Balance) -> bool {
     assert_eq!(bob_stake, initial_balance.into());
 
     bob.pool_unstake(&mut runtime, initial_balance).unwrap();
-    wait_epoch(&mut runtime);
+    for _ in 0..4 {
+        wait_epoch(&mut runtime);
+    }
     runtime.produce_block().unwrap();
     let outcome = bob.pool_withdraw(&mut runtime, initial_balance);
     if let Err(outcome) = outcome {
