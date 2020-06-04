@@ -280,7 +280,7 @@ pub fn are_transfers_enabled(&self) -> bool;
 ### Initialization
 
 Initialize contract, assuming it's called from `near` account.
-The onwer account ID is `owner1`. Lockup Duration is 365 days.
+The owner account ID is `owner1`. Lockup Duration is 365 days.
 Transfers are currently disabled and can be enabled by checking transfer voting poll contract at `transfers-poll`.
 Vesting is 4 years starting from `2018-09-01` to `2022-09-01` Pacific time.
 Staking pool whitelist contract is at `staking-pool-whitelist`.
@@ -456,4 +456,3 @@ near call owner1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
 ```
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
-
