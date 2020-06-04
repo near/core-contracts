@@ -11,7 +11,7 @@
 
 ### Initializing Contracts
 
-When setting up the contract creating the contract account, deploying the binary, and initializing the state must all be done as an atomic step.  Within a contract this is done with a batch transaction.  An example of this is in our tests for the lockup contract:
+When setting up the contract creating the contract account, deploying the binary, and initializing the state must all be done as an atomic step.  For example, in our tests for the lockup contract we initialize it like this:
 
 ```rust
 pub fn init_lockup(
@@ -46,13 +46,20 @@ const fs = require('fs');
 const account = await near.account("foundation");
 const contractName = "lockup-owner-id";
 const newArgs = {
-        lockup_duration: new BigInt(1000000000),
-        lockup_start_information: {
-            transfer_poll_account_id: "transfer-poll",
-        },
-        initial_owners_main_public_key: "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy",
-        foundation_account_id: null,
-        staking_pool_whitelist_account_id: "staking-pools-whitelist",
+       "lockup_duration": "31536000000000000",
+    "lockup_start_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "vesting_schedule": {
+        "start_timestamp": "1535760000000000000",
+        "cliff_timestamp": "1567296000000000000",
+        "end_timestamp": "1661990400000000000"
+    },
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+    "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7",
+    "foundation_account_id": "near"
 }
 const result = account.signAndSendTransaction(
     contractName,
@@ -60,7 +67,7 @@ const result = account.signAndSendTransaction(
         nearAPI.transactions.createAccount(),
         nearAPI.transactions.transfer("100000000000000000000000000"), 
         nearAPI.transactions.deployContract(fs.readFileSync("res/lockup_contract.wasm")),
-        nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
+        nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 100000000000000, "0"),
     ]);
 ```
 
