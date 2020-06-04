@@ -296,7 +296,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Can not remove signer public key")]
+    #[should_panic(
+        expected = "Can not remove owners public key that is used to sign this transaction"
+    )]
     fn test_remove_signing_key() {
         let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);

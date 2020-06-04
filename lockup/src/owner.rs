@@ -369,7 +369,7 @@ impl LockupContract {
         assert_ne!(
             old_public_key.0,
             env::signer_account_pk(),
-            "Can not remove signer public key"
+            "Can not remove owners public key that is used to sign this transaction"
         );
         env::log(b"Removing an existing owner's access key");
 
