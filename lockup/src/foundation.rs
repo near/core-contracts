@@ -47,7 +47,7 @@ impl LockupContract {
 
         match status {
             None => {
-                env::panic(b"There are no termination in progress");
+                env::panic(b"There is no termination in progress");
             }
             Some(TerminationStatus::UnstakingInProgress)
             | Some(TerminationStatus::WithdrawingFromStakingPoolInProgress)
