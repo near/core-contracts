@@ -54,7 +54,7 @@ It's because the contract has to maintain the minimum required balance to cover 
 The balance can also be lower due to transaction fees spent by the owner, because owner has access keys on the account of the contract and the transaction fees are paid from the account balance.
 The amount of NEAR tokens locked to maintain the minimum storage balance is 35 NEAR.
 
-If there is still termination balance deficit due to minimum required balance, the owner may decide to fund the deficit on this account to finish the termination process.
+If there is still a termination balance deficit due to minimum required balance, the owner may decide to fund the deficit on this account to finish the termination process.
 This can be done through a regular transfer action from an account with liquid balance.
 
 ## Technical details
@@ -464,4 +464,3 @@ near call owner1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
 ```
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
-
