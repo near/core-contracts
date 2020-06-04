@@ -1,7 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U64;
-use near_sdk::{near_bindgen, BlockHeight};
-use serde::Serialize;
+use near_sdk::{near_bindgen};
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -10,24 +9,10 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[derive(BorshDeserialize, BorshSerialize, Default)]
 pub struct FakeVotingContract {}
 
-#[derive(Serialize)]
-pub struct PollResult {
-    /// The proposal ID that was voted in.
-    pub proposal_id: u64,
-    /// The timestamp when the proposal was voted in.
-    pub timestamp: U64,
-    /// The block height when the proposal was voted in.
-    pub block_height: BlockHeight,
-}
-
 #[near_bindgen]
 impl FakeVotingContract {
-    pub fn get_result(&self) -> Option<PollResult> {
-        Some(PollResult {
-            proposal_id: 0,
-            timestamp: 1535760000000000000u64.into(),
-            block_height: 0,
-        })
+    pub fn get_result(&self) -> Option<U64> {
+        Some(1535760000000000000u64.into())
     }
 }
 
@@ -53,7 +38,7 @@ mod tests {
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(
-            contract.get_result().unwrap().timestamp.0,
+            contract.get_result().unwrap().0,
             1535760000000000000u64,
         );
     }
