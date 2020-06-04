@@ -1,7 +1,7 @@
 # Staking Pool Factory Contract
 
 This contract deploys and automatically whitelists new staking pool contracts.
-It allows any user to create an new whitelisted staking pool.
+It allows any user to create a new whitelisted staking pool.
 
 The staking pool factory contract packages the binary of the staking pool contract within its own binary.
 To create a new staking pool a user should issue a function call transaction and attach the required minimum deposit.
@@ -17,7 +17,7 @@ Otherwise, the factory returns the attached deposit back the users and returns `
 
 ```rust
 /// Initializes the staking pool factory with the given account ID of the staking pool whitelist
-// contract.
+/// contract.
 #[init]
 pub fn new(staking_pool_whitelist_account_id: AccountId) -> Self;
 
