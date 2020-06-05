@@ -32,6 +32,7 @@ impl Default for VotingContract {
 impl VotingContract {
     #[init]
     pub fn new() -> Self {
+        assert!(!env::state_exists(), "The contract is already initialized");
         VotingContract {
             votes: Map::new(b"a".to_vec()),
             total_voted_stake: 0,
