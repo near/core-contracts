@@ -89,7 +89,7 @@ impl VotingContract {
         let voted_stake = self.votes.remove(&account_id).unwrap_or_default();
         assert!(
             voted_stake <= self.total_voted_stake,
-            "voted stake {} is more than total voted stake {}",
+            "invariant: voted stake {} is more than total voted stake {}",
             voted_stake,
             self.total_voted_stake
         );
