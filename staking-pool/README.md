@@ -89,7 +89,7 @@ This method distributes rewards towards active delegators when the blockchain ep
 The rewards might be given due to staking and also because the contract earns gas fee rebates for every function call.
 Note, the if someone accidentally (or intentionally) transfers tokens to the contract (without function call), then
 tokens from the transfer will be distributed to the active stake participants of the contract in the next epoch.
-Note, in a rare scenario, where the owner withdraws tokens and while the call is not processed deletes their account, the
+Note, in a rare scenario, where the owner withdraws tokens and while the call is being processed deletes their account, the
 withdraw transfer will fail and the tokens will be returned to the staking pool. These tokens will also be distributed as
 a reward in the next epoch.
 
@@ -105,6 +105,7 @@ The difference is the total reward that has to be distributed.
 The fraction of the reward is awarded to the contract owner. The fraction is configurable by the owner, but can't exceed 100%.
 Note, that it might be unfair for the participants of the pool if the owner changes reward fee. But this owner will lose trust of the
 participants and it will lose future revenue in the long term. This should be enough to prevent owner from abusing reward fee.
+It could also be the case that they could change the reward fee to make their pool more attractive.
 
 The remaining part of the reward is added to the total staked balance. This action increases the price of each "stake" share without
 changing the amount of "stake" shares owned by different accounts. Which is effectively distributing the reward based on the number of shares.
@@ -140,7 +141,7 @@ It also has inner invariants:
 - The owner can't delete the staking pool account.
 
 NOTE: Guarantees are based on the no-slashing condition. Once slashing is introduced, the contract will no longer
-provide some guarantees.
+provide some guarantees. Read more about slashing in [Nightshade paper](https://near.ai/nightshade).
 
 ## Pre-requisites
 
