@@ -1,4 +1,4 @@
-//! A smart contract that allows tokens locked up.
+//! A smart contract that allows tokens to be locked up.
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
