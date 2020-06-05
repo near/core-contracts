@@ -5,7 +5,7 @@ use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight};
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-type Timestamp = u64;
+type WrappedTimestamp = U64;
 
 /// Voting contract for unlocking transfers. Once the majority of the stake holders agree to
 /// unlock transfer, the time will be recorded and the voting ends.
