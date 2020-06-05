@@ -88,7 +88,7 @@ Before every action the contract calls method `internal_ping`.
 This method distributes rewards towards active delegators when the blockchain epoch switches.
 The rewards might be given due to staking and also because the contract earns gas fee rebates for every function call.
 Note, the if someone accidentally (or intentionally) transfers tokens to the contract (without function call), then
-tokens form the transfer will be distributed to the active stake participants of the contract in the next epoch.
+tokens from the transfer will be distributed to the active stake participants of the contract in the next epoch.
 Note, in a rare scenario, where the owner withdraws tokens and while the call is not processed deletes their account, the
 withdraw transfer will fail and the tokens will be returned to the staking pool. These tokens will also be distributed as
 a reward in the next epoch.
@@ -464,6 +464,5 @@ Add additional gas by adding the parameter: --gas 10000000000000000
 
 #### Error: "wasm execution failed with error: FunctionCallError(MethodResolveError(MethodNotFound))"
 Your function call is incorrect or your contract is not updated
-
 
 

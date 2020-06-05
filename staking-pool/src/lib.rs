@@ -142,7 +142,7 @@ impl StakingContract {
     ///
     /// The entire current balance of this contract will be used to stake. This allows contract to
     /// always maintain staking shares that can't be unstaked or withdrawn.
-    /// It prevents inflation of the price of the share too much..
+    /// It prevents inflating the price of the share too much.
     #[init]
     pub fn new(
         owner_id: AccountId,
@@ -210,7 +210,7 @@ impl StakingContract {
     }
 
     /// Withdraws the non staked balance for given account.
-    /// It's only allowed if the `unstake` action was not performed in the 3 most recent epochs.
+    /// It's only allowed if the `unstake` action was not performed in the three most recent epochs.
     pub fn withdraw(&mut self, amount: U128) {
         let need_to_restake = self.internal_ping();
 
