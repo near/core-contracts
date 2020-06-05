@@ -45,7 +45,8 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
         // NOTE: This is best effort checks. There is still some balance might be left on the
-        // staking pool, but it's on the owner. The contract doesn't care about leftover.
+        // staking pool, but it's up to the owner whether to unselect the staking pool.
+        // The contract doesn't care about leftovers.
         assert_eq!(
             self.staking_information.as_ref().unwrap().deposit_amount.0,
             0,

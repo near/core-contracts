@@ -23,7 +23,7 @@ impl LockupContract {
         true
     }
 
-    /// Called after a deposit amount was transferred out of this account to the staking pool
+    /// Called after a deposit amount was transferred out of this account to the staking pool.
     /// This method needs to update staking pool status.
     pub fn on_staking_pool_deposit(&mut self, amount: WrappedBalance) -> bool {
         assert_self();
@@ -181,13 +181,12 @@ impl LockupContract {
     /// This method needs to update staking pool status.
     pub fn on_get_result_from_transfer_poll(
         &mut self,
-        #[callback] poll_result: Option<PollResult>,
+        #[callback] poll_result: PollResult,
     ) -> bool {
         assert_self();
         self.assert_transfers_disabled();
 
-        if let Some(poll_result) = poll_result {
-            let lockup_timestamp = poll_result.timestamp;
+        if let Some(lockup_timestamp) = poll_result {
             env::log(
                 format!(
                     "Transfers were successfully enabled at {}",

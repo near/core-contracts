@@ -1,4 +1,4 @@
-//! A smart contract that allows tokens lockup.
+//! A smart contract that allows tokens to be locked up.
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
@@ -92,10 +92,7 @@ pub trait ExtLockupContractOwner {
 
     fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool;
 
-    fn on_get_result_from_transfer_poll(
-        &mut self,
-        #[callback] poll_result: Option<PollResult>,
-    ) -> bool;
+    fn on_get_result_from_transfer_poll(&mut self, #[callback] poll_result: PollResult) -> bool;
 
     fn on_get_account_total_balance(&mut self, #[callback] total_balance: WrappedBalance);
 }
@@ -386,11 +383,7 @@ mod tests {
 
         contract.check_transfers_vote();
 
-        let poll_result = Some(PollResult {
-            proposal_id: 0,
-            timestamp: to_ts(GENESIS_TIME_IN_DAYS + 10).into(),
-            block_height: 0,
-        });
+        let poll_result = Some(to_ts(GENESIS_TIME_IN_DAYS + 10).into());
         // NOTE: Unit tests don't need to read the content of the promise result. So here we don't
         // have to pass serialized result from the transfer poll.
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));

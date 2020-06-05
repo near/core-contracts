@@ -66,7 +66,7 @@ pub mod owner_callbacks {
     /// staking pool.
     pub const ON_STAKING_POOL_STAKE: u64 = super::BASE_GAS;
 
-    /// Gas attached to the inner callback for processing result of the unstake call  to the
+    /// Gas attached to the inner callback for processing result of the unstake call to the
     /// staking pool.
     /// Requires BASE for local updates.
     pub const ON_STAKING_POOL_UNSTAKE: u64 = super::BASE_GAS;

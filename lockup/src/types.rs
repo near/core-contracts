@@ -1,14 +1,12 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::{AccountId, BlockHeight};
+use near_sdk::AccountId;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 construct_uint! {
     /// 256-bit unsigned integer.
-    // TODO: Revert back to 4 once wasm/wasmer bug is fixed.
-    // See https://github.com/wasmerio/wasmer/issues/1429
-    pub struct U256(8);
+    pub struct U256(4);
 }
 
 /// Timestamp in nanosecond wrapped into a struct for JSON serialization as a string.
@@ -17,8 +15,6 @@ pub type WrappedTimestamp = U64;
 pub type WrappedDuration = U64;
 /// Balance wrapped into a struct for JSON serialization as a string.
 pub type WrappedBalance = U128;
-
-pub type ProposalId = u64;
 
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
@@ -143,13 +139,6 @@ pub struct TerminationInformation {
     pub status: TerminationStatus,
 }
 
-/// Contains information about poll result.
-#[derive(Deserialize)]
-pub struct PollResult {
-    /// The proposal ID that was voted in.
-    pub proposal_id: ProposalId,
-    /// The timestamp when the proposal was voted in.
-    pub timestamp: WrappedTimestamp,
-    /// The block height when the proposal was voted in.
-    pub block_height: BlockHeight,
-}
+/// The result of the transfer poll.
+/// Contains The timestamp when the proposal was voted in.
+pub type PollResult = Option<WrappedTimestamp>;
