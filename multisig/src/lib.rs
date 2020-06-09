@@ -14,9 +14,8 @@ pub type RequestId = u32;
 
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub enum MultiSigRequest {
+pub enum MultiSigRequestAction {
     Transfer {
-        receiver_id: AccountId,
         amount: U128,
     },
     AddKey {
@@ -26,7 +25,6 @@ pub enum MultiSigRequest {
         public_key: Base58PublicKey,
     },
     FunctionCall {
-        contract_id: AccountId,
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
@@ -35,6 +33,13 @@ pub enum MultiSigRequest {
     SetNumConfirmations {
         num_confirmations: u32,
     },
+    CreateAccount,
+}
+
+#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct MultiSigRequest {
+    receiver_id: AccountId,
+    actions: Vec<MultiSigRequestAction>,
 }
 
 #[near_bindgen]
@@ -102,43 +107,55 @@ impl MultiSigContract {
     }
 
     fn execute_request(&mut self, request: MultiSigRequest) -> PromiseOrValue<bool> {
-        match request {
-            MultiSigRequest::Transfer {
-                receiver_id,
-                amount,
-            } => Promise::new(receiver_id).transfer(amount.into()).into(),
-            MultiSigRequest::AddKey { public_key } => Promise::new(env::current_account_id())
-                .add_access_key(
-                    public_key.into(),
-                    DEFAULT_ALLOWANCE,
-                    env::current_account_id(),
-                    "add_request,delete_request,confirm"
-                        .to_string()
-                        .into_bytes(),
-                )
-                .into(),
-            MultiSigRequest::DeleteKey { public_key } => Promise::new(env::current_account_id())
-                .delete_key(public_key.into())
-                .into(),
-            MultiSigRequest::FunctionCall {
-                contract_id,
-                method_name,
-                args,
-                deposit,
-                gas,
-            } => Promise::new(contract_id)
-                .function_call(
+        let mut promise = Promise::new(request.receiver_id.clone());
+        let num_actions = request.actions.len();
+        for action in request.actions {
+            promise = match action {
+                MultiSigRequestAction::Transfer { amount } => promise.transfer(amount.into()),
+                MultiSigRequestAction::AddKey { public_key }
+                    if request.receiver_id == env::current_account_id() =>
+                {
+                    promise
+                        .add_access_key(
+                            public_key.into(),
+                            DEFAULT_ALLOWANCE,
+                            env::current_account_id(),
+                            "add_request,delete_request,confirm"
+                                .to_string()
+                                .into_bytes(),
+                        )
+                        .into()
+                }
+                MultiSigRequestAction::AddKey { public_key } => {
+                    promise.add_full_access_key(public_key.into())
+                }
+                MultiSigRequestAction::DeleteKey { public_key } => {
+                    promise.delete_key(public_key.into())
+                }
+                MultiSigRequestAction::CreateAccount => promise.create_account(),
+                MultiSigRequestAction::SetNumConfirmations { num_confirmations } => {
+                    assert_eq!(request.receiver_id, env::current_account_id(), "Changing number of confirmations only works when receiver_id is equal to current_account_id");
+                    assert_eq!(
+                        num_actions, 1,
+                        "Changing number of confirmations should be a separate request"
+                    );
+                    self.num_confirmations = num_confirmations;
+                    return PromiseOrValue::Value(true);
+                }
+                MultiSigRequestAction::FunctionCall {
+                    method_name,
+                    args,
+                    deposit,
+                    gas,
+                } => promise.function_call(
                     method_name.into_bytes(),
                     args.into(),
                     deposit.into(),
                     gas.into(),
-                )
-                .into(),
-            MultiSigRequest::SetNumConfirmations { num_confirmations } => {
-                self.num_confirmations = num_confirmations;
-                PromiseOrValue::Value(true)
-            }
+                ),
+            };
         }
+        promise.into()
     }
 
     /// Confirm given request with given signing key.
@@ -322,9 +339,11 @@ mod tests {
             amount
         ));
         let mut c = MultiSigContract::new(3);
-        let request = MultiSigRequest::Transfer {
+        let request = MultiSigRequest {
             receiver_id: bob(),
-            amount: amount.into(),
+            actions: vec![MultiSigRequestAction::Transfer {
+                amount: amount.into(),
+            }],
         };
         let request_id = c.add_request(request.clone());
         assert_eq!(c.get_request(request_id), request);
@@ -357,8 +376,11 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![1, 2, 3], amount));
         let mut c = MultiSigContract::new(1);
-        let request_id = c.add_request(MultiSigRequest::SetNumConfirmations {
-            num_confirmations: 2,
+        let request_id = c.add_request(MultiSigRequest {
+            receiver_id: alice(),
+            actions: vec![MultiSigRequestAction::SetNumConfirmations {
+                num_confirmations: 2,
+            }],
         });
         c.confirm(request_id);
         assert_eq!(c.num_confirmations, 2);
@@ -370,9 +392,11 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer {
+        let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
-            amount: amount.into(),
+            actions: vec![MultiSigRequestAction::Transfer {
+                amount: amount.into(),
+            }],
         });
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 0);
@@ -386,9 +410,11 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        let request_id = c.add_request(MultiSigRequest::Transfer {
+        let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
-            amount: amount.into(),
+            actions: vec![MultiSigRequestAction::Transfer {
+                amount: amount.into(),
+            }],
         });
         c.delete_request(request_id);
         assert_eq!(c.requests.len(), 0);

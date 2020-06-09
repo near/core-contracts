@@ -19,18 +19,28 @@ All operations going forward will require `K` signatures to be performed.
 
 There are number of different request types that multisig can confirm and execute:
 ```rust
- Transfer { receiver_id: AccountId, amount: U128 }
- AddKey { public_key: Base58PublicKey },
- DeleteKey { public_key: Base58PublicKey },
- FunctionCall {
-        contract_id: AccountId,
+enum MultisigRequestAction {
+  Transfer { amount: U128 },
+  AddKey { public_key: Base58PublicKey },
+  DeleteKey { public_key: Base58PublicKey },
+  FunctionCall {
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
         gas: Gas
-    },
- SetNumConfirmations { num_confirmations: u32 }
-``` 
+  },
+  SetNumConfirmations { num_confirmations: u32 },
+  CreateAccount,
+}
+```
+
+The request specifies `receiver_id` and set of `actions` from above:
+```rust
+struct MultisigRequest {
+    receiver_id: AccountId,
+    actions: Vec<MultisigRequestAction>
+}
+```
 
 ### Methods
 
@@ -54,6 +64,8 @@ Guarantees:
 ### Gotchas
  
 User can delete access keys such that total number of different access keys will fall below `num_confirmations`, rendering contract locked.
+
+`AddKey` on another account adds full access key.
  
 ## Pre-requisites
 
@@ -108,17 +120,17 @@ const result = account.signAndSendTransaction(
 
 To create request for transfer funds:
 ```bash
-near call multisig.illia add_request '{"request": {"type": "Transfer", "receiver_id": "illia", "amount": "1000000000000000000000"}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "illia", "actions": [{"type": "Transfer", "amount": "1000000000000000000000"}]}}' --accountId multisig.illia
 ```
 
 Add another key to multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"type": "AddKey", "public_key": "<base58 of the key>"}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}}' --accountId multisig.illia
 ```
 
 Change number of confirmations required to approve multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"type": "SetNumConfirmations", "num_confirmations": 2}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "SetNumConfirmations", "num_confirmations": 2}]}}' --accountId multisig.illia
 ```
 
 Returns the `request_id` of this request that can be used to confirm or see details.
