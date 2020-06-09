@@ -104,31 +104,35 @@ const result = account.signAndSendTransaction(
     ]);
 ```
 
+### Create request
+
 To create request for transfer funds:
-```javascript
-const contractName = "multisig.illia";
-const account = await near.account(contractName);
-const requestArgs = {"request": {"type": "Transfer", "receiver_id": "illia", "amount": "1000000000000000000000"}};
-const result = account.signAndSendTransaction(
-    contractName,
-    [
-        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs)), 10000000000000, "0"),
-    ]
-);
+```bash
+near call multisig.illia add_request '{"request": {"type": "Transfer", "receiver_id": "illia", "amount": "1000000000000000000000"}}' --accountId multisig.illia
 ```
 
-To confirm a specific request:
-```javascript
-const contractName = "multisig.illia";
-const account = await near.account(contractName);
-const confirmArgs = {"request_id": 0};
-const result = account.signAndSendTransaction(
-    contractName,
-    [
-        nearAPI.transactions.functionCall("confirm", Buffer.from(JSON.stringify(confirmArgs)), 10000000000000, "0"),
-    ]
-);
+Add another key to multisig:
+```bash
+near call multisig.illia add_request '{"request": {"type": "AddKey", "public_key": "<base58 of the key>"}}' --accountId multisig.illia
 ```
+
+Change number of confirmations required to approve multisig:
+```bash
+near call multisig.illia add_request '{"request": {"type": "SetNumConfirmations", "num_confirmations": 2}}' --accountId multisig.illia
+```
+
+Returns the `request_id` of this request that can be used to confirm or see details.
+
+As a side note, for this to work one of the keys from multisig should be available in your `~/.near-credentials/<network>/<multisig-name>.json` or use `--useLedgerKey` to sign with Ledger.
+
+### Confirm request
+
+To confirm a specific request:
+```bash
+near call multisig.illia confirm '{"request_id": 0}' --accountId multisig.illia
+```
+
+### View requests
 
 To list all requests ids:
 ```bash
