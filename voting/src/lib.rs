@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
 use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight};
+use near_sdk::json_types::U64;
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -17,7 +18,7 @@ pub struct VotingContract {
     /// Total voted balance so far.
     total_voted_stake: Balance,
     /// When the voting ended. `None` means the poll is still open.
-    result: Option<Timestamp>,
+    result: Option<WrappedTimestamp>,
     /// Epoch height when the contract is touched last time.
     last_epoch_height: EpochHeight,
 }
@@ -68,12 +69,12 @@ impl VotingContract {
         );
         let total_stake = env::validator_total_stake();
         if self.total_voted_stake > 2 * total_stake / 3 {
-            self.result = Some(env::block_timestamp());
+            self.result = Some(U64::from(env::block_timestamp()));
         }
     }
 
     /// Internal function to handle vote and withdraw.
-    fn vote_internal(&mut self, is_vote: bool) {
+    pub fn vote(&mut self, is_vote: bool) {
         self.ping();
         if self.result.is_some() {
             return;
@@ -100,18 +101,8 @@ impl VotingContract {
         }
     }
 
-    /// Vote for unlocking transfer
-    pub fn vote(&mut self) {
-        self.vote_internal(true)
-    }
-
-    /// Withdraw the vote
-    pub fn withdraw_vote(&mut self) {
-        self.vote_internal(false)
-    }
-
     /// Get the timestamp of when the voting finishes. `None` means the voting hasn't ended yet.
-    pub fn get_result(&self) -> Option<Timestamp> {
+    pub fn get_result(&self) -> Option<WrappedTimestamp> {
         self.result.clone()
     }
 }
@@ -166,7 +157,7 @@ mod tests {
         );
         testing_env!(context, Default::default(), Default::default(), validators);
         let mut contract = VotingContract::new();
-        contract.vote();
+        contract.vote(true);
     }
 
     #[test]
@@ -176,17 +167,25 @@ mod tests {
         let validators = HashMap::from_iter(vec![("alice.near".to_string(), 100)].into_iter());
         testing_env!(context, Default::default(), Default::default(), validators);
         let mut contract = VotingContract::new();
-        contract.vote();
+        contract.vote(true);
         assert!(contract.result.is_some());
-        contract.vote();
+        contract.vote(true);
     }
 
     #[test]
     fn test_voting_simple() {
-        let mut contract = VotingContract::new();
+        let context = get_context("test0".to_string());
         let validators = (0..10)
             .map(|i| (format!("test{}", i), 10))
             .collect::<HashMap<_, _>>();
+        testing_env!(
+                context,
+                Default::default(),
+                Default::default(),
+                validators.clone()
+            );
+        let mut contract = VotingContract::new();
+
 
         for i in 0..7 {
             let context = get_context(format!("test{}", i));
@@ -196,7 +195,7 @@ mod tests {
                 Default::default(),
                 validators.clone()
             );
-            contract.vote();
+            contract.vote(true);
             assert_eq!(contract.votes.len(), i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
@@ -208,10 +207,18 @@ mod tests {
 
     #[test]
     fn test_voting_with_epoch_change() {
-        let mut contract = VotingContract::new();
         let validators = (0..10)
             .map(|i| (format!("test{}", i), 10))
             .collect::<HashMap<_, _>>();
+        let context = get_context("test0".to_string());
+        testing_env!(
+                context,
+                Default::default(),
+                Default::default(),
+                validators.clone()
+            );
+        let mut contract = VotingContract::new();
+
         for i in 0..7 {
             let context = get_context_with_epoch_height(format!("test{}", i), i);
             testing_env!(
@@ -220,7 +227,7 @@ mod tests {
                 Default::default(),
                 validators.clone()
             );
-            contract.vote();
+            contract.vote(true);
             assert_eq!(contract.votes.len(), i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
@@ -232,7 +239,6 @@ mod tests {
 
     #[test]
     fn test_validator_stake_change() {
-        let mut contract = VotingContract::new();
         let mut validators = HashMap::from_iter(vec![
             ("test1".to_string(), 40),
             ("test2".to_string(), 10),
@@ -245,7 +251,9 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote();
+
+        let mut contract = VotingContract::new();
+        contract.vote(true);
         validators.insert("test1".to_string(), 50);
         let context = get_context_with_epoch_height("test2".to_string(), 2);
         testing_env!(
@@ -260,7 +268,6 @@ mod tests {
 
     #[test]
     fn test_withdraw_votes() {
-        let mut contract = VotingContract::new();
         let validators =
             HashMap::from_iter(vec![("test1".to_string(), 10), ("test2".to_string(), 10)]);
         let context = get_context_with_epoch_height("test1".to_string(), 1);
@@ -270,7 +277,8 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.vote();
+        let mut contract = VotingContract::new();
+        contract.vote(true);
         assert_eq!(contract.votes.len(), 1);
         let context = get_context_with_epoch_height("test1".to_string(), 2);
         testing_env!(
@@ -279,7 +287,7 @@ mod tests {
             Default::default(),
             validators.clone()
         );
-        contract.withdraw_vote();
+        contract.vote(false);
         assert!(contract.votes.is_empty());
     }
 }
