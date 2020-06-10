@@ -263,6 +263,10 @@ impl MultiSigContract {
         self.requests.keys().collect()
     }
 
+    pub fn get_num_confirmations(&self) -> u32 {
+        self.num_confirmations
+    }
+
     pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey> {
         self.confirmations
             .get(&request_id)
