@@ -205,6 +205,11 @@ To see confirmations for specific request:
 near view multisig.illia get_confirmations '{"request_id": 0}'
 ```
 
+Total confirmations required for any request:
+```
+near view multisig.illia get_num_confirmations
+```
+
 ### Upgrade given multisig with new code
 
 Create a request that deploys new contract code on the given account.
