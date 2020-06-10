@@ -204,3 +204,24 @@ To see confirmations for specific request:
 ```bash
 near view multisig.illia get_confirmations '{"request_id": 0}'
 ```
+
+### Upgrade given multisig with new code
+
+Create a request that deploys new contract code on the given account.
+Be careful about data and requiring migrations (contract updates should include data migrations going forward). 
+
+```javascript
+const fs = require('fs');
+const account = await near.account("multisig.illia");
+const contractName = "multisig.illia";
+const requestArgs = {"request": [
+    {"receiver_id": "multisig.illia", "actions": [{"type": "DeployContract", "code": fs.readFileSync("res/multisig.wasm")}]}
+]};
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs)), 10000000000000, "0"),
+    ]);
+```
+
+After this, still will need to confirm this with `num_confirmations` you have setup for given contract.
