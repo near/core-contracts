@@ -205,6 +205,7 @@ impl MultiSigContract {
                         "Changing the number of confirmations should be a separate request"
                     );
                     self.num_confirmations = num_confirmations;
+                    // added remove request here, never calls ext::self
                     self.requests.remove(&request_id);
                     return PromiseOrValue::Value(true);
                 }
@@ -252,10 +253,12 @@ impl MultiSigContract {
             self.execute_request(request_id, 0, request);
             // check to see if request is still there
             if self.requests.get(&request_id).is_some() {
-                PromiseOrValue::Value(false) // wasn't removed
+                // request wasn't removed during execute_request (something went wrong)
+                PromiseOrValue::Value(false)
             } else {
-                self.confirmations.remove(&request_id); // was removed, remove confirmations
-                PromiseOrValue::Value(true) // return true
+                // request was removed, remove confirmations and return true
+                self.confirmations.remove(&request_id);
+                PromiseOrValue::Value(true)
             }
         } else {
             confirmations.insert(env::signer_account_pk());
