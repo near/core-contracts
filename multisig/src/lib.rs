@@ -246,8 +246,14 @@ impl MultiSigContract {
             "Already confirmed this request with this key"
         );
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
-            self.confirmations.remove(&request_id);
-            self.execute_request(request_id, 0, request)
+            self.execute_request(request_id, 0, request);
+            // check to see if request is still there
+            if self.requests.get(&request_id).is_some() {
+                PromiseOrValue::Value(false) // wasn't removed
+            } else {
+                self.confirmations.remove(&request_id);
+                PromiseOrValue::Value(true)
+            }
         } else {
             confirmations.insert(env::signer_account_pk());
             self.confirmations.insert(&request_id, &confirmations);
