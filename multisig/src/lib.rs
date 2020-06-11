@@ -205,6 +205,7 @@ impl MultiSigContract {
                         "Changing the number of confirmations should be a separate request"
                     );
                     self.num_confirmations = num_confirmations;
+                    self.requests.remove(&request_id);
                     return PromiseOrValue::Value(true);
                 }
                 MultiSigRequestAction::FunctionCall {
