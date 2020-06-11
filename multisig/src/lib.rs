@@ -75,7 +75,7 @@ pub type MultiSigRequest = Vec<MultiSigRequestTransaction>;
 #[ext_contract(ext_self)]
 pub trait ExtMultiSigContract {
     /// Callback after transaction executed to execute next transaction or finish the request.
-    fn on_transaction_completed(&mut self, request_id: RequestId, next_transaction_index: usize) -> bool;
+    fn on_transaction_completed(&mut self, request_id: RequestId, transaction_index: usize) -> bool;
 }
 
 #[near_bindgen]
@@ -205,6 +205,7 @@ impl MultiSigContract {
                         "Changing the number of confirmations should be a separate request"
                     );
                     self.num_confirmations = num_confirmations;
+                    self.requests.remove(&request_id);
                     return PromiseOrValue::Value(true);
                 }
                 MultiSigRequestAction::FunctionCall {
@@ -220,7 +221,9 @@ impl MultiSigContract {
                 ),
             };
         }
-        promise.then(ext_self::on_transaction_completed(request_id, transaction_index, &env::current_account_id(), NO_DEPOSIT, ON_TRANSACTION_COMPLETE_CALLBACK_GAS)).into()
+        promise.then(ext_self::on_transaction_completed(
+            request_id, transaction_index, &env::current_account_id(), NO_DEPOSIT, ON_TRANSACTION_COMPLETE_CALLBACK_GAS)
+        ).into()
     }
 
     /// Confirm given request with given signing key.
@@ -246,8 +249,14 @@ impl MultiSigContract {
             "Already confirmed this request with this key"
         );
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
-            self.confirmations.remove(&request_id);
-            self.execute_request(request_id, 0, request)
+            self.execute_request(request_id, 0, request);
+            // check to see if request is still there
+            if self.requests.get(&request_id).is_some() {
+                PromiseOrValue::Value(false) // wasn't removed
+            } else {
+                self.confirmations.remove(&request_id); // was removed, remove confirmations
+                PromiseOrValue::Value(true) // return true
+            }
         } else {
             confirmations.insert(env::signer_account_pk());
             self.confirmations.insert(&request_id, &confirmations);
@@ -276,7 +285,7 @@ impl MultiSigContract {
             .collect()
     }
 
-    pub fn on_transaction_completed(&mut self, request_id: RequestId, transaction_index: usize) -> bool {
+    pub fn on_transaction_completed(&mut self, request_id: RequestId, transaction_index: usize) -> PromiseOrValue<bool> {
         assert_eq!(env::predecessor_account_id(), env::current_account_id(), "Callback can only be called from the contract");
         let success = is_promise_success();
         assert!(success, format!("Transaction {} in request {} has failed", transaction_index, request_id));
@@ -286,12 +295,11 @@ impl MultiSigContract {
         );
         let request = self.requests.get(&request_id).unwrap();
         if transaction_index + 1 == request.len() {
-            // Request is finished and can be removed.
             self.requests.remove(&request_id);
+            PromiseOrValue::Value(true)
         } else {
-            self.execute_request(request_id, transaction_index + 1, request);
+            self.execute_request(request_id, transaction_index + 1, request)
         }
-        true
     }
 }
 
