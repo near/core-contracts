@@ -209,6 +209,10 @@ impl MultiSigContract {
             .map(|key| Base58PublicKey::try_from(key).expect("Failed to covert key to base58"))
             .collect()
     }
+
+    pub fn get_num_confirmations(&self) -> u32 {
+        self.num_confirmations
+    }
 }
 
 #[cfg(test)]
