@@ -12,28 +12,47 @@ const DEFAULT_ALLOWANCE: u128 = 0;
 
 pub type RequestId = u32;
 
+/// Permissions for function call access key.
+#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct FunctionCallPermission {
+    allowance: Option<U128>,
+    receiver_id: AccountId,
+    method_names: Vec<String>,
+}
+
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum MultiSigRequestAction {
+    /// Transfers given amount to receiver.
     Transfer {
         amount: U128,
     },
+    /// Create a new account.
+    CreateAccount,
+    /// Deploys contract to receiver's account. Can upgrade given contract as well.
+    DeployContract { code: Base64VecU8 },
+    /// Adds key, either new key for multisig or full access key to another account.
     AddKey {
         public_key: Base58PublicKey,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        permission: Option<FunctionCallPermission>,
     },
+    /// Deletes key, either one of the keys from multisig or key from another account.
     DeleteKey {
         public_key: Base58PublicKey,
     },
+    /// Call function on behalf of this contract.
     FunctionCall {
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
         gas: U64,
     },
+    /// Sets number of confirmations required to authorize requests.
+    /// Can not be bundled with any other actions or transactions.
     SetNumConfirmations {
         num_confirmations: u32,
     },
-    CreateAccount,
 }
 
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -112,9 +131,18 @@ impl MultiSigContract {
         for action in request.actions {
             promise = match action {
                 MultiSigRequestAction::Transfer { amount } => promise.transfer(amount.into()),
-                MultiSigRequestAction::AddKey { public_key }
-                    if request.receiver_id == env::current_account_id() =>
-                {
+                MultiSigRequestAction::CreateAccount => promise.create_account(),
+                MultiSigRequestAction::DeployContract { code } => {
+                    promise.deploy_contract(code.into())
+                }
+                MultiSigRequestAction::AddKey {
+                    public_key,
+                    permission,
+                } if request.receiver_id == env::current_account_id() => {
+                    assert!(
+                        permission.is_none(),
+                        "Permissions for access key on this contract are set by default"
+                    );
                     promise
                         .add_access_key(
                             public_key.into(),
@@ -126,13 +154,28 @@ impl MultiSigContract {
                         )
                         .into()
                 }
-                MultiSigRequestAction::AddKey { public_key } => {
-                    promise.add_full_access_key(public_key.into())
+                MultiSigRequestAction::AddKey {
+                    public_key,
+                    permission,
+                } => {
+                    if let Some(permission) = permission {
+                        promise.add_access_key(
+                            public_key.into(),
+                            permission
+                                .allowance
+                                .map(|x| x.into())
+                                .unwrap_or(DEFAULT_ALLOWANCE),
+                            permission.receiver_id,
+                            permission
+                                .method_names.join(",").into_bytes(),
+                        )
+                    } else {
+                        promise.add_full_access_key(public_key.into())
+                    }
                 }
                 MultiSigRequestAction::DeleteKey { public_key } => {
                     promise.delete_key(public_key.into())
                 }
-                MultiSigRequestAction::CreateAccount => promise.create_account(),
                 MultiSigRequestAction::SetNumConfirmations { num_confirmations } => {
                     assert_eq!(request.receiver_id, env::current_account_id(), "Changing number of confirmations only works when receiver_id is equal to current_account_id");
                     assert_eq!(
