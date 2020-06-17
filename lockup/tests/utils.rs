@@ -19,7 +19,8 @@ use serde::Serialize;
 use serde_json::json;
 use std::convert::TryInto;
 
-pub const LOCKUP_ACCOUNT_ID: &str = "holder";
+pub const MAX_GAS: u64 = 300000000000000;
+pub const LOCKUP_ACCOUNT_ID: &str = "lockup";
 
 pub fn days(num_days: u64) -> u64 {
     num_days * 86400_000_000_000
@@ -55,13 +56,14 @@ fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
 
 #[derive(Serialize)]
 pub struct InitLockupArgs {
+    pub owner_account_id: AccountId,
     pub lockup_duration: U64,
     pub lockup_start_information: LockupStartInformation,
     pub staking_pool_whitelist_account_id: AccountId,
-    pub initial_owners_main_public_key: Base58PublicKey,
     pub foundation_account_id: Option<AccountId>,
 }
 
+#[derive(Clone)]
 pub struct ExternalUser {
     pub account_id: AccountId,
     pub signer: InMemorySigner,
@@ -147,7 +149,7 @@ impl ExternalUser {
     ) -> TxResult {
         let tx = self
             .new_tx(runtime, receiver_id.to_string())
-            .function_call(method.into(), args.to_vec(), 10000000000000000, 0)
+            .function_call(method.into(), args.to_vec(), MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -165,12 +167,7 @@ impl ExternalUser {
             .create_account()
             .transfer(ntoy(35) + amount)
             .deploy_contract(LOCKUP_WASM_BYTES.to_vec())
-            .function_call(
-                "new".into(),
-                serde_json::to_vec(args).unwrap(),
-                10000000000000000,
-                0,
-            )
+            .function_call("new".into(), serde_json::to_vec(args).unwrap(), MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
