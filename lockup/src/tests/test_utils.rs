@@ -5,6 +5,10 @@ pub const LOCKUP_NEAR: u128 = 1000;
 pub const GENESIS_TIME_IN_DAYS: u64 = 500;
 pub const YEAR: u64 = 365;
 
+pub fn lockup_account() -> AccountId {
+    "lockup".to_string()
+}
+
 pub fn system_account() -> AccountId {
     "system".to_string()
 }
@@ -56,7 +60,7 @@ pub fn get_context(
     is_view: bool,
 ) -> VMContext {
     VMContext {
-        current_account_id: account_owner(),
+        current_account_id: lockup_account(),
         signer_account_id: predecessor_account_id.clone(),
         signer_account_pk: vec![0, 1, 2],
         predecessor_account_id,
@@ -88,6 +92,7 @@ pub fn testing_env_with_promise_results(context: VMContext, promise_result: Prom
         Default::default(),
         vec![promise_result],
         storage,
+        Default::default(),
     )));
 }
 

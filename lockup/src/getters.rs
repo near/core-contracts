@@ -3,6 +3,11 @@ use near_sdk::near_bindgen;
 
 #[near_bindgen]
 impl LockupContract {
+    /// Returns the account ID of the owner.
+    pub fn get_owner_account_id(&self) -> AccountId {
+        self.owner_account_id.clone()
+    }
+
     /// Returns the account ID of the selected staking pool.
     pub fn get_staking_pool_account_id(&self) -> Option<AccountId> {
         self.staking_information
