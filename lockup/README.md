@@ -457,7 +457,7 @@ If everything went okay, the status should be advanced to `ReadyToWithdraw`.
 Once the termination status is `ReadyToWithdraw`. The Foundation can proceed with withdrawing the unvested balance.
 
 ```bash
-near call lockup1 xtermination_withdraw '{"receiver_id": "near"}' --accountId=near
+near call lockup1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
 ```
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
