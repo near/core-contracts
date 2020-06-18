@@ -22,6 +22,7 @@ pub struct FunctionCallPermission {
 
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 #[serde(tag = "type")]
+/// Lowest level action that can be performed by the multisig contract.
 pub enum MultiSigRequestAction {
     /// Transfers given amount to receiver.
     Transfer {
@@ -99,7 +100,7 @@ impl MultiSigContract {
             requests: Map::new(b"r".to_vec()),
             confirmations: Map::new(b"c".to_vec()),
             num_requests_pk: Map::new(b"k".to_vec()),
-            active_requests_limit: 4,
+            active_requests_limit: 12,
         }
     }
 
@@ -140,10 +141,10 @@ impl MultiSigContract {
             env::signer_account_pk(),
             "Only the creator of the request can delete"
         );
-        // can't delete requests before 10s
+        // can't delete requests before 1h
         assert!(
-            env::block_timestamp() > request_with_signer.added_timestamp + 10_000_000_000,
-            "Account has too many active requests. Confirm or delete some."
+            env::block_timestamp() > request_with_signer.added_timestamp + 3_600_000_000_000,
+            "Request cannot be deleted immediately after creation."
         );
         self.remove_request(request_id);
     }
@@ -249,6 +250,10 @@ impl MultiSigContract {
         (self.requests.get(&request_id).expect("No such request")).request
     }
 
+    pub fn get_num_requests_pk(&self, public_key: PublicKey) -> u32 {
+        self.num_requests_pk.get(&public_key).unwrap_or(0)
+    }
+
     pub fn list_request_ids(&self) -> Vec<RequestId> {
         self.requests.keys().collect()
     }
@@ -274,7 +279,10 @@ impl MultiSigContract {
     fn remove_request(&mut self, request_id: RequestId) -> MultiSigRequest {
         let request_with_signer = self.requests.remove(&request_id).expect("Failed to remove existing element");
         self.confirmations.remove(&request_id);
-        let num_requests_pk = self.num_requests_pk.get(&request_with_signer.signer_pk).unwrap_or(0) - 1;
+        let mut num_requests_pk = self.num_requests_pk.get(&request_with_signer.signer_pk).unwrap_or(0);
+        if num_requests_pk > 0 {
+            num_requests_pk = num_requests_pk - 1;
+        }
         self.num_requests_pk.insert(&env::signer_account_pk(), &num_requests_pk);
         // return request
         request_with_signer.request
@@ -424,7 +432,7 @@ mod tests {
     fn context_with_key_future(key: PublicKey, amount: Balance) -> VMContext {
         VMContextBuilder::new()
             .current_account_id(alice())
-            .block_timestamp(10_000_000_001)
+            .block_timestamp(4_000_000_000_001)
             .predecessor_account_id(alice())
             .signer_account_id(alice())
             .signer_account_pk(key)
@@ -564,7 +572,7 @@ mod tests {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
-        for _i in 0..10 {
+        for _i in 0..16 {
             c.add_request(MultiSigRequest {
                 receiver_id: bob(),
                 actions: vec![MultiSigRequestAction::Transfer {
