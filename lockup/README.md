@@ -9,7 +9,7 @@ When the transfer poll is resolved, it returns the timestamp when it was resolve
 lockup period.
 
 Once all tokens are unlocked, everything is vested, and transfers are enabled, the owner can add a full access key to the
-account. This will allow the owner to turn this account into a regular account, claim the remaining tokens, and remove the contract
+account. This will allow the owner to turn this contract account into a regular account, claim the remaining tokens, and remove the contract
 or delete the account.
 
 ### Vesting
@@ -51,7 +51,6 @@ Once the unvested balance is withdrawn completely, the contract returns to the r
 
 The amount withdrawn in the event of termination by NEAR foundation may be lower than the initial contract amount.
 It's because the contract has to maintain the minimum required balance to cover storage of the contract code and contract state.
-The balance can also be lower due to transaction fees spent by the owner, because owner has access keys on the account of the contract and the transaction fees are paid from the account balance.
 The amount of NEAR tokens locked to maintain the minimum storage balance is `35` NEAR.
 `35` NEAR is enough to cover storage for `350000` bytes on mainnet at price of `1` NEAR per `10000` bytes.
 
@@ -70,11 +69,22 @@ The contract can be used for the following purposes:
 ### Guarantees
 
 With the guarantees from the staking pool contracts, whitelist and voting contract, the lockup contract provides the following guarantees:
-- The contract can't lose tokens using staking access key or block main access key. (Except for tokens spent on gas)
-- The owner can't prevent foundation from withdrawing the unvested balance in case of termination.
-- The owner can't withdraw tokens locked due to lockup period, disabled transfers or vesting schedule.
+- The owner can not lose tokens or block contract operations by using methods under staking section.
+- The owner can not prevent foundation from withdrawing the unvested balance in case of termination.
+- The owner can not withdraw tokens locked due to lockup period, disabled transfers or vesting schedule.
 - The owner can withdraw rewards from staking pool, before tokens are unlocked, unless the vesting termination prevents it.
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
+
+## Change Log
+
+### `0.2.0`
+
+- Replaced owner's access keys with the owner's account. The access is now controlled through the predecessor account ID similar to NEAR foundation access.
+  This allows to be more flexible with the account access including multi-sig implementation.
+- The lockup contract account should not have any access keys until the account is fully vested and unlocked.
+  Only then the owner can add the full access key.
+- Removed methods for adding and removing staking/main access keys.
+- Added a view method to get the account ID of the owner.
 
 ## Interface
 
@@ -97,22 +107,23 @@ The initialization method has the following interface.
 
 ```rust
 /// Initializes lockup contract.
+/// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
+///    methods on this contract.
 /// - `lockup_duration` - the duration in nanoseconds of the lockup period.
 /// - `lockup_start_information` - the information when the lockup period starts, either
 ///    transfers are already enabled, then it contains the timestamp, or the transfers are
 ///    currently disabled and it contains the account ID of the transfer poll contract.
 /// - `vesting_schedule` - if present, describes the vesting schedule.
 /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
-/// - `initial_owners_main_public_key` - the public key for the owner's main access key.
 /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
 ///    terminate vesting schedule.
 #[init]
 pub fn new(
+    owner_account_id: AccountId,
     lockup_duration: WrappedDuration,
     lockup_start_information: LockupStartInformation,
     vesting_schedule: Option<VestingSchedule>,
     staking_pool_whitelist_account_id: AccountId,
-    initial_owners_main_public_key: Base58PublicKey,
     foundation_account_id: Option<AccountId>,
 ) -> Self;
 ```
@@ -146,11 +157,11 @@ pub struct VestingSchedule {
 
 ### Owner's methods
 
-Owner's methods are split into 2 groups. Methods that can be called with the main access keys and methods that can be called with the staking access keys.
-The staking access key can be changed with any main access key, so it's okay to store it in the less secure location, e.g. Staking Pool UI in the browser.
-On the other hand, all main access keys have to be kept secret and secure, because they have full control over the owner's account.
+Owner's methods are split into 2 groups. Methods that are related to transfers and methods that are related to staking.
+It's safer to give access to the staking methods, because they can't lose or lock tokens. It should be possible to
+create an access key on the owner's account restricted to the staking methods and give it to staking pool manager UI. e.g. Staking Pool UI in the browser.
 
-#### Main Access Key methods
+#### Transfers methods
 
 ```rust
 /// OWNER'S METHOD
@@ -164,25 +175,13 @@ pub fn check_transfers_vote(&mut self) -> Promise;
 pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise;
 
 /// OWNER'S METHOD
-/// Adds a new owner's staking access key with the given public key.
-pub fn add_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
-
-/// OWNER'S METHOD
-/// Adds a new owner's main access key with the given public key.
-pub fn add_main_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
-
-/// OWNER'S METHOD
-/// Removes an existing owner's access key with the given public key.
-pub fn remove_access_key(&mut self, old_public_key: Base58PublicKey) -> Promise;
-
-/// OWNER'S METHOD
 /// Adds full access key with the given public key to the account once the contract is fully
 /// vested, lockup duration has expired and transfers are enabled.
 /// This will allow owner to use this account as a regular account and remove the contract.
 pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
 ```
 
-#### Staking Access Key methods
+#### Staking methods
 
 ```rust
 /// OWNER'S METHOD
@@ -242,6 +241,9 @@ pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise;
 ### View methods
 
 ```rust
+/// Returns the account ID of the owner.
+pub fn get_owner_account_id(&self) -> AccountId;
+
 /// Returns the account ID of the selected staking pool.
 pub fn get_staking_pool_account_id(&self) -> Option<AccountId>;
 
@@ -289,17 +291,18 @@ pub fn are_transfers_enabled(&self) -> bool;
 ### Initialization
 
 Initialize contract, assuming it's called from `near` account.
+The lockup contract account ID is `lockup1`.
 The owner account ID is `owner1`. Lockup Duration is 365 days.
 Transfers are currently disabled and can be enabled by checking transfer voting poll contract at `transfers-poll`.
 Vesting is 4 years starting from `2018-09-01` to `2022-09-01` Pacific time.
 Staking pool whitelist contract is at `staking-pool-whitelist`.
-The owner's main public key is ED25519 curve `KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7` in base58.
 The foundation account ID that can terminate vesting is `near`.
 
 Arguments in JSON format
 
 ```json
 {
+    "owner_account_id": "owner1",
     "lockup_duration": "31536000000000000",
     "lockup_start_information": {
         "TransfersDisabled": {
@@ -312,7 +315,6 @@ Arguments in JSON format
         "end_timestamp": "1661990400000000000"
     },
     "staking_pool_whitelist_account_id": "staking-pool-whitelist",
-    "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7",
     "foundation_account_id": "near"
 }
 ```
@@ -320,21 +322,15 @@ Arguments in JSON format
 Command
 
 ```bash
-near call owner1 new '{"lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "initial_owners_main_public_key": "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7", "foundation_account_id": "near"}' --accountId=near
+near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
 ```
 
 ### Staking flow
 
-#### Add staking access key
-
-```bash
-near call owner1 add_staking_access_key '{"new_public_key": "PJLZtSkhsC6kkwBTxoka7nWFrffryy2TmizoApkCSjV"}' --accountId=owner1
-```
-
 #### Select staking pool
 
 ```bash
-near call owner1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1
+near call lockup1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1
 ```
 
 #### Deposit to the staking pool
@@ -342,7 +338,7 @@ near call owner1 select_staking_pool '{"staking_pool_account_id": "staking_pool_
 Deposit `1000` NEAR tokens.
 
 ```bash
-near call owner1 deposit_to_staking_pool '{"amount": "1000000000000000000000000000"}' --accountId=owner1
+near call lockup1 deposit_to_staking_pool '{"amount": "1000000000000000000000000000"}' --accountId=owner1
 ```
 
 #### Stake on the staking pool
@@ -350,7 +346,7 @@ near call owner1 deposit_to_staking_pool '{"amount": "10000000000000000000000000
 Stake `1000` NEAR tokens.
 
 ```bash
-near call owner1 stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1
+near call lockup1 stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1
 ```
 
 #### Refresh the current total balance on the staking pool
@@ -360,7 +356,7 @@ It's because the contract doesn't know about the accumulated rewards.
 In order for the contract to get the new total balance, the owner has to call `refresh_staking_pool_balance`.
 
 ```bash
-near call owner1 refresh_staking_pool_balance '{}' --accountId=owner1
+near call lockup1 refresh_staking_pool_balance '{}' --accountId=owner1
 ```
 
 #### Checking owner's balance
@@ -369,7 +365,7 @@ If the owner has accumulated 10 NEAR in the rewards, after refreshing the stakin
 the local balance to increase as well.
 
 ```bash
-near view owner1 get_owners_balance '{}'
+near view lockup1 get_owners_balance '{}'
 ```
 
 #### Unstake from the staking pool
@@ -378,7 +374,7 @@ Let's say the owner checked staked balance by calling view method on the staking
 Unstake `1010` NEAR tokens.
 
 ```bash
-near call owner1 unstake '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+near call lockup1 unstake '{"amount": "1010000000000000000000000000"}' --accountId=owner1
 ```
 
 #### Withdraw from the staking pool
@@ -386,13 +382,13 @@ near call owner1 unstake '{"amount": "1010000000000000000000000000"}' --accountI
 Wait 4 epochs (about 48 hours) and now can withdraw `1010` NEAR tokens from the staking pool.
 
 ```bash
-near call owner1 withdraw_from_staking_pool '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+near call lockup1 withdraw_from_staking_pool '{"amount": "1010000000000000000000000000"}' --accountId=owner1
 ```
 
 #### Check transfers vote
 
 ```bash
-near call owner1 check_transfers_vote '{}' --accountId=owner1
+near call lockup1 check_transfers_vote '{}' --accountId=owner1
 ```
 
 Let's assume transfers are enabled now.
@@ -401,13 +397,13 @@ Let's assume transfers are enabled now.
 #### Check liquid balance and transfer 10 NEAR
 
 ```bash
-near view owner1 get_liquid_owners_balance '{}'
+near view lockup1 get_liquid_owners_balance '{}'
 ```
 
 Transfer 10 NEAR to `owner-sub-account`.
 
 ```bash
-near call owner1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
+near call lockup1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
 ```
 
 ### Vesting termination by NEAR Foundation
@@ -419,7 +415,7 @@ If the employee was terminated, the foundation needs to terminate vesting.
 To initiate termination NEAR Foundation has to issue the following command:
 
 ```bash
-near call owner1 terminate_vesting '' --accountId=near
+near call lockup1 terminate_vesting '' --accountId=near
 ```
 
 This will block the account until the termination process is completed.
@@ -429,7 +425,7 @@ This will block the account until the termination process is completed.
 To check the current status of the termination process, the foundation and the owner can call:
 
 ```bash
-near view owner1 get_termination_status '{}'
+near view lockup1 get_termination_status '{}'
 ```
 
 #### Withdrawing deficit from the staking pool
@@ -444,14 +440,14 @@ become liquid, withdraw them from the staking pool to the contract. This is done
 These calls require quite a bit of callbacks, so the amount of gas has to be slightly more than default of `100 * 10^12`.
 
 ```bash
-near call owner1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
 ```
 
 The first will unstake everything from the staking pool. This should advance the termination status to `EverythingUnstaked`.
 In 4 epochs, or about 48 hours, the Foundation can call the same command again:
 
 ```bash
-near call owner1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
 ```
 
 If everything went okay, the status should be advanced to `ReadyToWithdraw`.
@@ -461,7 +457,7 @@ If everything went okay, the status should be advanced to `ReadyToWithdraw`.
 Once the termination status is `ReadyToWithdraw`. The Foundation can proceed with withdrawing the unvested balance.
 
 ```bash
-near call owner1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
+near call lockup1 xtermination_withdraw '{"receiver_id": "near"}' --accountId=near
 ```
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.

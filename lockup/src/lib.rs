@@ -144,7 +144,8 @@ impl Default for LockupContract {
 #[near_bindgen]
 impl LockupContract {
     /// Initializes lockup contract.
-    /// - `owner_account_id` - the account ID of the owner.
+    /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
+    ///    methods on this contract.
     /// - `lockup_duration` - the duration in nanoseconds of the lockup period.
     /// - `lockup_start_information` - the information when the lockup period starts, either
     ///    transfers are already enabled, then it contains the timestamp, or the transfers are
