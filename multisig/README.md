@@ -19,27 +19,56 @@ All operations going forward will require `K` signatures to be performed.
 
 There are number of different request types that multisig can confirm and execute:
 ```rust
-enum MultisigRequestAction {
-  Transfer { amount: U128 },
-  AddKey { public_key: Base58PublicKey },
-  DeleteKey { public_key: Base58PublicKey },
-  FunctionCall {
+/// Lowest level action that can be performed by the multisig contract.
+pub enum MultiSigRequestAction {
+    /// Create a new account.
+    CreateAccount,
+    /// Deploys contract to receiver's account. Can upgrade given contract as well.
+    DeployContract {
+        code: Base64VecU8,
+    },
+    /// Transfers given amount to receiver.
+    Transfer {
+        amount: U128,
+    },
+    /// Stake with this account.
+    Stake {
+        public_key: Base58PublicKey,
+        stake: U128,
+    },
+    /// Adds key, either new key for multisig or full access key to another account.
+    AddKey {
+        public_key: Base58PublicKey,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        permission: Option<FunctionCallPermission>,
+    },
+    /// Deletes key, either one of the keys from multisig or key from another account.
+    DeleteKey {
+        public_key: Base58PublicKey,
+    },
+    /// Call function on behalf of this contract.
+    FunctionCall {
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
-        gas: Gas
-  },
-  SetNumConfirmations { num_confirmations: u32 },
-  CreateAccount,
+        gas: U64,
+    },
+    /// Sets number of confirmations required to authorize requests.
+    /// Can not be bundled with any other actions or transactions.
+    SetNumConfirmations {
+        num_confirmations: u32,
+    },
 }
-```
 
-The request specifies `receiver_id` and set of `actions` from above:
-```rust
-struct MultisigRequest {
+/// Single transaction of the multisig request, batching actions for specific `receiver_id`.
+pub struct MultiSigRequestTransaction {
     receiver_id: AccountId,
-    actions: Vec<MultisigRequestAction>
+    actions: Vec<MultiSigRequestAction>,
 }
+
+/// Multisig request, a group of transactions that will be executed in order.
+/// If one transaction execution fails the rest will be cancelled.
+pub type MultiSigRequest = Vec<MultiSigRequestTransaction>;
 ```
 
 ### Methods
@@ -56,16 +85,20 @@ pub fn delete_request(&mut self, request_id: RequestId) {
 pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
 ```
 
-### Mutlisig contract guarantees and invariants
+### State machine
 
-Guarantees:
- - Each request only gets executed after `num_confirmations` calls to `confirm` from different access keys. 
+Per each request, multisig maintains next state machine:
+ - `add_request` adds new request with empty list of confirmations.
+ - `delete_request` deletes request and ends state machine.
+ - `confirm` either adds new confirmation to list of confirmations or if there is more than `num_confirmations` confirmations with given call - switches to execution of request. `confirm` fails if request is already has been confirmed and already is executing which is determined if `confirmations` contain given `request_id`.
+ - each step of execution, schedules a promise of given set of actions on `receiver_id` and puts a callback.
+ - when callback executes, it checks if promise executed successfully: if no - stops executing the request and return failure. If yes - execute next transaction in the request if present.
+ - when all transactions are executed, remove request from `requests` and with that finish the execution of the request.   
 
 ### Gotchas
  
-User can delete access keys such that total number of different access keys will fall below `num_confirmations`, rendering contract locked.
-
-`AddKey` on another account adds full access key.
+User can delete access keys on the multisig such that total number of different access keys will fall below `num_confirmations`, rendering contract locked.
+This is due to not having a way to query blockchain for current number of access keys on the account. See discussion here - https://github.com/nearprotocol/NEPs/issues/79.
  
 ## Pre-requisites
 
@@ -120,22 +153,33 @@ const result = account.signAndSendTransaction(
 
 To create request for transfer funds:
 ```bash
-near call multisig.illia add_request '{"request": {"receiver_id": "illia", "actions": [{"type": "Transfer", "amount": "1000000000000000000000"}]}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": [{"receiver_id": "illia", "actions": [{"type": "Transfer", "amount": "1000000000000000000000"}]}]}' --accountId multisig.illia
 ```
 
 Add another key to multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": [{"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}]}' --accountId multisig.illia
 ```
 
 Change number of confirmations required to approve multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "SetNumConfirmations", "num_confirmations": 2}]}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": [{"receiver_id": "multisig.illia", "actions": [{"type": "SetNumConfirmations", "num_confirmations": 2}]}]}' --accountId multisig.illia
 ```
 
 Returns the `request_id` of this request that can be used to confirm or see details.
 
 As a side note, for this to work one of the keys from multisig should be available in your `~/.near-credentials/<network>/<multisig-name>.json` or use `--useLedgerKey` to sign with Ledger.
+
+You can also create a way more complex call that chains calling multiple different contracts:
+
+```bash
+near call multisig.illia add_request '{"request": [
+    {"receiver_id": "nep21-token", "actions": [{"type": "FunctionCall", "method": "allow", "args": "eyJhbW91bnQiOiAiMTAwIn0K", "deposit": "0", "gas": 10000000000000}]},
+    {"receiver_id": "dex", "actions": [{"type": "FunctionCall", "method": "withdraw", "args": "e30K", "deposi"t": "0", "gas": 10000000000000}]},
+]}'
+```
+
+where `eyJhbW91bnQiOiAiMTAwIn0K` is `{"amount": "100"}` encoded in base64.
 
 ### Confirm request
 
@@ -160,3 +204,29 @@ To see confirmations for specific request:
 ```bash
 near view multisig.illia get_confirmations '{"request_id": 0}'
 ```
+
+Total confirmations required for any request:
+```
+near view multisig.illia get_num_confirmations
+```
+
+### Upgrade given multisig with new code
+
+Create a request that deploys new contract code on the given account.
+Be careful about data and requiring migrations (contract updates should include data migrations going forward). 
+
+```javascript
+const fs = require('fs');
+const account = await near.account("multisig.illia");
+const contractName = "multisig.illia";
+const requestArgs = {"request": [
+    {"receiver_id": "multisig.illia", "actions": [{"type": "DeployContract", "code": fs.readFileSync("res/multisig.wasm")}]}
+]};
+const result = account.signAndSendTransaction(
+    contractName,
+    [
+        nearAPI.transactions.functionCall("add_request", Buffer.from(JSON.stringify(requestArgs)), 10000000000000, "0"),
+    ]);
+```
+
+After this, still will need to confirm this with `num_confirmations` you have setup for given contract.

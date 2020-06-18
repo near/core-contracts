@@ -65,6 +65,7 @@ pub struct MultiSigRequest {
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
     signer_pk: PublicKey,
+    added_timestamp: u64,
 }
 
 #[near_bindgen]
@@ -119,6 +120,7 @@ impl MultiSigContract {
         // add the request
         let request_added = MultiSigRequestWithSigner {
             signer_pk: env::signer_account_pk(),
+            added_timestamp: env::block_timestamp(),
             request: request,
         };
         self.requests.insert(&self.request_nonce, &request_added);
@@ -132,10 +134,16 @@ impl MultiSigContract {
     /// Remove given request and associated confirmations.
     pub fn delete_request(&mut self, request_id: RequestId) {
         self.valid_request(request_id);
+        let request_with_signer = self.requests.get(&request_id).expect("No such request");
         assert_eq!(
-            self.requests.get(&request_id).expect("No such request").signer_pk,
+            request_with_signer.signer_pk,
             env::signer_account_pk(),
             "Only the creator of the request can delete"
+        );
+        // can't delete requests before 10s
+        assert!(
+            env::block_timestamp() > request_with_signer.added_timestamp + 10_000_000_000,
+            "Account has too many active requests. Confirm or delete some."
         );
         self.remove_request(request_id);
     }
@@ -348,6 +356,11 @@ mod tests {
             self
         }
 
+        pub fn block_timestamp(mut self, time: u64) -> Self {
+            self.context.block_timestamp = time;
+            self
+        }
+
         #[allow(dead_code)]
         pub fn signer_account_id(mut self, account_id: AccountId) -> Self {
             self.context.signer_account_id = account_id;
@@ -401,6 +414,17 @@ mod tests {
     fn context_with_key(key: PublicKey, amount: Balance) -> VMContext {
         VMContextBuilder::new()
             .current_account_id(alice())
+            .predecessor_account_id(alice())
+            .signer_account_id(alice())
+            .signer_account_pk(key)
+            .account_balance(amount)
+            .finish()
+    }
+
+    fn context_with_key_future(key: PublicKey, amount: Balance) -> VMContext {
+        VMContextBuilder::new()
+            .current_account_id(alice())
+            .block_timestamp(10_000_000_001)
             .predecessor_account_id(alice())
             .signer_account_id(alice())
             .signer_account_pk(key)
@@ -485,7 +509,8 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_request() {
+    #[should_panic]
+    fn test_panics_delete_request() {
         let amount = 1_000;
         testing_env!(context_with_key(vec![5, 7, 9], amount));
         let mut c = MultiSigContract::new(3);
@@ -495,6 +520,23 @@ mod tests {
                 amount: amount.into(),
             }],
         });
+        c.delete_request(request_id);
+        assert_eq!(c.requests.len(), 0);
+        assert_eq!(c.confirmations.len(), 0);
+    }
+
+    #[test]
+    fn test_delete_request_future() {
+        let amount = 1_000;
+        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        let mut c = MultiSigContract::new(3);
+        let request_id = c.add_request(MultiSigRequest {
+            receiver_id: bob(),
+            actions: vec![MultiSigRequestAction::Transfer {
+                amount: amount.into(),
+            }],
+        });
+        testing_env!(context_with_key_future(vec![5, 7, 9], amount));
         c.delete_request(request_id);
         assert_eq!(c.requests.len(), 0);
         assert_eq!(c.confirmations.len(), 0);
