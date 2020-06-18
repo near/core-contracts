@@ -65,7 +65,7 @@ pub fn remove_staking_pool(&mut self, staking_pool_account_id: AccountId) -> boo
 
 /// Adds the given staking pool factory contract account ID to the factory whitelist.
 /// Returns `true` if the factory was not in the whitelist before, `false` otherwise.
-/// This method can be called either by the NEAR foundation.
+/// This method can only be called by the NEAR foundation.
 pub fn add_factory(&mut self, factory_account_id: AccountId) -> bool;
 
 /// Removes the given staking pool factory account ID from the factory whitelist.

@@ -105,7 +105,7 @@ impl WhitelistContract {
 
     /// Adds the given staking pool factory contract account ID to the factory whitelist.
     /// Returns `true` if the factory was not in the whitelist before, `false` otherwise.
-    /// This method can be called either by the NEAR foundation.
+    /// This method can only be called by the NEAR foundation.
     pub fn add_factory(&mut self, factory_account_id: AccountId) -> bool {
         assert!(
             env::is_valid_account_id(factory_account_id.as_bytes()),
