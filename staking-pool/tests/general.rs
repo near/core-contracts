@@ -1,7 +1,9 @@
 mod utils;
 
+use crate::utils::{is_pool_paused, reward_pool, POOL_ACCOUNT_ID};
 use near_primitives::types::Balance;
 use utils::{init_pool, ntoy, pool_account, wait_epoch, ExternalUser};
+
 #[test]
 fn multi_accounts_max_roundtrip() {
     struct AccountStake {
@@ -64,4 +66,65 @@ fn multi_accounts_max_roundtrip() {
         pool_account(runtime).amount + pool_account(runtime).locked,
         initial_pool_balance
     );
+}
+
+#[test]
+fn test_pause_resume() {
+    let deposit_amount = ntoy(40);
+    let (mut runtime, root) = init_pool(ntoy(100));
+    let bob = root
+        .create_external(&mut runtime, "bob".into(), ntoy(100))
+        .unwrap();
+
+    assert!(!is_pool_paused(&mut runtime));
+
+    root.pool_pause(&mut runtime).unwrap();
+
+    assert!(is_pool_paused(&mut runtime));
+
+    for _ in 0..4 {
+        wait_epoch(&mut runtime);
+    }
+
+    let mut pool = runtime.view_account(&POOL_ACCOUNT_ID.into()).unwrap();
+    pool.amount += pool.locked;
+    pool.locked = 0;
+    runtime.force_account_update(POOL_ACCOUNT_ID.into(), &pool);
+
+    bob.pool_deposit(&mut runtime, deposit_amount).unwrap();
+
+    let res = bob.get_account_unstaked_balance(&runtime);
+    assert_eq!(res, deposit_amount);
+
+    bob.pool_stake(&mut runtime, deposit_amount).unwrap();
+
+    let res = bob.get_account_staked_balance(&runtime);
+    assert_eq!(res, deposit_amount);
+
+    for _ in 0..4 {
+        wait_epoch(&mut runtime);
+    }
+
+    bob.pool_ping(&mut runtime).unwrap();
+
+    assert_eq!(pool_account(&mut runtime).locked, 0);
+
+    let res = bob.get_account_staked_balance(&runtime);
+    assert_eq!(res, deposit_amount);
+
+    root.pool_resume(&mut runtime).unwrap();
+
+    assert!(!is_pool_paused(&mut runtime));
+
+    assert_ne!(pool_account(&mut runtime).locked, 0);
+
+    for _ in 0..4 {
+        wait_epoch(&mut runtime);
+        reward_pool(&mut runtime, ntoy(1));
+    }
+
+    bob.pool_ping(&mut runtime).unwrap();
+
+    let res = bob.get_account_staked_balance(&runtime);
+    assert!(res > deposit_amount);
 }

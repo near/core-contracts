@@ -16,6 +16,7 @@ use serde_json::json;
 use staking_pool::RewardFeeFraction;
 
 pub const POOL_ACCOUNT_ID: &str = "pool";
+pub const MAX_GAS: u64 = 300_000_000_000_000;
 
 pub fn ntoy(near_amount: Balance) -> Balance {
     near_amount * 10u128.pow(24)
@@ -116,7 +117,7 @@ impl ExternalUser {
             .create_account()
             .transfer(amount)
             .deploy_contract(POOL_WASM_BYTES.to_vec())
-            .function_call("new".into(), args, 10000000000000000, 0)
+            .function_call("new".into(), args, MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -126,7 +127,7 @@ impl ExternalUser {
     pub fn pool_deposit(&self, runtime: &mut RuntimeStandalone, amount: Balance) -> TxResult {
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("deposit".into(), vec![], 10000000000000000, amount)
+            .function_call("deposit".into(), vec![], MAX_GAS, amount)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -136,7 +137,7 @@ impl ExternalUser {
     pub fn pool_ping(&self, runtime: &mut RuntimeStandalone) -> TxResult {
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("ping".into(), vec![], 10000000000000000, 0)
+            .function_call("ping".into(), vec![], MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -150,7 +151,7 @@ impl ExternalUser {
             .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("stake".into(), args, 10000000000000000, 0)
+            .function_call("stake".into(), args, MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -164,7 +165,7 @@ impl ExternalUser {
             .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("unstake".into(), args, 10000000000000000, 0)
+            .function_call("unstake".into(), args, MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -187,7 +188,27 @@ impl ExternalUser {
             .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("withdraw".into(), args, 10000000000000000, 0)
+            .function_call("withdraw".into(), args, MAX_GAS, 0)
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn pool_pause(&self, runtime: &mut RuntimeStandalone) -> TxResult {
+        let tx = self
+            .new_tx(runtime, POOL_ACCOUNT_ID.into())
+            .function_call("pause_staking".into(), vec![], MAX_GAS, 0)
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn pool_resume(&self, runtime: &mut RuntimeStandalone) -> TxResult {
+        let tx = self
+            .new_tx(runtime, POOL_ACCOUNT_ID.into())
+            .function_call("resume_staking".into(), vec![], MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -202,7 +223,7 @@ impl ExternalUser {
             .to_vec();
         let tx = self
             .new_tx(runtime, POOL_ACCOUNT_ID.into())
-            .function_call("withdraw".into(), args, 10000000000000000, 0)
+            .function_call("withdraw".into(), args, MAX_GAS, 0)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -268,6 +289,10 @@ pub fn init_pool(initial_transfer: Balance) -> (RuntimeStandalone, ExternalUser)
     )
     .unwrap();
     return (runtime, root);
+}
+
+pub fn is_pool_paused(runtime: &mut RuntimeStandalone) -> bool {
+    call_view(runtime, &POOL_ACCOUNT_ID.into(), "is_staking_paused", "{}")
 }
 
 pub fn reward_pool(runtime: &mut RuntimeStandalone, amount: Balance) {
