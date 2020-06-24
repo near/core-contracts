@@ -95,6 +95,12 @@ pub struct StakingContract {
     pub reward_fee_fraction: RewardFeeFraction,
     /// Persistent map from an account ID hash to the corresponding account.
     pub accounts: Map<AccountHash, Account>,
+    /// Whether the staking is paused.
+    /// When paused, the account unstakes everything (stakes 0) and doesn't restake.
+    /// It doesn't affect the staking shares or reward distribution.
+    /// Pausing is useful for node maintenance. Only the owner can pause and resume staking.
+    /// The contract is not paused by default.
+    pub paused: bool,
 }
 
 /// Returns sha256 hash of the given account ID.
@@ -171,6 +177,7 @@ impl StakingContract {
             total_stake_shares: NumStakeShares::from(total_staked_balance),
             reward_fee_fraction,
             accounts: Map::new(b"u".to_vec()),
+            paused: false,
         };
         // Staking with the current pool to make sure the staking key is valid.
         this.restake();
@@ -378,11 +385,18 @@ impl StakingContract {
 
     /// Restakes the current `total_staked_balance` again.
     fn restake(&mut self) {
+        if self.paused {
+            return;
+        }
         // Stakes with the staking public key. If the public key is invalid the entire function
         // call will be rolled back.
         Promise::new(env::current_account_id())
             .stake(self.total_staked_balance, self.stake_public_key.clone());
     }
+
+    /****************/
+    /* View methods */
+    /****************/
 
     /// Returns the unstaked balance of the given account.
     pub fn get_account_unstaked_balance(&self, account_id: AccountId) -> U128 {
@@ -430,6 +444,11 @@ impl StakingContract {
         self.stake_public_key.clone().try_into().unwrap()
     }
 
+    /// Returns true if the staking is paused
+    pub fn is_staking_paused(&self) -> bool {
+        self.paused
+    }
+
     /*******************/
     /* Owner's methods */
     /*******************/
@@ -437,11 +456,7 @@ impl StakingContract {
     /// Owner's method.
     /// Updates current public key to the new given public key.
     pub fn update_staking_key(&mut self, stake_public_key: Base58PublicKey) {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.owner_id,
-            "Can only be called by the owner"
-        );
+        self.assert_owner();
         // When updating the staking key, the contract has to restake.
         let _need_to_restake = self.internal_ping();
         self.stake_public_key = stake_public_key.into();
@@ -451,11 +466,7 @@ impl StakingContract {
     /// Owner's method.
     /// Updates current reward fee fraction to the new given fraction.
     pub fn update_reward_fee_fraction(&mut self, reward_fee_fraction: RewardFeeFraction) {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.owner_id,
-            "Can only be called by the owner"
-        );
+        self.assert_owner();
         reward_fee_fraction.assert_valid();
 
         let need_to_restake = self.internal_ping();
@@ -476,11 +487,7 @@ impl StakingContract {
         proposal_id: ProposalId,
         stake: U128,
     ) -> Promise {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.owner_id,
-            "Can only be called by the owner"
-        );
+        self.assert_owner();
         assert!(
             env::is_valid_account_id(voting_account_id.as_bytes()),
             "Invalid voting account ID"
@@ -489,9 +496,40 @@ impl StakingContract {
         ext_voting::vote(proposal_id, stake, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
     }
 
+    /// Owner's method.
+    /// Pauses pool staking.
+    pub fn pause_staking(&mut self) {
+        self.assert_owner();
+        assert!(!self.paused, "The staking is already paused");
+
+        self.internal_ping();
+        self.paused = true;
+        Promise::new(env::current_account_id()).stake(0, self.stake_public_key.clone());
+    }
+
+    /// Owner's method.
+    /// Resumes pool staking.
+    pub fn resume_staking(&mut self) {
+        self.assert_owner();
+        assert!(self.paused, "The staking is not paused");
+
+        self.internal_ping();
+        self.paused = false;
+        self.restake();
+    }
+
     /********************/
     /* Internal methods */
     /********************/
+
+    /// Asserts that the method was called by the owner.
+    fn assert_owner(&self) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner_id,
+            "Can only be called by the owner"
+        );
+    }
 
     /// Distributes rewards after the new epoch. It's automatically called before every action.
     /// Returns true if the current epoch height is different from the last epoch height.

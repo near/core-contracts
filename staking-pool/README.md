@@ -120,7 +120,9 @@ Once the rewards are distributed the contract remembers the new total balance.
 Contract owner can do the following:
 - Change public staking key. This action restakes with the new key.
 - Change reward fee fraction.
-- Vote on behalf of the pool. This is needed for the NEAR chain governence, and can be discussed in the following NEP: https://github.com/nearprotocol/NEPs/pull/62
+- Vote on behalf of the pool. This is needed for the NEAR chain governance, and can be discussed in the following NEP: https://github.com/nearprotocol/NEPs/pull/62
+- Pause and resume staking. When paused, the pool account unstakes everything (stakes 0) and doesn't restake.
+It doesn't affect the staking shares or reward distribution. Pausing is useful for node maintenance. Note, the contract is not paused by default.
 
 ## Staking pool contract guarantees and invariants
 
@@ -142,6 +144,13 @@ It also has inner invariants:
 
 NOTE: Guarantees are based on the no-slashing condition. Once slashing is introduced, the contract will no longer
 provide some guarantees. Read more about slashing in [Nightshade paper](https://near.ai/nightshade).
+
+## Changelog
+
+### `0.2.0`
+
+- Added new owners methods: `pause_staking` and `resume_staking`. Allows pool owner to unstake everything from the pool for node maintenance.
+- Added a new view method `is_staking_paused` to check whether the pool has paused staking.
 
 ## Pre-requisites
 
@@ -296,6 +305,8 @@ pub fn get_reward_fee_fraction(&self) -> RewardFeeFraction;
 /// Returns the staking public key
 pub fn get_staking_key(&self) -> Base58PublicKey;
 
+/// Returns true if the staking is paused
+pub fn is_staking_paused(&self) -> bool
 
 /*******************/
 /* Owner's methods */
@@ -314,6 +325,14 @@ pub fn update_reward_fee_fraction(&mut self, reward_fee_fraction: RewardFeeFract
 /// NOTE: This method allows the owner to call `vote(proposal_id: U64)` on any contract on
 /// behalf of this staking pool.
 pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) -> Promise;
+
+/// Owner's method.
+/// Pauses pool staking.
+pub fn pause_staking(&mut self);
+
+/// Owner's method.
+/// Resumes pool staking.
+pub fn resume_staking(&mut self);
 ```
 
 ## Migrating from an existing validator or contract
