@@ -5,27 +5,25 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use borsh::BorshSerialize;
 use lockup_contract::LockupStartInformation;
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::U128;
 use near_sdk::AccountId;
 use serde_json::json;
-use std::convert::TryInto;
 use utils::{call_lockup, new_root, ntoy, InitLockupArgs};
 
 #[quickcheck]
 fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
-    let (mut r, foundation, initial_owners_main_public_key, _) = basic_setup();
+    let (mut r, foundation, owner) = basic_setup();
 
     let args = InitLockupArgs {
+        owner_account_id: owner.account_id.clone(),
         lockup_duration: lockup_duration.into(),
         lockup_start_information: LockupStartInformation::TransfersEnabled {
             lockup_timestamp: lockup_timestamp.saturating_add(1).into(),
         },
-        initial_owners_main_public_key,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: "staking".into(),
     };
@@ -50,7 +48,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
 #[test]
 fn staking() {
     let lockup_amount = ntoy(1000);
-    let (mut r, foundation, initial_owners_main_public_key, owner) = basic_setup();
+    let (mut r, foundation, owner) = basic_setup();
 
     let staking_pool_whitelist_account_id = "staking-pool-whitelist".to_string();
     let staking_pool_account_id = "staking-pool".to_string();
@@ -92,11 +90,11 @@ fn staking() {
         .unwrap();
 
     let args = InitLockupArgs {
+        owner_account_id: owner.account_id.clone(),
         lockup_duration: 1000000000.into(),
         lockup_start_information: LockupStartInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
-        initial_owners_main_public_key,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
     };
@@ -105,27 +103,7 @@ fn staking() {
         .init_lockup(&mut r, &args, lockup_amount)
         .unwrap();
 
-    // Add new access key for calling staking methods
-    let mut owner_staking_account = foundation
-        .create_external(&mut r, "owner-staking".into(), ntoy(30))
-        .unwrap();
-    owner_staking_account.account_id = LOCKUP_ACCOUNT_ID.into();
-    let staking_access_key: Base58PublicKey = owner_staking_account
-        .signer()
-        .public_key
-        .try_to_vec()
-        .unwrap()
-        .try_into()
-        .unwrap();
-
-    owner
-        .function_call(
-            &mut r,
-            LOCKUP_ACCOUNT_ID,
-            "add_staking_access_key",
-            &serde_json::to_vec(&json!({"new_public_key": staking_access_key.clone()})).unwrap(),
-        )
-        .unwrap();
+    let owner_staking_account = owner.clone();
 
     let res: Option<AccountId> = call_lockup(&r, "get_staking_pool_account_id", "");
     assert_eq!(res, None);
@@ -291,30 +269,11 @@ fn staking() {
     assert_eq!(res, None);
 }
 
-fn basic_setup() -> (
-    RuntimeStandalone,
-    ExternalUser,
-    Base58PublicKey,
-    ExternalUser,
-) {
+fn basic_setup() -> (RuntimeStandalone, ExternalUser, ExternalUser) {
     let (mut r, foundation) = new_root("foundation".into());
 
-    let mut owner = foundation
+    let owner = foundation
         .create_external(&mut r, "owner".into(), ntoy(30))
         .unwrap();
-
-    owner.account_id = LOCKUP_ACCOUNT_ID.into();
-
-    (
-        r,
-        foundation,
-        owner
-            .signer()
-            .public_key
-            .try_to_vec()
-            .unwrap()
-            .try_into()
-            .unwrap(),
-        owner,
-    )
+    (r, foundation, owner)
 }
