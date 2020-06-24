@@ -7,7 +7,7 @@ impl LockupContract {
     /// Selects staking pool contract at the given account ID. The staking pool first has to be
     /// checked against the staking pool whitelist contract.
     pub fn select_staking_pool(&mut self, staking_pool_account_id: AccountId) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(
             env::is_valid_account_id(staking_pool_account_id.as_bytes()),
             "The staking pool account ID is invalid"
@@ -41,7 +41,7 @@ impl LockupContract {
     /// Unselects the current staking pool.
     /// It requires that there are no known deposits left on the currently selected staking pool.
     pub fn unselect_staking_pool(&mut self) {
-        assert_self();
+        self.assert_owner();
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
         // NOTE: This is best effort checks. There is still some balance might be left on the
@@ -70,7 +70,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     /// Deposits the given extra amount to the staking pool
     pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
@@ -116,7 +116,7 @@ impl LockupContract {
     /// transfer them back to this account for withdrawal. In order to know the actual liquid
     /// balance on the account, this contract needs to query the staking pool.
     pub fn refresh_staking_pool_balance(&mut self) -> Promise {
-        assert_self();
+        self.assert_owner();
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
@@ -153,7 +153,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     /// Withdraws the given amount from the staking pool
     pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
@@ -193,7 +193,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     /// Stakes the given extra amount at the staking pool
     pub fn stake(&mut self, amount: WrappedBalance) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
@@ -233,7 +233,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     /// Unstakes the given amount at the staking pool
     pub fn unstake(&mut self, amount: WrappedBalance) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(amount.0 > 0, "Amount should be positive");
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
@@ -274,7 +274,7 @@ impl LockupContract {
     /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
     /// are enabled, they can't be disabled anymore.
     pub fn check_transfers_vote(&mut self) -> Promise {
-        assert_self();
+        self.assert_owner();
         self.assert_transfers_disabled();
         self.assert_no_termination();
 
@@ -309,7 +309,7 @@ impl LockupContract {
     /// Transfers the given extra amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
     pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise {
-        assert_self();
+        self.assert_owner();
         assert!(amount.0 > 0, "Amount should be positive");
         assert!(
             env::is_valid_account_id(receiver_id.as_bytes()),
@@ -331,58 +331,11 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
-    /// Adds a new owner's staking access key with the given public key.
-    pub fn add_staking_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
-        assert_self();
-
-        env::log(b"Adding a new owner's staking access key");
-
-        let account_id = env::current_account_id();
-        Promise::new(account_id.clone()).add_access_key(
-            new_public_key.into(),
-            0,
-            account_id,
-            OWNER_STAKING_KEY_ALLOWED_METHODS.to_vec(),
-        )
-    }
-
-    /// OWNER'S METHOD
-    /// Adds a new owner's main access key with the given public key.
-    pub fn add_main_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
-        assert_self();
-
-        env::log(b"Adding a new owner's main access key");
-
-        let account_id = env::current_account_id();
-        Promise::new(account_id.clone()).add_access_key(
-            new_public_key.into(),
-            0,
-            account_id,
-            OWNER_MAIN_KEY_ALLOWED_METHODS.to_vec(),
-        )
-    }
-
-    /// OWNER'S METHOD
-    /// Removes an existing owner's access key with the given public key.
-    pub fn remove_access_key(&mut self, old_public_key: Base58PublicKey) -> Promise {
-        assert_self();
-
-        assert_ne!(
-            old_public_key.0,
-            env::signer_account_pk(),
-            "Can not remove owners public key that is used to sign this transaction"
-        );
-        env::log(b"Removing an existing owner's access key");
-
-        Promise::new(env::current_account_id()).delete_key(old_public_key.into())
-    }
-
-    /// OWNER'S METHOD
     /// Adds full access key with the given public key to the account once the contract is fully
     /// vested, lockup duration has expired and transfers are enabled.
     /// This will allow owner to use this account as a regular account and remove the contract.
     pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
-        assert_self();
+        self.assert_owner();
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
         self.assert_no_termination();

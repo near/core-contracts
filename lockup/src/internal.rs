@@ -97,4 +97,12 @@ impl LockupContract {
             env::panic(b"No NEAR Foundation account is specified in the contract");
         }
     }
+
+    pub fn assert_owner(&self) {
+        assert_eq!(
+            &env::predecessor_account_id(),
+            &self.owner_account_id,
+            "Can only be called by the owner"
+        )
+    }
 }
