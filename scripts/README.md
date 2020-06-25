@@ -17,7 +17,7 @@ export MASTER_ACCOUNT_ID=near
 ### Set network environment
 
 ```bash
-export MASTER_ACCOUNT_ID=testnet
+export NODE_ENV=testnet
 ```
 
 ### Deploy
