@@ -24,13 +24,13 @@ export NODE_ENV=testnet
 
 This will deploy the following contracts:
 
-- Voting contract at `vote.<MASTER_ACCOUNT_ID>`
-- Whitelist contract at `whitelist.<MASTER_ACCOUNT_ID>`
-- Staking pool factory contract at `pool.<MASTER_ACCOUNT_ID>`
+- Voting contract at `vote.<MASTER_ACCOUNT_ID>` with `15` NEAR tokens
+- Whitelist contract at `whitelist.<MASTER_ACCOUNT_ID>` with `15` NEAR tokens
+- Staking pool factory contract at `pool.<MASTER_ACCOUNT_ID>` with `50` NEAR tokens
 
 It will whitelist the staking pool factory account.
 
-It requires `80` NEAR tokens.
+It requires total `80` NEAR tokens + gas fees.
 
 ```bash
 ./deploy_core.sh
