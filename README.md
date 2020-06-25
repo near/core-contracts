@@ -1,15 +1,19 @@
-# Initial contracts
+# Core contracts
 
-- [Staking Pool / Delegation contract](./staking-pool/)
 - [Lockup / Vesting contract](./lockup/)
-- [Whitelist Contract](./whitelist/)
-- [Staking Pool Factory](./staking-pool-factory/)
 - [Multisig contract](./multisig/)
+- [Staking Pool / Delegation contract](./staking-pool/)
+- [Staking Pool Factory](./staking-pool-factory/)
+- [Voting Contract](./voting/)
+- [Whitelist Contract](./whitelist/)
 
 **Note**: observe the usage of the file `rust-toolchain` in the project root. This file contains toolchain information for nightly, while the `build.sh` scripts in respective contract subdirectories may override this with `cargo +stable`. Refer to the documentation on [the toolchain file and override precedence](https://github.com/rust-lang/rustup#the-toolchain-file). Keep in mind that the build scripts may use `stable` while `cargo test` may use nightly.
 
+## Building and deploying
 
-### Initializing Contracts
+See [scripts](./scripts/) folder for details.
+
+## Initializing Contracts with near-shell
 
 When setting up the contract creating the contract account, deploying the binary, and initializing the state must all be done as an atomic step.  For example, in our tests for the lockup contract we initialize it like this:
 
@@ -28,7 +32,7 @@ pub fn init_lockup(
             .function_call(
                 "new".into(),
                 serde_json::to_vec(args).unwrap(),
-                10000000000000000,
+                200000000000000,
                 0,
             )
             .sign(&self.signer);
@@ -65,7 +69,7 @@ const result = account.signAndSendTransaction(
     contractName,
     [
         nearAPI.transactions.createAccount(),
-        nearAPI.transactions.transfer("100000000000000000000000000"), 
+        nearAPI.transactions.transfer("100000000000000000000000000"),
         nearAPI.transactions.deployContract(fs.readFileSync("res/lockup_contract.wasm")),
         nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 100000000000000, "0"),
     ]);
