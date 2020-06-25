@@ -28,7 +28,7 @@ This will deploy the following contracts:
 - Whitelist contract at `whitelist.<MASTER_ACCOUNT_ID>`
 - Staking pool factory contract at `pool.<MASTER_ACCOUNT_ID>`
 
-It will whitelist the staking pool factory.
+It will whitelist the staking pool factory account.
 
 It requires `80` NEAR tokens.
 
