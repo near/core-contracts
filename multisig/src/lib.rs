@@ -175,7 +175,7 @@ impl MultiSigContract {
                             public_key.into(),
                             DEFAULT_ALLOWANCE,
                             env::current_account_id(),
-                            "add_request,delete_request,confirm"
+                            "add_request,add_request_and_confirm,delete_request,confirm"
                                 .to_string()
                                 .into_bytes(),
                         )
