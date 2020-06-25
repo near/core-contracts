@@ -31,7 +31,7 @@ This will deploy the following contracts:
 It requires `80` NEAR tokens.
 
 ```bash
-./deploy_all.sh
+./deploy_core.sh
 ```
 
 ## Notes
