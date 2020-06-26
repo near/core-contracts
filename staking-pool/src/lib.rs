@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
-use near_sdk::json_types::{Base58PublicKey, U128, U64};
+use near_sdk::json_types::{Base58PublicKey, U128};
 use near_sdk::{
     env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
 };
@@ -18,9 +18,6 @@ const STAKE_SHARE_PRICE_GUARANTEE_FUND: Balance = 1_000_000_000_000;
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
-
-/// Proposal ID for voting contract.
-pub type ProposalId = U64;
 
 /// The sha256 hash of the Account ID
 pub type AccountHash = Vec<u8>;
