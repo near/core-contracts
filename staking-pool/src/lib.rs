@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
-use near_sdk::json_types::{Base58PublicKey, U128, U64};
+use near_sdk::json_types::{Base58PublicKey, U128};
 use near_sdk::{
     env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
 };
@@ -18,9 +18,6 @@ const STAKE_SHARE_PRICE_GUARANTEE_FUND: Balance = 1_000_000_000_000;
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
-
-/// Proposal ID for voting contract.
-pub type ProposalId = U64;
 
 /// The sha256 hash of the Account ID
 pub type AccountHash = Vec<u8>;
@@ -137,8 +134,9 @@ impl RewardFeeFraction {
 /// Interface for a voting contract.
 #[ext_contract(ext_voting)]
 pub trait VoteContract {
-    /// Votes on the given proposal_id with the given stake.
-    fn vote(&mut self, proposal_id: ProposalId, stake: U128);
+    /// Method for validators to vote or withdraw the vote.
+    /// Votes for if `is_vote` is true, or withdraws the vote if `is_vote` is false.
+    fn vote(&mut self, is_vote: bool);
 }
 
 #[near_bindgen]
@@ -477,23 +475,15 @@ impl StakingContract {
     }
 
     /// Owner's method.
-    /// Vote on a given proposal with the given stake amount on a given voting contract account ID
-    /// on behalf of the pool.
-    /// NOTE: This method allows the owner to call `vote(proposal_id: U64, stake: U128)` on any
-    /// contract on behalf of this staking pool.
-    pub fn vote(
-        &mut self,
-        voting_account_id: AccountId,
-        proposal_id: ProposalId,
-        stake: U128,
-    ) -> Promise {
+    /// Calls `vote(is_vote)` on the given voting contract account ID on behalf of the pool.
+    pub fn vote(&mut self, voting_account_id: AccountId, is_vote: bool) -> Promise {
         self.assert_owner();
         assert!(
             env::is_valid_account_id(voting_account_id.as_bytes()),
             "Invalid voting account ID"
         );
 
-        ext_voting::vote(proposal_id, stake, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
+        ext_voting::vote(is_vote, &voting_account_id, NO_DEPOSIT, VOTE_GAS)
     }
 
     /// Owner's method.
