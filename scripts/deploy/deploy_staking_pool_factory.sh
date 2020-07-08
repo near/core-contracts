@@ -25,7 +25,7 @@ END
 
 echo $REPL | near repl
 
-echo "Whetelisting staking pool factory $ACCOUNT_ID on whitelist contract $WHITELIST_ACCOUNT_ID"
+echo "Whitelisting staking pool factory $ACCOUNT_ID on whitelist contract $WHITELIST_ACCOUNT_ID"
 
 REPL=$(cat <<-END
 const account = await near.account("$MASTER_ACCOUNT_ID");
