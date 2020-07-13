@@ -21,12 +21,12 @@ if [ -z "$AMOUNT" ]; then
   exit 1
 fi
 
-ACCOUNT_PREFIX=$1
+read -p "Enter account ID (prefix) to create: " ACCOUNT_PREFIX
 
-PREFIX_RE=$(grep -qE '^([a-z\d]+[\-_])*[a-z\d]+$' <<< "$ACCOUNT_PREFIX")
+PREFIX_RE=$(grep -qE '^([a-z0-9]+[-_])*[a-z0-9]+$' <<< "$ACCOUNT_PREFIX" && echo "OK" || echo "BAD")
 
-if [ -z "$PREFIX_RE" ]; then
-  ACCOUNT_ID="$1.${MASTER_ACCOUNT_ID}"
+if [ "$PREFIX_RE" = "OK" ]; then
+  ACCOUNT_ID="$ACCOUNT_PREFIX.${MASTER_ACCOUNT_ID}"
 else
   echo "Invalid new account prefix."
   exit 1
@@ -43,6 +43,26 @@ if [ ${#LOCKUP_ACCOUNT_ID} -gt "64" ]; then
   echo "The legnth of the lockup account is longer than 64 characters"
   exit 1
 fi
+
+PUBLIC_KEYS=()
+
+for i in {1..3}; do
+  while true; do
+    read -p "New account multisig public key in base58 format ($i/3): " KEY
+    REPL=$(echo "nearAPI.utils.key_pair.PublicKey.fromString('$KEY').data.length == 32")
+    RES=$(echo "$REPL" | near repl | grep -q "true" && echo "OK" || echo "BAD")
+    if [ "$RES" = "OK" ]; then
+      break;
+    else
+      echo "Invalid public key. Try again."
+    fi
+  done
+  PUBLIC_KEYS+=( $KEY )
+done
+
+read -p "Enter the amount of yocto-NEAR tokens to deposit on lockup contract: " LOCKUP_BALANCE
+
+
 
 #
 #if
