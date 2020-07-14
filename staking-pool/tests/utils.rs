@@ -11,8 +11,8 @@ use near_primitives::{
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
 use near_sdk::json_types::U128;
-use serde::de::DeserializeOwned;
-use serde_json::json;
+use near_sdk::serde::de::DeserializeOwned;
+use near_sdk::serde_json::{self, json};
 use staking_pool::RewardFeeFraction;
 
 pub const POOL_ACCOUNT_ID: &str = "pool";
