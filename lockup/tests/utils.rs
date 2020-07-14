@@ -38,9 +38,9 @@ pub fn public_key(byte_val: u8) -> Base58PublicKey {
 
 lazy_static::lazy_static! {
     static ref LOCKUP_WASM_BYTES: &'static [u8] = include_bytes!("../res/lockup_contract.wasm").as_ref();
-    static ref STAKING_POOL_WASM_BYTES: &'static [u8] = include_bytes!("res/staking_pool.wasm").as_ref();
+    static ref STAKING_POOL_WASM_BYTES: &'static [u8] = include_bytes!("../../staking-pool/res/staking_pool.wasm").as_ref();
     static ref FAKE_VOTING_WASM_BYTES: &'static [u8] = include_bytes!("res/fake_voting.wasm").as_ref();
-    static ref WHITELIST_WASM_BYTES: &'static [u8] = include_bytes!("res/whitelist.wasm").as_ref();
+    static ref WHITELIST_WASM_BYTES: &'static [u8] = include_bytes!("../../whitelist/res/whitelist.wasm").as_ref();
 }
 
 type TxResult = Result<ExecutionOutcome, ExecutionOutcome>;

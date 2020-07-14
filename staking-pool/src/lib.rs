@@ -4,13 +4,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Map;
 use near_sdk::json_types::{Base58PublicKey, U128};
 use near_sdk::{
-    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
+    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PromiseResult,
+    PublicKey,
 };
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
-/// The amount of gas given to complete `internal_after_stake` call.
-const VOTE_GAS: u64 = 200_000_000_000_000;
+/// The amount of gas given to complete `vote` call.
+const VOTE_GAS: u64 = 100_000_000_000_000;
+
+/// The amount of gas given to complete internal `on_stake_action` call.
+const ON_STAKE_ACTION_GAS: u64 = 20_000_000_000_000;
 
 /// The amount of yocto NEAR the contract dedicates to guarantee that the "share" price never
 /// decreases. It's used during rounding errors for share -> amount conversions.
@@ -137,6 +141,17 @@ pub trait VoteContract {
     /// Method for validators to vote or withdraw the vote.
     /// Votes for if `is_vote` is true, or withdraws the vote if `is_vote` is false.
     fn vote(&mut self, is_vote: bool);
+}
+
+/// Interface for the contract itself.
+#[ext_contract(ext_self)]
+pub trait SelfContract {
+    /// A callback to check the result of the staking action.
+    /// In case the stake amount is less than the minimum staking threshold, the staking action
+    /// fails, and the stake amount is not changed. This might lead to inconsistent state and the
+    /// follow withdraw calls might fail. To mitigate this, the contract will issue a new unstaking
+    /// action in case of the failure of the first staking action.
+    fn on_stake_action(&mut self);
 }
 
 #[near_bindgen]
@@ -389,7 +404,12 @@ impl StakingContract {
         // Stakes with the staking public key. If the public key is invalid the entire function
         // call will be rolled back.
         Promise::new(env::current_account_id())
-            .stake(self.total_staked_balance, self.stake_public_key.clone());
+            .stake(self.total_staked_balance, self.stake_public_key.clone())
+            .then(ext_self::on_stake_action(
+                &env::current_account_id(),
+                NO_DEPOSIT,
+                ON_STAKE_ACTION_GAS,
+            ));
     }
 
     /****************/
@@ -445,6 +465,34 @@ impl StakingContract {
     /// Returns true if the staking is paused
     pub fn is_staking_paused(&self) -> bool {
         self.paused
+    }
+
+    /*************/
+    /* Callbacks */
+    /*************/
+
+    pub fn on_stake_action(&mut self) {
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Can be called only as a callback"
+        );
+
+        assert_eq!(
+            env::promise_results_count(),
+            1,
+            "Contract expected a result on the callback"
+        );
+        let stake_action_succeeded = match env::promise_result(0) {
+            PromiseResult::Successful(_) => true,
+            _ => false,
+        };
+
+        // If the stake action failed and the current locked amount is positive, then the contract
+        // has to unstake.
+        if !stake_action_succeeded && env::account_locked_balance() > 0 {
+            Promise::new(env::current_account_id()).stake(0, self.stake_public_key.clone());
+        }
     }
 
     /*******************/
