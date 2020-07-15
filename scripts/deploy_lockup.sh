@@ -15,8 +15,8 @@ echo "Using NODE_ENV=${NODE_ENV}"
 echo "Using MASTER_ACCOUNT_ID=${MASTER_ACCOUNT_ID}"
 
 # Verifying master account exist
-AMOUNT=$(near state $MASTER_ACCOUNT_ID | grep "amount")
-if [ -z "$AMOUNT" ]; then
+RES=$(near state $MASTER_ACCOUNT_ID | grep "amount" && echo "OK" || echo "BAD")
+if [ "$RES" = "BAD" ]; then
   echo "Can't get state for ${MASTER_ACCOUNT_ID}. Maybe the account doesn't exist."
   exit 1
 fi
@@ -32,17 +32,24 @@ else
   exit 1
 fi
 
+
 LOCKUP_ACCOUNT_ID="lockup.$ACCOUNT_ID"
 
-echo "Multisig account ID is $ACCOUNT_ID"
+echo "Multi-sig account ID is $ACCOUNT_ID"
 echo "Lockup account ID is $LOCKUP_ACCOUNT_ID"
-
-LOCKUP_ACCOUNT_ID_LEN=${#LOCKUP_ACCOUNT_ID}
 
 if [ ${#LOCKUP_ACCOUNT_ID} -gt "64" ]; then
   echo "The legnth of the lockup account is longer than 64 characters"
   exit 1
 fi
+
+# Verifying the new account doesn't exist
+RES=$(near state $ACCOUNT_ID | grep "amount" && echo "BAD" || echo "OK")
+if [ "$RES" = "BAD" ]; then
+  echo "The account ${ACCOUNT_ID} already exist."
+  exit 1
+fi
+
 
 PUBLIC_KEYS=()
 
@@ -60,7 +67,16 @@ for i in {1..3}; do
   PUBLIC_KEYS+=( $KEY )
 done
 
-read -p "Enter the amount of yocto-NEAR tokens to deposit on lockup contract: " LOCKUP_BALANCE
+
+MINIMUM_BALANCE="35"
+while true; do
+  read -p "Enter the amount in NEAR tokens to deposit on lockup contract (min $MINIMUM_BALANCE): " LOCKUP_BALANCE
+  if [ "$LOCKUP_BALANCE" -ge "$MINIMUM_BALANCE" ]; then
+    break;
+  else
+    echo "The minimum balance has to be $MINIMUM_BALANCE. Try again."
+  fi
+done
 
 
 
