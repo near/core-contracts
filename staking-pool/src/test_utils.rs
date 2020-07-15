@@ -1,4 +1,4 @@
-use near_sdk::{AccountId, VMContext};
+use near_sdk::{AccountId, MockedBlockchain, PromiseResult, VMContext};
 use near_sdk::{Balance, BlockHeight, EpochHeight};
 
 pub fn staking() -> AccountId {
@@ -107,4 +107,21 @@ impl VMContextBuilder {
     pub fn finish(self) -> VMContext {
         self.context
     }
+}
+
+pub fn testing_env_with_promise_results(context: VMContext, promise_result: PromiseResult) {
+    let storage = near_sdk::env::take_blockchain_interface()
+        .unwrap()
+        .as_mut_mocked_blockchain()
+        .unwrap()
+        .take_storage();
+
+    near_sdk::env::set_blockchain_interface(Box::new(MockedBlockchain::new(
+        context,
+        Default::default(),
+        Default::default(),
+        vec![promise_result],
+        storage,
+        Default::default(),
+    )));
 }

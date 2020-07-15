@@ -1,16 +1,20 @@
 use std::convert::TryInto;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::Map;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
-    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PublicKey,
+    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PromiseResult,
+    PublicKey,
 };
-use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
-/// The amount of gas given to complete `internal_after_stake` call.
-const VOTE_GAS: u64 = 200_000_000_000_000;
+/// The amount of gas given to complete `vote` call.
+const VOTE_GAS: u64 = 100_000_000_000_000;
+
+/// The amount of gas given to complete internal `on_stake_action` call.
+const ON_STAKE_ACTION_GAS: u64 = 20_000_000_000_000;
 
 /// The amount of yocto NEAR the contract dedicates to guarantee that the "share" price never
 /// decreases. It's used during rounding errors for share -> amount conversions.
@@ -34,7 +38,7 @@ construct_uint! {
 mod test_utils;
 
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 /// Inner account data of a delegate.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
@@ -91,7 +95,7 @@ pub struct StakingContract {
     /// validator node.
     pub reward_fee_fraction: RewardFeeFraction,
     /// Persistent map from an account ID hash to the corresponding account.
-    pub accounts: Map<AccountHash, Account>,
+    pub accounts: UnorderedMap<AccountHash, Account>,
     /// Whether the staking is paused.
     /// When paused, the account unstakes everything (stakes 0) and doesn't restake.
     /// It doesn't affect the staking shares or reward distribution.
@@ -112,6 +116,7 @@ impl Default for StakingContract {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
 pub struct RewardFeeFraction {
     pub numerator: u32,
     pub denominator: u32,
@@ -137,6 +142,17 @@ pub trait VoteContract {
     /// Method for validators to vote or withdraw the vote.
     /// Votes for if `is_vote` is true, or withdraws the vote if `is_vote` is false.
     fn vote(&mut self, is_vote: bool);
+}
+
+/// Interface for the contract itself.
+#[ext_contract(ext_self)]
+pub trait SelfContract {
+    /// A callback to check the result of the staking action.
+    /// In case the stake amount is less than the minimum staking threshold, the staking action
+    /// fails, and the stake amount is not changed. This might lead to inconsistent state and the
+    /// follow withdraw calls might fail. To mitigate this, the contract will issue a new unstaking
+    /// action in case of the failure of the first staking action.
+    fn on_stake_action(&mut self);
 }
 
 #[near_bindgen]
@@ -174,7 +190,7 @@ impl StakingContract {
             total_staked_balance,
             total_stake_shares: NumStakeShares::from(total_staked_balance),
             reward_fee_fraction,
-            accounts: Map::new(b"u".to_vec()),
+            accounts: UnorderedMap::new(b"u".to_vec()),
             paused: false,
         };
         // Staking with the current pool to make sure the staking key is valid.
@@ -389,7 +405,12 @@ impl StakingContract {
         // Stakes with the staking public key. If the public key is invalid the entire function
         // call will be rolled back.
         Promise::new(env::current_account_id())
-            .stake(self.total_staked_balance, self.stake_public_key.clone());
+            .stake(self.total_staked_balance, self.stake_public_key.clone())
+            .then(ext_self::on_stake_action(
+                &env::current_account_id(),
+                NO_DEPOSIT,
+                ON_STAKE_ACTION_GAS,
+            ));
     }
 
     /****************/
@@ -445,6 +466,34 @@ impl StakingContract {
     /// Returns true if the staking is paused
     pub fn is_staking_paused(&self) -> bool {
         self.paused
+    }
+
+    /*************/
+    /* Callbacks */
+    /*************/
+
+    pub fn on_stake_action(&mut self) {
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Can be called only as a callback"
+        );
+
+        assert_eq!(
+            env::promise_results_count(),
+            1,
+            "Contract expected a result on the callback"
+        );
+        let stake_action_succeeded = match env::promise_result(0) {
+            PromiseResult::Successful(_) => true,
+            _ => false,
+        };
+
+        // If the stake action failed and the current locked amount is positive, then the contract
+        // has to unstake.
+        if !stake_action_succeeded && env::account_locked_balance() > 0 {
+            Promise::new(env::current_account_id()).stake(0, self.stake_public_key.clone());
+        }
     }
 
     /*******************/
@@ -662,7 +711,7 @@ impl StakingContract {
 mod tests {
     use std::convert::TryFrom;
 
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::{serde_json, testing_env, MockedBlockchain, VMContext};
 
     use crate::test_utils::*;
 
@@ -675,6 +724,7 @@ mod tests {
         pub locked_amount: Balance,
         last_total_staked_balance: Balance,
         last_total_stake_shares: Balance,
+        context: VMContext,
     }
 
     fn zero_fee() -> RewardFeeFraction {
@@ -690,10 +740,11 @@ mod tests {
             stake_public_key: String,
             reward_fee_fraction: RewardFeeFraction,
         ) -> Self {
-            testing_env!(VMContextBuilder::new()
+            let context = VMContextBuilder::new()
                 .current_account_id(owner.clone())
                 .account_balance(ntoy(30))
-                .finish());
+                .finish();
+            testing_env!(context.clone());
             let contract = StakingContract::new(
                 owner,
                 Base58PublicKey::try_from(stake_public_key).unwrap(),
@@ -708,6 +759,7 @@ mod tests {
                 locked_amount: 0,
                 last_total_staked_balance,
                 last_total_stake_shares,
+                context,
             }
         }
 
@@ -725,7 +777,7 @@ mod tests {
 
         pub fn update_context(&mut self, predecessor_account_id: String, deposit: Balance) {
             self.verify_stake_price_increase_guarantee();
-            testing_env!(VMContextBuilder::new()
+            self.context = VMContextBuilder::new()
                 .current_account_id(staking())
                 .predecessor_account_id(predecessor_account_id.clone())
                 .signer_account_id(predecessor_account_id)
@@ -733,7 +785,8 @@ mod tests {
                 .account_balance(self.amount)
                 .account_locked_balance(self.locked_amount)
                 .epoch_height(self.epoch_height)
-                .finish());
+                .finish();
+            testing_env!(self.context.clone());
             println!(
                 "Epoch: {}, Deposit: {}, amount: {}, locked_amount: {}",
                 self.epoch_height, deposit, self.amount, self.locked_amount
@@ -753,6 +806,36 @@ mod tests {
             self.epoch_height += num;
             self.locked_amount = (self.locked_amount * (100 + u128::from(num))) / 100;
         }
+    }
+
+    #[test]
+    fn test_restake_fail() {
+        let mut emulator = Emulator::new(
+            owner(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            zero_fee(),
+        );
+        emulator.update_context(bob(), 0);
+        emulator.contract.restake();
+        let receipts = env::created_receipts();
+        assert_eq!(receipts.len(), 2);
+        // Mocked Receipt fields are private, so can't check directly.
+        assert!(serde_json::to_string(&receipts[0])
+            .unwrap()
+            .contains("\"actions\":[{\"Stake\":{\"stake\":29999999999999000000000000,"));
+        assert!(serde_json::to_string(&receipts[1])
+            .unwrap()
+            .contains("\"method_name\":\"on_stake_action\""));
+        emulator.simulate_stake_call();
+
+        emulator.update_context(staking(), 0);
+        testing_env_with_promise_results(emulator.context.clone(), PromiseResult::Failed);
+        emulator.contract.on_stake_action();
+        let receipts = env::created_receipts();
+        assert_eq!(receipts.len(), 1);
+        assert!(serde_json::to_string(&receipts[0])
+            .unwrap()
+            .contains("\"actions\":[{\"Stake\":{\"stake\":0,"));
     }
 
     #[test]
