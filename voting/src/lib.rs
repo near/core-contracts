@@ -48,7 +48,7 @@ impl VotingContract {
         let cur_epoch_height = env::epoch_height();
         if cur_epoch_height != self.last_epoch_height {
             let votes = std::mem::take(&mut self.votes);
-            for (account_id, account_voted_stake) in votes.into_iter() {
+            for (account_id, account_voted_stake) in votes {
                 let account_current_stake = env::validator_stake(&account_id);
                 if account_current_stake > 0 {
                     self.total_voted_stake =
