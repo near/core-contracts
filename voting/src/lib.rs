@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::Map;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight};
-use near_sdk::json_types::U64;
+use std::collections::HashMap;
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -14,7 +14,7 @@ type WrappedTimestamp = U64;
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct VotingContract {
     /// How much each validator votes
-    votes: Map<AccountId, Balance>,
+    votes: HashMap<AccountId, Balance>,
     /// Total voted balance so far.
     total_voted_stake: Balance,
     /// When the voting ended. `None` means the poll is still open.
@@ -35,7 +35,7 @@ impl VotingContract {
     pub fn new() -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
         VotingContract {
-            votes: Map::new(b"a".to_vec()),
+            votes: HashMap::new(),
             total_voted_stake: 0,
             result: None,
             last_epoch_height: 0,
@@ -47,13 +47,13 @@ impl VotingContract {
         assert!(self.result.is_none(), "Voting has already ended");
         let cur_epoch_height = env::epoch_height();
         if cur_epoch_height != self.last_epoch_height {
-            for account_id in self.votes.keys().into_iter().collect::<Vec<_>>() {
+            let votes = std::mem::take(&mut self.votes);
+            for (account_id, account_voted_stake) in votes.into_iter() {
                 let account_current_stake = env::validator_stake(&account_id);
-                let account_voted_stake = self.votes.remove(&account_id).unwrap();
                 if account_current_stake > 0 {
                     self.total_voted_stake =
                         self.total_voted_stake + account_current_stake - account_voted_stake;
-                    self.votes.insert(&account_id, &account_current_stake);
+                    self.votes.insert(account_id, account_current_stake);
                 }
             }
             self.check_result();
@@ -97,7 +97,7 @@ impl VotingContract {
         );
         self.total_voted_stake = self.total_voted_stake + account_stake - voted_stake;
         if account_stake > 0 {
-            self.votes.insert(&account_id, &account_stake);
+            self.votes.insert(account_id, account_stake);
             self.check_result();
         }
     }
@@ -105,6 +105,26 @@ impl VotingContract {
     /// Get the timestamp of when the voting finishes. `None` means the voting hasn't ended yet.
     pub fn get_result(&self) -> Option<WrappedTimestamp> {
         self.result.clone()
+    }
+
+    /// Returns current a pair of `total_voted_stake` and the total stake.
+    /// Note: as a view method, it doesn't recompute the active stake. May need to call `ping` to
+    /// update the active stake.
+    pub fn get_total_voted_stake(&self) -> (U128, U128) {
+        (
+            self.total_voted_stake.into(),
+            env::validator_total_stake().into(),
+        )
+    }
+
+    /// Returns all active votes.
+    /// Note: as a view method, it doesn't recompute the active stake. May need to call `ping` to
+    /// update the active stake.
+    pub fn get_votes(&self) -> HashMap<AccountId, U128> {
+        self.votes
+            .iter()
+            .map(|(account_id, stake)| (account_id.clone(), (*stake).into()))
+            .collect()
     }
 }
 
@@ -180,24 +200,40 @@ mod tests {
             .map(|i| (format!("test{}", i), 10))
             .collect::<HashMap<_, _>>();
         testing_env!(
-                context,
+            context,
+            Default::default(),
+            Default::default(),
+            validators.clone()
+        );
+        let mut contract = VotingContract::new();
+
+        for i in 0..7 {
+            let mut context = get_context(format!("test{}", i));
+            testing_env!(
+                context.clone(),
                 Default::default(),
                 Default::default(),
                 validators.clone()
             );
-        let mut contract = VotingContract::new();
-
-
-        for i in 0..7 {
-            let context = get_context(format!("test{}", i));
+            contract.vote(true);
+            context.is_view = true;
             testing_env!(
                 context,
                 Default::default(),
                 Default::default(),
                 validators.clone()
             );
-            contract.vote(true);
-            assert_eq!(contract.votes.len(), i + 1);
+            assert_eq!(
+                contract.get_total_voted_stake(),
+                (U128::from(10 * (i + 1)), U128::from(100))
+            );
+            assert_eq!(
+                contract.get_votes(),
+                (0..=i)
+                    .map(|i| (format!("test{}", i), U128::from(10)))
+                    .collect::<HashMap<_, _>>()
+            );
+            assert_eq!(contract.votes.len() as u128, i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
             } else {
@@ -213,11 +249,11 @@ mod tests {
             .collect::<HashMap<_, _>>();
         let context = get_context("test0".to_string());
         testing_env!(
-                context,
-                Default::default(),
-                Default::default(),
-                validators.clone()
-            );
+            context,
+            Default::default(),
+            Default::default(),
+            validators.clone()
+        );
         let mut contract = VotingContract::new();
 
         for i in 0..7 {
@@ -229,7 +265,7 @@ mod tests {
                 validators.clone()
             );
             contract.vote(true);
-            assert_eq!(contract.votes.len(), i + 1);
+            assert_eq!(contract.votes.len() as u64, i + 1);
             if i < 6 {
                 assert!(contract.result.is_none());
             } else {
