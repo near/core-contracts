@@ -147,6 +147,11 @@ provide some guarantees. Read more about slashing in [Nightshade paper](https://
 
 ## Changelog
 
+### `0.2.1`
+
+- Update `vote` interface to match the voting contract interface.
+
+
 ### `0.2.0`
 
 - Added new owners methods: `pause_staking` and `resume_staking`. Allows pool owner to unstake everything from the pool for node maintenance.

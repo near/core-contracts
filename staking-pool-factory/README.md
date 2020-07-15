@@ -13,6 +13,12 @@ receipt that creates the staking pool. Once the receipt executes, the factory ch
 callback. If the staking pool was created successfully, the factory then whitelists the newly created staking pool.
 Otherwise, the factory returns the attached deposit back the users and returns `false`.
 
+## Changelog
+
+### `0.1.1`
+
+- Rebuild with the staking pool contract version of `0.2.1`.
+
 ## API
 
 ```rust
