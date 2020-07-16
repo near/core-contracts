@@ -41,9 +41,6 @@ pub enum MultiSigRequestAction {
         #[serde(skip_serializing_if = "Option::is_none")]
         permission: Option<FunctionCallPermission>,
     },
-    AddFullAccessKey {
-        public_key: Base58PublicKey,
-    },
     /// Deletes key, either one of the keys from multisig or key from another account.
     DeleteKey {
         public_key: Base58PublicKey,
@@ -202,11 +199,6 @@ impl MultiSigContract {
                         // wallet UI should warn user if receiver_id == env::current_account_id(), adding FAK will render multisig useless
                         promise.add_full_access_key(public_key.into())
                     }
-                }
-                MultiSigRequestAction::AddFullAccessKey {
-                    public_key,
-                } => {
-                    promise.add_full_access_key(public_key.into())
                 }
                 MultiSigRequestAction::DeleteKey { public_key } => {
                     promise.delete_key(public_key.into())
