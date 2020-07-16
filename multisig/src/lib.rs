@@ -188,10 +188,6 @@ impl MultiSigContract {
                     permission,
                 } => {
                     if let Some(permission) = permission {
-                        assert!(
-                            permission.receiver_id != env::current_account_id(),
-                            "Permissions for access key on this contract are set by default. Hint: remove permissions argument."
-                        );
                         promise.add_access_key(
                             public_key.into(),
                             permission
@@ -203,20 +199,8 @@ impl MultiSigContract {
                                 .method_names.join(",").into_bytes(),
                         )
                     } else {
-                        if receiver_id == env::current_account_id() {
-                            // permissions for this account default to multisig only
-                            promise.add_access_key(
-                                public_key.into(),
-                                DEFAULT_ALLOWANCE,
-                                env::current_account_id(),
-                                "add_request,add_request_and_confirm,delete_request,confirm"
-                                    .to_string()
-                                    .into_bytes(),
-                            )
-                        } else {
-                            // a full access key for another account
-                            promise.add_full_access_key(public_key.into())
-                        }
+                        // wallet UI should warn user if receiver_id == env::current_account_id(), adding FAK will render multisig useless
+                        promise.add_full_access_key(public_key.into())
                     }
                 }
                 MultiSigRequestAction::AddFullAccessKey {
