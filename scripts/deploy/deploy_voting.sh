@@ -7,6 +7,7 @@ echo "Deploying voting contract to $ACCOUNT_ID with 15 NEAR"
 
 
 REPL=$(cat <<-END
+await new Promise(resolve => setTimeout(resolve, 100));
 const fs = require('fs');
 const account = await near.account("$MASTER_ACCOUNT_ID");
 const contractName = "$ACCOUNT_ID";
