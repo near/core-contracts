@@ -21,21 +21,14 @@ There are number of different request types that multisig can confirm and execut
 ```rust
 /// Lowest level action that can be performed by the multisig contract.
 pub enum MultiSigRequestAction {
-    /// Create a new account.
-    CreateAccount,
-    /// Deploys contract to receiver's account. Can upgrade given contract as well.
-    DeployContract {
-        code: Base64VecU8,
-    },
     /// Transfers given amount to receiver.
     Transfer {
         amount: U128,
     },
-    /// Stake with this account.
-    Stake {
-        public_key: Base58PublicKey,
-        stake: U128,
-    },
+    /// Create a new account.
+    CreateAccount,
+    /// Deploys contract to receiver's account. Can upgrade given contract as well.
+    DeployContract { code: Base64VecU8 },
     /// Adds key, either new key for multisig or full access key to another account.
     AddKey {
         public_key: Base58PublicKey,
@@ -58,17 +51,34 @@ pub enum MultiSigRequestAction {
     SetNumConfirmations {
         num_confirmations: u32,
     },
+    /// Sets number of active requests (unconfirmed requests) per access key
+    /// Default is 12 unconfirmed requests at a time
+    /// The REQUEST_COOLDOWN for requests is 15min
+    /// Worst gas attack a malicious keyholder could do is 12 requests every 15min
+    SetActiveRequestsLimit {
+        active_requests_limit: u32,
+    },
 }
 
-/// Single transaction of the multisig request, batching actions for specific `receiver_id`.
-pub struct MultiSigRequestTransaction {
+/// Permission for an access key, scoped to receiving account and method names with allowance to add when key is added to accoount
+pub struct FunctionCallPermission {
+    allowance: Option<U128>,
+    receiver_id: AccountId,
+    method_names: Vec<String>,
+}
+
+// The request the user makes specifying the receiving account and actions they want to execute (1 tx)
+pub struct MultiSigRequest {
     receiver_id: AccountId,
     actions: Vec<MultiSigRequestAction>,
 }
 
-/// Multisig request, a group of transactions that will be executed in order.
-/// If one transaction execution fails the rest will be cancelled.
-pub type MultiSigRequest = Vec<MultiSigRequestTransaction>;
+// An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
+pub struct MultiSigRequestWithSigner {
+    request: MultiSigRequest,
+    signer_pk: PublicKey,
+    added_timestamp: u64,
+}
 ```
 
 ### Methods
@@ -76,6 +86,9 @@ pub type MultiSigRequest = Vec<MultiSigRequestTransaction>;
 ```rust
 /// Add request for multisig.
 pub fn add_request(&mut self, request: MultiSigRequest) -> RequestId {
+
+/// Add request for multisig and confirm right away with the key that is adding the request.
+pub fn add_request_and_confirm(&mut self, request: MultiSigRequest) -> RequestId {
 
 /// Remove given request and associated confirmations.
 pub fn delete_request(&mut self, request_id: RequestId) {
@@ -85,10 +98,21 @@ pub fn delete_request(&mut self, request_id: RequestId) {
 pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
 ```
 
+### View Methods
+```rust
+pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest
+pub fn get_num_requests_pk(&self, public_key: Base58PublicKey) -> u32
+pub fn list_request_ids(&self) -> Vec<RequestId>
+pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey>
+pub fn get_num_confirmations(&self) -> u32
+pub fn get_request_nonce(&self) -> u32
+```
+
 ### State machine
 
 Per each request, multisig maintains next state machine:
  - `add_request` adds new request with empty list of confirmations.
+ - `add_request_and_confirm` adds new request with 1 confirmation from the adding key.
  - `delete_request` deletes request and ends state machine.
  - `confirm` either adds new confirmation to list of confirmations or if there is more than `num_confirmations` confirmations with given call - switches to execution of request. `confirm` fails if request is already has been confirmed and already is executing which is determined if `confirmations` contain given `request_id`.
  - each step of execution, schedules a promise of given set of actions on `receiver_id` and puts a callback.

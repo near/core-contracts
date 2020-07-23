@@ -154,7 +154,7 @@ impl MultiSigContract {
 
     /// Remove given request and associated confirmations.
     pub fn delete_request(&mut self, request_id: RequestId) {
-        self.valid_request(request_id);
+        self.assert_valid_request(request_id);
         let request_with_signer = self.requests.get(&request_id).expect("No such request");
         assert_eq!(
             request_with_signer.signer_pk,
@@ -216,12 +216,12 @@ impl MultiSigContract {
                 ),
                 // the following methods must be a single action
                 MultiSigRequestAction::SetNumConfirmations { num_confirmations } => {
-                    self.one_action_only(receiver_id, num_actions);
+                    self.assert_one_action_only(receiver_id, num_actions);
                     self.num_confirmations = num_confirmations;
                     return PromiseOrValue::Value(true);
                 }
                 MultiSigRequestAction::SetActiveRequestsLimit { active_requests_limit } => {
-                    self.one_action_only(receiver_id, num_actions);
+                    self.assert_one_action_only(receiver_id, num_actions);
                     self.active_requests_limit = active_requests_limit;
                     return PromiseOrValue::Value(true);
                 }
@@ -233,7 +233,7 @@ impl MultiSigContract {
     /// Confirm given request with given signing key.
     /// If with this, there has been enough confirmation, a promise with request will be scheduled.
     pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
-        self.valid_request(request_id);
+        self.assert_valid_request(request_id);
         let mut confirmations = self.confirmations.get(&request_id).unwrap();
         assert!(
             !confirmations.contains(&env::signer_account_pk()),
@@ -251,7 +251,11 @@ impl MultiSigContract {
             PromiseOrValue::Value(true)
         }
     }
-    // Helper removes request, removes confirmations and reduces num_requests_pk - used in delete and confirm
+
+    /********************************
+    Helper methods
+    ********************************/
+    // removes request, removes confirmations and reduces num_requests_pk - used in delete and confirm
     fn remove_request(&mut self, request_id: RequestId) -> MultiSigRequest {
         // remove confirmations for this request
         self.confirmations.remove(&request_id);
@@ -268,12 +272,8 @@ impl MultiSigContract {
         // return request
         request_with_signer.request
     }
-    
-    /********************************
-    Modifiers (solidity term to prevent access to methods)
-    ********************************/
     // Prevents access to calling requests and make sure request_id is valid - used in delete and confirm
-    fn valid_request(&mut self, request_id: RequestId) {
+    fn assert_valid_request(&mut self, request_id: RequestId) {
         // request must come from key added to contract account
         assert_eq!(
             env::current_account_id(),
@@ -291,15 +291,14 @@ impl MultiSigContract {
             "Internal error: confirmations mismatch requests"
         );
     }
-    // This prevents a request from being bundled with other actions
-    fn one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
+    // Prevents a request from being bundled with other actions
+    fn assert_one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
         assert_eq!(receiver_id, env::current_account_id(), "This method only works when receiver_id is equal to current_account_id");
         assert_eq!(
             num_actions, 1,
             "This method should be a separate request"
         );
     }
-
     /********************************
     View methods
     ********************************/
@@ -307,8 +306,8 @@ impl MultiSigContract {
         (self.requests.get(&request_id).expect("No such request")).request
     }
 
-    pub fn get_num_requests_pk(&self, public_key: PublicKey) -> u32 {
-        self.num_requests_pk.get(&public_key).unwrap_or(0)
+    pub fn get_num_requests_pk(&self, public_key: Base58PublicKey) -> u32 {
+        self.num_requests_pk.get(&public_key.into()).unwrap_or(0)
     }
 
     pub fn list_request_ids(&self) -> Vec<RequestId> {
