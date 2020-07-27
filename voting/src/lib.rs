@@ -48,11 +48,11 @@ impl VotingContract {
         let cur_epoch_height = env::epoch_height();
         if cur_epoch_height != self.last_epoch_height {
             let votes = std::mem::take(&mut self.votes);
-            for (account_id, account_voted_stake) in votes {
+            self.total_voted_stake = 0;
+            for (account_id, _) in votes {
                 let account_current_stake = env::validator_stake(&account_id);
+                self.total_voted_stake += account_current_stake;
                 if account_current_stake > 0 {
-                    self.total_voted_stake =
-                        self.total_voted_stake + account_current_stake - account_voted_stake;
                     self.votes.insert(account_id, account_current_stake);
                 }
             }
@@ -326,5 +326,35 @@ mod tests {
         );
         contract.vote(false);
         assert!(contract.votes.is_empty());
+    }
+
+    #[test]
+    fn test_validator_kick_out() {
+        let mut validators = HashMap::from_iter(vec![
+            ("test1".to_string(), 40),
+            ("test2".to_string(), 10),
+            ("test3".to_string(), 10),
+        ]);
+        let context = get_context_with_epoch_height("test1".to_string(), 1);
+        testing_env!(
+            context,
+            Default::default(),
+            Default::default(),
+            validators.clone()
+        );
+
+        let mut contract = VotingContract::new();
+        contract.vote(true);
+        assert_eq!((contract.get_total_voted_stake().0).0, 40);
+        validators.remove(&"test1".to_string());
+        let context = get_context_with_epoch_height("test2".to_string(), 2);
+        testing_env!(
+            context,
+            Default::default(),
+            Default::default(),
+            validators.clone()
+        );
+        contract.ping();
+        assert_eq!((contract.get_total_voted_stake().0).0, 0);
     }
 }
