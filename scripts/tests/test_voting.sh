@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-nearup localnet --num-nodes 5 --docker-image "nearprotocol/nearcore:master" --overwrite
+# nearup localnet --num-nodes 5 --docker-image "nearprotocol/nearcore:master" --overwrite
+nearup localnet --num-nodes 5 --binary-path /Users/ekwork/code/nearcore/target/debug/ --overwrite
+
 export MASTER_ACCOUNT_ID=node0
 export NODE_ENV=local
 
@@ -75,21 +77,43 @@ echo "Current validators should be the $LAST_NODE nodes with the staking pools o
 near validators current
 near validators current | grep "Validators (total: $LAST_NODE,"
 
-echo "Checking votes (should be none)"
 VOTE_ACCOUNT_ID="vote.$MASTER_ACCOUNT_ID"
-near view $VOTE_ACCOUNT_ID get_total_voted_stake
-near view $VOTE_ACCOUNT_ID get_votes
 
-for (( i=1; i<=$NODES_TO_VOTE; i++ )); do
-  ACCOUNT_ID="node${i}"
-  echo "Voting through the pool to node $ACCOUNT_ID"
-  near call $ACCOUNT_ID vote "{\"voting_account_id\": \"$VOTE_ACCOUNT_ID\", \"is_vote\": true}" --accountId=$OWNER_ACCOUNT_ID --gas=200000000000000
-
-  echo "Checking votes again"
+check_votes() {
+  echo "Checking votes"
   near view $VOTE_ACCOUNT_ID get_total_voted_stake
   near view $VOTE_ACCOUNT_ID get_votes
   echo "Checking result"
   near view $VOTE_ACCOUNT_ID get_result
-done;
+
+}
+
+vote() {
+  ACCOUNT_ID="node${1}"
+  echo "Voting through the pool to node $ACCOUNT_ID"
+  near call $ACCOUNT_ID vote "{\"voting_account_id\": \"$VOTE_ACCOUNT_ID\", \"is_vote\": true}" --accountId=$OWNER_ACCOUNT_ID --gas=200000000000000
+
+  check_votes
+}
+
+vote 1
+vote 2
+
+echo "Going to kick out node1. And restake with node0"
+near call node1 pause_staking --accountId=$OWNER_ACCOUNT_ID
+sleep 1
+near stake node0 "$NODE0_PUBLIC_KEY" 999000000
+
+echo "Sleeping 3+ minutes (for 3+ epochs)"
+sleep 200
+
+echo "Current validators should be the 3 nodes with the staking pools and node0"
+near validators current
+near validators current | grep "Validators (total: 4,"
+
+check_votes
+
+vote 3
+vote 4
 
 stop_nodes
