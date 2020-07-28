@@ -8,6 +8,7 @@ echo "Deploying staking pool factory contract to $ACCOUNT_ID with 50 NEAR"
 
 
 REPL=$(cat <<-END
+await new Promise(resolve => setTimeout(resolve, 100));
 const fs = require('fs');
 const account = await near.account("$MASTER_ACCOUNT_ID");
 const contractName = "$ACCOUNT_ID";
@@ -28,6 +29,7 @@ echo $REPL | near repl
 echo "Whitelisting staking pool factory $ACCOUNT_ID on whitelist contract $WHITELIST_ACCOUNT_ID"
 
 REPL=$(cat <<-END
+await new Promise(resolve => setTimeout(resolve, 100));
 const account = await near.account("$MASTER_ACCOUNT_ID");
 const contractName = "$WHITELIST_ACCOUNT_ID";
 const args = {factory_account_id: "$ACCOUNT_ID"};
