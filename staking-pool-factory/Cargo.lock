@@ -1504,7 +1504,7 @@ checksum = "dba1a27d3efae4351c8051072d619e3ade2820635c3958d826bfea39d59b54c8"
 
 [[package]]
 name = "staking-pool-factory"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "borsh",
  "env_logger",

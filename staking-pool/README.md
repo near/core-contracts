@@ -147,6 +147,15 @@ provide some guarantees. Read more about slashing in [Nightshade paper](https://
 
 ## Changelog
 
+### `0.3.0`
+
+- Inner implementation has changed from using the hash of the account ID to use unmodified account ID as a key.
+- Added 3 new view methods:
+    - `get_account` - Returns human readable representation of the account for the given account ID
+    - `get_number_of_accounts` - returns the total number of accounts that have positive balance in this staking pool.
+    - `get_accounts` - Returns up to the limit of accounts starting from the given offset
+
+
 ### `0.2.1`
 
 - Update `vote` interface to match the voting contract interface.
@@ -156,6 +165,7 @@ provide some guarantees. Read more about slashing in [Nightshade paper](https://
 
 - Added new owners methods: `pause_staking` and `resume_staking`. Allows pool owner to unstake everything from the pool for node maintenance.
 - Added a new view method `is_staking_paused` to check whether the pool has paused staking.
+
 
 ## Pre-requisites
 
@@ -312,6 +322,15 @@ pub fn get_staking_key(&self) -> Base58PublicKey;
 
 /// Returns true if the staking is paused
 pub fn is_staking_paused(&self) -> bool
+
+/// Returns human readable representation of the account for the given account ID.
+pub fn get_account(&self, account_id: AccountId) -> HumanReadableAccount;
+
+/// Returns the number of accounts that have positive balance on this staking pool.
+pub fn get_number_of_accounts(&self) -> u64;
+
+/// Returns the list of accounts
+pub fn get_accounts(&self, from_index: u64, limit: u64) -> Vec<HumanReadableAccount>;
 
 /*******************/
 /* Owner's methods */
