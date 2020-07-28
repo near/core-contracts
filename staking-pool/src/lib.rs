@@ -950,6 +950,8 @@ mod tests {
                 + ntoy(10_000)
                 + ntoy((10_000u128 * 90_000 + n_locked_amount / 2) / n_locked_amount)
         );
+
+        assert_eq!(emulator.contract.get_number_of_accounts(), 2);
     }
 
     #[test]
@@ -1044,6 +1046,13 @@ mod tests {
             emulator.contract.get_account_staked_balance(bob()).0,
             ntoy(1_030_000)
         );
+
+        // Checking accounts view methods
+        // Should be 2, because the pool has 0 fee.
+        assert_eq!(emulator.contract.get_number_of_accounts(), 2);
+        let accounts = emulator.contract.get_accounts(0, 10);
+        assert_eq!(accounts[0].account_id, alice());
+        assert_eq!(accounts[1].account_id, bob());
     }
 
     #[test]
