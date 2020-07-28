@@ -201,7 +201,18 @@ impl MultiSigContract {
                     }
                 }
                 MultiSigRequestAction::DeleteKey { public_key } => {
-                    promise.delete_key(public_key.into())
+                    let pk:PublicKey = public_key.into();
+                    // delete outstanding requests by public_key
+                    let request_ids = self.list_request_ids();
+                    for request_id in request_ids {
+                        let request_with_signer = self.requests.get(&request_id).expect("No such request");
+                        if request_with_signer.signer_pk == pk {
+                            self.remove_request(request_id);
+                        }
+                    }
+                    // remove num_requests_pk entry for public_key
+                    self.num_requests_pk.remove(&pk);
+                    promise.delete_key(pk)
                 }
                 MultiSigRequestAction::FunctionCall {
                     method_name,
@@ -255,7 +266,7 @@ impl MultiSigContract {
     /********************************
     Helper methods
     ********************************/
-    // removes request, removes confirmations and reduces num_requests_pk - used in delete and confirm
+    // removes request, removes confirmations and reduces num_requests_pk - used in delete, delete_key, and confirm
     fn remove_request(&mut self, request_id: RequestId) -> MultiSigRequest {
         // remove confirmations for this request
         self.confirmations.remove(&request_id);
@@ -548,6 +559,62 @@ mod tests {
         c.confirm(request_id);
         // TODO: confirm that funds were transferred out via promise.
         assert_eq!(c.requests.len(), 0);
+    }
+
+    #[test]
+    fn add_key_delete_key_storage_cleared() {
+        let amount = 1_000;
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
+                .unwrap()
+                .into(),
+            amount
+        ));
+        let mut c = MultiSigContract::new(1);
+        let new_key:Base58PublicKey = Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
+            .unwrap()
+            .into();
+        let request = MultiSigRequest {
+            receiver_id: bob(),
+            actions: vec![MultiSigRequestAction::AddKey {
+                public_key: new_key.clone(),
+                permission: None
+            }],
+        };
+        // make request
+        c.add_request_and_confirm(request.clone());
+        // should be empty now
+        assert_eq!(c.requests.len(), 0);
+        // switch accounts
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
+                .unwrap()
+                .into(),
+            amount
+        ));
+        let request2 = MultiSigRequest {
+            receiver_id: bob(),
+            actions: vec![MultiSigRequestAction::Transfer {
+                amount: amount.into(),
+            }],
+        };
+        // make request but don't confirm
+        c.add_request(request2.clone());
+        // should have 1 request now
+        assert_eq!(c.requests.len(), 1);
+        assert_eq!(c.get_num_requests_pk(new_key.clone()), 1);
+        // self delete key
+        let request3 = MultiSigRequest {
+            receiver_id: bob(),
+            actions: vec![MultiSigRequestAction::DeleteKey {
+                public_key: new_key.clone(),
+            }],
+        };
+        // make request and confirm
+        c.add_request_and_confirm(request3.clone());
+        // should be empty now
+        assert_eq!(c.requests.len(), 0);
+        assert_eq!(c.get_num_requests_pk(new_key.clone()), 0);
     }
 
     #[test]
