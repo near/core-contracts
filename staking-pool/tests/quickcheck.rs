@@ -19,7 +19,7 @@ fn check_invariants(_runtime: &mut RuntimeStandalone, _users: &[AccountId]) {}
 
 #[quickcheck]
 fn qc_should_stake(initial_balance: Balance) -> bool {
-    let (mut runtime, root) = init_pool(ntoy(23));
+    let (mut runtime, root) = init_pool(ntoy(30));
     let bob = root
         .create_external(&mut runtime, "bob".into(), ntoy(100))
         .unwrap();

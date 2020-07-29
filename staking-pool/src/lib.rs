@@ -23,9 +23,6 @@ const STAKE_SHARE_PRICE_GUARANTEE_FUND: Balance = 1_000_000_000_000;
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
 
-/// The sha256 hash of the Account ID
-pub type AccountHash = Vec<u8>;
-
 /// A type to distinguish between a balance and "stake" shares for better readability.
 pub type NumStakeShares = Balance;
 
@@ -54,6 +51,19 @@ pub struct Account {
     /// The minimum epoch height when the withdrawn is allowed.
     /// This changes after unstaking action, because the amount is still locked for 3 epochs.
     pub unstaked_available_epoch_height: EpochHeight,
+}
+
+/// Represents an account structure readable by humans.
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct HumanReadableAccount {
+    pub account_id: AccountId,
+    /// The unstaked balance that can be withdrawn or staked.
+    pub unstaked_balance: U128,
+    /// The amount balance staked at the current "stake" share price.
+    pub staked_balance: U128,
+    /// Whether the unstaked balance is available for withdrawal now.
+    pub can_withdraw: bool,
 }
 
 impl Default for Account {
@@ -94,19 +104,14 @@ pub struct StakingContract {
     /// The fraction of the reward that goes to the owner of the staking pool for running the
     /// validator node.
     pub reward_fee_fraction: RewardFeeFraction,
-    /// Persistent map from an account ID hash to the corresponding account.
-    pub accounts: UnorderedMap<AccountHash, Account>,
+    /// Persistent map from an account ID to the corresponding account.
+    pub accounts: UnorderedMap<AccountId, Account>,
     /// Whether the staking is paused.
     /// When paused, the account unstakes everything (stakes 0) and doesn't restake.
     /// It doesn't affect the staking shares or reward distribution.
     /// Pausing is useful for node maintenance. Only the owner can pause and resume staking.
     /// The contract is not paused by default.
     pub paused: bool,
-}
-
-/// Returns sha256 hash of the given account ID.
-fn hash_account_id(account_id: &AccountId) -> Vec<u8> {
-    env::sha256(account_id.as_bytes())
 }
 
 impl Default for StakingContract {
@@ -211,10 +216,10 @@ impl StakingContract {
         let need_to_restake = self.internal_ping();
 
         let account_id = env::predecessor_account_id();
-        let mut account = self.get_account(&account_id);
+        let mut account = self.get_inner_account(&account_id);
         let amount = env::attached_deposit();
         account.unstaked += amount;
-        self.save_account(&account_id, &account);
+        self.save_inner_account(&account_id, &account);
         self.last_total_balance += amount;
 
         env::log(
@@ -239,7 +244,7 @@ impl StakingContract {
         assert!(amount > 0, "Withdrawal amount should be positive");
 
         let account_id = env::predecessor_account_id();
-        let mut account = self.get_account(&account_id);
+        let mut account = self.get_inner_account(&account_id);
         assert!(
             account.unstaked >= amount,
             "Not enough unstaked balance to withdraw"
@@ -249,7 +254,7 @@ impl StakingContract {
             "The unstaked balance is not yet available due to unstaking delay"
         );
         account.unstaked -= amount;
-        self.save_account(&account_id, &account);
+        self.save_inner_account(&account_id, &account);
 
         env::log(
             format!(
@@ -277,7 +282,7 @@ impl StakingContract {
         assert!(amount > 0, "Staking amount should be positive");
 
         let account_id = env::predecessor_account_id();
-        let mut account = self.get_account(&account_id);
+        let mut account = self.get_inner_account(&account_id);
 
         // Calculate the number of "stake" shares that the account will receive for staking the
         // given amount.
@@ -301,7 +306,7 @@ impl StakingContract {
         );
         account.unstaked -= charge_amount;
         account.stake_shares += num_shares;
-        self.save_account(&account_id, &account);
+        self.save_inner_account(&account_id, &account);
 
         // The staked amount that will be added to the total to guarantee the "stake" share price
         // never decreases. The difference between `stake_amount` and `charge_amount` is paid
@@ -340,7 +345,7 @@ impl StakingContract {
         assert!(amount > 0, "Unstaking amount should be positive");
 
         let account_id = env::predecessor_account_id();
-        let mut account = self.get_account(&account_id);
+        let mut account = self.get_inner_account(&account_id);
 
         assert!(
             self.total_staked_balance > 0,
@@ -369,7 +374,7 @@ impl StakingContract {
         account.stake_shares -= num_shares;
         account.unstaked += receive_amount;
         account.unstaked_available_epoch_height = env::epoch_height() + NUM_EPOCHS_TO_UNLOCK;
-        self.save_account(&account_id, &account);
+        self.save_inner_account(&account_id, &account);
 
         // The amount tokens that will be unstaked from the total to guarantee the "stake" share
         // price never decreases. The difference between `receive_amount` and `unstake_amount` is
@@ -419,28 +424,25 @@ impl StakingContract {
 
     /// Returns the unstaked balance of the given account.
     pub fn get_account_unstaked_balance(&self, account_id: AccountId) -> U128 {
-        self.get_account(&account_id).unstaked.into()
+        self.get_account(account_id).unstaked_balance
     }
 
     /// Returns the staked balance of the given account.
     /// NOTE: This is computed from the amount of "stake" shares the given account has and the
     /// current amount of total staked balance and total stake shares on the account.
     pub fn get_account_staked_balance(&self, account_id: AccountId) -> U128 {
-        self.staked_amount_from_num_shares_rounded_down(self.get_account(&account_id).stake_shares)
-            .into()
+        self.get_account(account_id).staked_balance
     }
 
     /// Returns the total balance of the given account (including staked and unstaked balances).
     pub fn get_account_total_balance(&self, account_id: AccountId) -> U128 {
-        (self.get_account(&account_id).unstaked + self.get_account_staked_balance(account_id).0)
-            .into()
+        let account = self.get_account(account_id);
+        (account.unstaked_balance.0 + account.staked_balance.0).into()
     }
 
     /// Returns `true` if the given account can withdraw tokens in the current epoch.
     pub fn is_account_unstaked_balance_available(&self, account_id: AccountId) -> bool {
-        self.get_account(&account_id)
-            .unstaked_available_epoch_height
-            <= env::epoch_height()
+        self.get_account(account_id).can_withdraw
     }
 
     /// Returns the total staking balance.
@@ -466,6 +468,33 @@ impl StakingContract {
     /// Returns true if the staking is paused
     pub fn is_staking_paused(&self) -> bool {
         self.paused
+    }
+
+    /// Returns human readable representation of the account for the given account ID.
+    pub fn get_account(&self, account_id: AccountId) -> HumanReadableAccount {
+        let account = self.get_inner_account(&account_id);
+        HumanReadableAccount {
+            account_id,
+            unstaked_balance: account.unstaked.into(),
+            staked_balance: self
+                .staked_amount_from_num_shares_rounded_down(account.stake_shares)
+                .into(),
+            can_withdraw: account.unstaked_available_epoch_height <= env::epoch_height(),
+        }
+    }
+
+    /// Returns the number of accounts that have positive balance on this staking pool.
+    pub fn get_number_of_accounts(&self) -> u64 {
+        self.accounts.len()
+    }
+
+    /// Returns the list of accounts
+    pub fn get_accounts(&self, from_index: u64, limit: u64) -> Vec<HumanReadableAccount> {
+        let keys = self.accounts.keys_as_vector();
+
+        (from_index..std::cmp::min(from_index + limit, keys.len()))
+            .map(|index| self.get_account(keys.get(index).unwrap()))
+            .collect()
     }
 
     /*************/
@@ -604,9 +633,9 @@ impl StakingContract {
             if num_shares > 0 {
                 // Updating owner's inner account
                 let owner_id = self.owner_id.clone();
-                let mut account = self.get_account(&owner_id);
+                let mut account = self.get_inner_account(&owner_id);
                 account.stake_shares += num_shares;
-                self.save_account(&owner_id, &account);
+                self.save_inner_account(&owner_id, &account);
                 // Increasing the total amount of "stake" shares.
                 self.total_stake_shares += num_shares;
             }
@@ -690,19 +719,17 @@ impl StakingContract {
     }
 
     /// Inner method to get the given account or a new default value account.
-    fn get_account(&self, account_id: &AccountId) -> Account {
-        self.accounts
-            .get(&hash_account_id(account_id))
-            .unwrap_or_default()
+    fn get_inner_account(&self, account_id: &AccountId) -> Account {
+        self.accounts.get(account_id).unwrap_or_default()
     }
 
     /// Inner method to save the given account for a given account ID.
     /// If the account balances are 0, the account is deleted instead to release storage.
-    fn save_account(&mut self, account_id: &AccountId, account: &Account) {
+    fn save_inner_account(&mut self, account_id: &AccountId, account: &Account) {
         if account.unstaked > 0 || account.stake_shares > 0 {
-            self.accounts.insert(&hash_account_id(account_id), &account);
+            self.accounts.insert(account_id, &account);
         } else {
-            self.accounts.remove(&hash_account_id(account_id));
+            self.accounts.remove(account_id);
         }
     }
 }
@@ -923,6 +950,8 @@ mod tests {
                 + ntoy(10_000)
                 + ntoy((10_000u128 * 90_000 + n_locked_amount / 2) / n_locked_amount)
         );
+
+        assert_eq!(emulator.contract.get_number_of_accounts(), 2);
     }
 
     #[test]
@@ -964,6 +993,12 @@ mod tests {
             emulator.contract.get_account_unstaked_balance(bob()).0,
             deposit_amount / 2
         );
+        let acc = emulator.contract.get_account(bob());
+        assert_eq!(acc.account_id, bob());
+        assert_eq_in_near!(acc.unstaked_balance.0, deposit_amount / 2);
+        assert_eq_in_near!(acc.staked_balance.0, deposit_amount / 2 + ntoy(10));
+        assert!(!acc.can_withdraw);
+
         assert!(!emulator
             .contract
             .is_account_unstaked_balance_available(bob()),);
@@ -1011,6 +1046,25 @@ mod tests {
             emulator.contract.get_account_staked_balance(bob()).0,
             ntoy(1_030_000)
         );
+
+        // Checking accounts view methods
+        // Should be 2, because the pool has 0 fee.
+        assert_eq!(emulator.contract.get_number_of_accounts(), 2);
+        let accounts = emulator.contract.get_accounts(0, 10);
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].account_id, alice());
+        assert_eq!(accounts[1].account_id, bob());
+
+        let accounts = emulator.contract.get_accounts(1, 10);
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_id, bob());
+
+        let accounts = emulator.contract.get_accounts(0, 1);
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_id, alice());
+
+        let accounts = emulator.contract.get_accounts(2, 10);
+        assert_eq!(accounts.len(), 0);
     }
 
     #[test]
