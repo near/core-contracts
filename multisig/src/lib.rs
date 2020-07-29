@@ -203,12 +203,9 @@ impl MultiSigContract {
                 MultiSigRequestAction::DeleteKey { public_key } => {
                     let pk:PublicKey = public_key.into();
                     // delete outstanding requests by public_key
-                    let request_ids = self.list_request_ids();
+                    let request_ids:Vec<u32> = self.requests.iter().filter(|(_k, r)| r.signer_pk == pk).map(|(k, _r)| k).collect();
                     for request_id in request_ids {
-                        let request_with_signer = self.requests.get(&request_id).expect("No such request");
-                        if request_with_signer.signer_pk == pk {
-                            self.remove_request(request_id);
-                        }
+                        self.remove_request(request_id);
                     }
                     // remove num_requests_pk entry for public_key
                     self.num_requests_pk.remove(&pk);
