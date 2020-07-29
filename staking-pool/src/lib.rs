@@ -1051,8 +1051,20 @@ mod tests {
         // Should be 2, because the pool has 0 fee.
         assert_eq!(emulator.contract.get_number_of_accounts(), 2);
         let accounts = emulator.contract.get_accounts(0, 10);
+        assert_eq!(accounts.len(), 2);
         assert_eq!(accounts[0].account_id, alice());
         assert_eq!(accounts[1].account_id, bob());
+
+        let accounts = emulator.contract.get_accounts(1, 10);
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_id, bob());
+
+        let accounts = emulator.contract.get_accounts(0, 1);
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_id, alice());
+
+        let accounts = emulator.contract.get_accounts(2, 10);
+        assert_eq!(accounts.len(), 0);
     }
 
     #[test]
