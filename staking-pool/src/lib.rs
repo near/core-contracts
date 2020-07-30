@@ -217,7 +217,7 @@ impl StakingContract {
     pub fn deposit(&mut self) {
         let need_to_restake = self.internal_ping();
 
-        let _amount = self.internal_deposit();
+        self.internal_deposit();
 
         if need_to_restake {
             self.internal_restake();
@@ -227,7 +227,7 @@ impl StakingContract {
     /// Deposits the attached amount into the inner account of the predecessor and stakes it.
     #[payable]
     pub fn deposit_and_stake(&mut self) {
-        let _need_to_restake = self.internal_ping();
+        self.internal_ping();
 
         let amount = self.internal_deposit();
         self.internal_stake(amount);
@@ -265,7 +265,7 @@ impl StakingContract {
     /// Stakes all available unstaked balance from the inner account of the predecessor.
     pub fn stake_all(&mut self) {
         // Stake action always restakes
-        let _need_to_restake = self.internal_ping();
+        self.internal_ping();
 
         let account_id = env::predecessor_account_id();
         let account = self.internal_get_account(&account_id);
@@ -278,7 +278,7 @@ impl StakingContract {
     /// The inner account should have enough unstaked balance.
     pub fn stake(&mut self, amount: U128) {
         // Stake action always restakes
-        let _need_to_restake = self.internal_ping();
+        self.internal_ping();
 
         let amount: Balance = amount.into();
         self.internal_stake(amount);
@@ -290,7 +290,7 @@ impl StakingContract {
     /// The new total unstaked balance will be available for withdrawal in four epochs.
     pub fn unstake_all(&mut self) {
         // Unstake action always restakes
-        let _need_to_restake = self.internal_ping();
+        self.internal_ping();
 
         let account_id = env::predecessor_account_id();
         let account = self.internal_get_account(&account_id);
@@ -305,7 +305,7 @@ impl StakingContract {
     /// The new total unstaked balance will be available for withdrawal in four epochs.
     pub fn unstake(&mut self, amount: U128) {
         // Unstake action always restakes
-        let _need_to_restake = self.internal_ping();
+        self.internal_ping();
 
         let amount: Balance = amount.into();
         self.inner_unstake(amount);
