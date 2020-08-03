@@ -147,6 +147,25 @@ provide some guarantees. Read more about slashing in [Nightshade paper](https://
 
 ## Changelog
 
+### `0.4.0`
+
+- Internal refactoring. Moving internal methods to `internal.rs`
+- Added 4 new delegator methods:
+    - `deposit_and_stake` - to deposit and stake attached balance in one call.
+    - `stake_all` - to stake all unstaked balance.
+    - `unstake_all` - to unstake all staked balance.
+    - `withdraw_all` - to withdraw all unstaked balance.
+
+
+### `0.3.0`
+
+- Inner implementation has changed from using the hash of the account ID to use unmodified account ID as a key.
+- Added 3 new view methods:
+    - `get_account` - Returns human readable representation of the account for the given account ID
+    - `get_number_of_accounts` - returns the total number of accounts that have positive balance in this staking pool.
+    - `get_accounts` - Returns up to the limit of accounts starting from the given offset
+
+
 ### `0.2.1`
 
 - Update `vote` interface to match the voting contract interface.
@@ -156,6 +175,7 @@ provide some guarantees. Read more about slashing in [Nightshade paper](https://
 
 - Added new owners methods: `pause_staking` and `resume_staking`. Allows pool owner to unstake everything from the pool for node maintenance.
 - Added a new view method `is_staking_paused` to check whether the pool has paused staking.
+
 
 ## Pre-requisites
 
@@ -267,18 +287,33 @@ pub fn ping(&mut self);
 #[payable]
 pub fn deposit(&mut self);
 
+ /// Deposits the attached amount into the inner account of the predecessor and stakes it.
+#[payable]
+pub fn deposit_and_stake(&mut self);
+
 /// Withdraws the non staked balance for given account.
-/// It's only allowed if the `unstake` action was not performed in the recent 3 epochs.
+/// It's only allowed if the `unstake` action was not performed in the four most recent epochs.
 pub fn withdraw(&mut self, amount: U128);
+
+/// Withdraws the entire unstaked balance from the predecessor account.
+/// It's only allowed if the `unstake` action was not performed in the four most recent epochs.
+pub fn withdraw_all(&mut self);
 
 /// Stakes the given amount from the inner account of the predecessor.
 /// The inner account should have enough unstaked balance.
 pub fn stake(&mut self, amount: U128);
 
+/// Stakes all available unstaked balance from the inner account of the predecessor.
+pub fn stake_all(&mut self);
+
 /// Unstakes the given amount from the inner account of the predecessor.
 /// The inner account should have enough staked balance.
-/// The new total unstaked balance will be available for withdrawal in 3 epochs.
+/// The new total unstaked balance will be available for withdrawal in four epochs.
 pub fn unstake(&mut self, amount: U128);
+
+/// Unstakes all staked balance from the inner account of the predecessor.
+/// The new total unstaked balance will be available for withdrawal in four epochs.
+pub fn unstake_all(&mut self);
 
 /****************/
 /* View methods */
@@ -311,7 +346,16 @@ pub fn get_reward_fee_fraction(&self) -> RewardFeeFraction;
 pub fn get_staking_key(&self) -> Base58PublicKey;
 
 /// Returns true if the staking is paused
-pub fn is_staking_paused(&self) -> bool
+pub fn is_staking_paused(&self) -> bool;
+
+/// Returns human readable representation of the account for the given account ID.
+pub fn get_account(&self, account_id: AccountId) -> HumanReadableAccount;
+
+/// Returns the number of accounts that have positive balance on this staking pool.
+pub fn get_number_of_accounts(&self) -> u64;
+
+/// Returns the list of accounts
+pub fn get_accounts(&self, from_index: u64, limit: u64) -> Vec<HumanReadableAccount>;
 
 /*******************/
 /* Owner's methods */

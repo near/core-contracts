@@ -1,6 +1,6 @@
 [package]
 name = "staking-pool-factory"
-version = "0.1.2"
+version = "0.1.4"
 authors = ["Near Inc <hello@near.org>"]
 edition = "2018"
 publish = false
