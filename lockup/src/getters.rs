@@ -29,7 +29,7 @@ impl LockupContract {
 
     /// Returns the current termination status or `None` in case of no termination.
     pub fn get_termination_status(&self) -> Option<TerminationStatus> {
-        if let VestingInformation::Terminating(termination_information) = &self.vesting_information
+        if let ReleaseInformation::Terminating(termination_information) = &self.release_information
         {
             Some(termination_information.status)
         } else {
@@ -40,9 +40,9 @@ impl LockupContract {
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
-        if let VestingInformation::Terminating(TerminationInformation {
+        if let ReleaseInformation::Terminating(TerminationInformation {
             unvested_amount, ..
-        }) = &self.vesting_information
+        }) = &self.release_information
         {
             *unvested_amount
         } else {
@@ -61,12 +61,14 @@ impl LockupContract {
 
     /// Get the amount of tokens that are locked in this account due to lockup or vesting.
     pub fn get_locked_amount(&self) -> WrappedBalance {
-        if let LockupStartInformation::TransfersEnabled { lockup_timestamp } =
-            &self.lockup_information.lockup_start_information
+        if let TransfersInformation::TransfersEnabled {
+            transfers_timestamp,
+        } = &self.lockup_information.transfers_information
         {
-            let lockup_timestamp = lockup_timestamp
-                .0
-                .saturating_add(self.lockup_information.lockup_duration.0);
+            let lockup_timestamp = match &self.lockup_information.lockup_time {
+                TimeMoment::Timestamp(timestamp) => timestamp.0,
+                TimeMoment::Duration(duration) => transfers_timestamp.0.saturating_add(duration.0),
+            };
             if lockup_timestamp <= env::block_timestamp() {
                 return self.get_unvested_amount();
             }
@@ -84,12 +86,12 @@ impl LockupContract {
     pub fn get_unvested_amount(&self) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount.0;
-        match &self.vesting_information {
-            VestingInformation::None => {
+        match &self.release_information {
+            ReleaseInformation::None => {
                 // Everything is vested and unlocked
                 0.into()
             }
-            VestingInformation::Vesting(vesting_schedule) => {
+            ReleaseInformation::Vesting(vesting_schedule) => {
                 if block_timestamp < vesting_schedule.cliff_timestamp.0 {
                     // Before the cliff, nothing is vested
                     lockup_amount.into()
@@ -109,7 +111,28 @@ impl LockupContract {
                     unvested_amount.as_u128().into()
                 }
             }
-            VestingInformation::Terminating(termination_information) => {
+            ReleaseInformation::ReleaseDuration(release_duration) => {
+                if let TransfersInformation::TransfersEnabled {
+                    transfers_timestamp,
+                } = &self.lockup_information.transfers_information
+                {
+                    let end_timestamp = transfers_timestamp.0.saturating_add(release_duration.0);
+                    if block_timestamp >= end_timestamp {
+                        // After the end, everything is vested
+                        0.into()
+                    } else {
+                        let time_left = U256::from(end_timestamp - block_timestamp);
+                        let unreleased_amount =
+                            U256::from(lockup_amount) * time_left / U256::from(release_duration.0);
+                        // The unreleased amount can't be larger than lockup_amount because the
+                        // time_left is smaller than total_time.
+                        unreleased_amount.as_u128().into()
+                    }
+                } else {
+                    lockup_amount.into()
+                }
+            }
+            ReleaseInformation::Terminating(termination_information) => {
                 termination_information.unvested_amount
             }
         }
@@ -132,9 +155,9 @@ impl LockupContract {
 
     /// Returns `true` if transfers are enabled, `false` otherwise.
     pub fn are_transfers_enabled(&self) -> bool {
-        match &self.lockup_information.lockup_start_information {
-            LockupStartInformation::TransfersEnabled { .. } => true,
-            LockupStartInformation::TransfersDisabled { .. } => false,
+        match &self.lockup_information.transfers_information {
+            TransfersInformation::TransfersEnabled { .. } => true,
+            TransfersInformation::TransfersDisabled { .. } => false,
         }
     }
 }
