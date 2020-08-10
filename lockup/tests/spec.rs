@@ -5,7 +5,7 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use lockup_contract::{TimeMoment, TransfersInformation};
+use lockup_contract::TransfersInformation;
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
@@ -20,7 +20,8 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
 
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
-        lockup_time: TimeMoment::Duration(lockup_duration.into()),
+        lockup_duration: lockup_duration.into(),
+        lockup_timestamp: None,
         transfers_information: TransfersInformation::TransfersEnabled {
             transfers_timestamp: lockup_timestamp.saturating_add(1).into(),
         },
@@ -93,7 +94,8 @@ fn staking() {
 
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
-        lockup_time: TimeMoment::Duration(1000000000.into()),
+        lockup_duration: 1000000000.into(),
+        lockup_timestamp: None,
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },

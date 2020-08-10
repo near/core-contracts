@@ -65,10 +65,15 @@ impl LockupContract {
             transfers_timestamp,
         } = &self.lockup_information.transfers_information
         {
-            let lockup_timestamp = match &self.lockup_information.lockup_time {
-                TimeMoment::Timestamp(timestamp) => timestamp.0,
-                TimeMoment::Duration(duration) => transfers_timestamp.0.saturating_add(duration.0),
-            };
+            let lockup_timestamp = std::cmp::max(
+                transfers_timestamp
+                    .0
+                    .saturating_add(self.lockup_information.lockup_duration.0),
+                self.lockup_information
+                    .lockup_timestamp
+                    .map(|t| t.0)
+                    .unwrap_or(0),
+            );
             if lockup_timestamp <= env::block_timestamp() {
                 return self.get_unvested_amount();
             }

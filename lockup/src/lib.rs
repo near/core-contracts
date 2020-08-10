@@ -120,7 +120,7 @@ pub struct LockupContract {
     /// Information about lockup schedule and the amount.
     pub lockup_information: LockupInformation,
 
-    /// Information about funds release schedule.
+    /// Information about tokens release schedule.
     pub release_information: ReleaseInformation,
 
     /// Account ID of the staking pool whitelist contract.
@@ -146,14 +146,16 @@ impl LockupContract {
     /// Initializes lockup contract.
     /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
     ///    methods on this contract.
-    /// - `lockup_time` - the moment of time when the lockup period ends. Either an absolute
-    ///    timestamp in nanoseconds or a duration relative to the moment the transfers are enabled.
-    /// - `lockup_start_information` - the information when the lockup period starts, either
-    ///    transfers are already enabled, then it contains the timestamp, or the transfers are
-    ///    currently disabled and it contains the account ID of the transfer poll contract.
+    /// - `lockup_duration` - the duration in nanoseconds of the lockup period from the moment
+    ///    the transfers are enabled.
+    /// - `lockup_timestamp` - the optional absolute lockup timestamp in nanoseconds which locks
+    ///    the tokens until this timestamp passes.
+    /// - `transfers_information` - the information about the transfers. Either transfers are
+    ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
+    ///    are currently disabled and it contains the account ID of the transfer poll contract.
     /// - `vesting_schedule` - if present, describes the vesting schedule.
     /// - `release_duration` - is the duration when the full lockup amount will be available.
-    ///    The funds are linearly released from the moment transfers are enabled. It can not be
+    ///    The tokens are linearly released from the moment transfers are enabled. It can not be
     ///    provided with the vesting schedule.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
     /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
@@ -161,7 +163,8 @@ impl LockupContract {
     #[init]
     pub fn new(
         owner_account_id: AccountId,
-        lockup_time: TimeMoment,
+        lockup_duration: WrappedDuration,
+        lockup_timestamp: Option<WrappedTimestamp>,
         transfers_information: TransfersInformation,
         vesting_schedule: Option<VestingSchedule>,
         release_duration: Option<WrappedDuration>,
@@ -194,7 +197,8 @@ impl LockupContract {
         }
         let lockup_information = LockupInformation {
             lockup_amount: env::account_balance().into(),
-            lockup_time,
+            lockup_duration,
+            lockup_timestamp,
             transfers_information,
         };
         let release_information = if let Some(vesting_schedule) = vesting_schedule {
@@ -274,7 +278,8 @@ mod tests {
         };
         LockupContract::new(
             account_owner(),
-            TimeMoment::Duration(to_nanos(YEAR).into()),
+            to_nanos(YEAR).into(),
+            None,
             lockup_start_information,
             vesting_schedule,
             release_duration,
@@ -852,7 +857,8 @@ mod tests {
         testing_env!(context.clone());
         let contract = LockupContract::new(
             account_owner(),
-            TimeMoment::Timestamp(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
+            0.into(),
+            Some(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
             TransfersInformation::TransfersDisabled {
                 transfer_poll_account_id: AccountId::from("transfers"),
             },
@@ -886,7 +892,8 @@ mod tests {
         testing_env!(context.clone());
         let contract = LockupContract::new(
             account_owner(),
-            TimeMoment::Timestamp(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
+            0.into(),
+            Some(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
             TransfersInformation::TransfersEnabled {
                 transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR / 2).into(),
             },

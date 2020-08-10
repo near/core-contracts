@@ -16,26 +16,18 @@ pub type WrappedDuration = U64;
 /// Balance wrapped into a struct for JSON serialization as a string.
 pub type WrappedBalance = U128;
 
-/// Describes the moment in time either through an absolute timestamp in nanoseconds or a relative
-/// duration in nanoseconds from the moment the transfers are enabled.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-#[serde(crate = "near_sdk::serde")]
-pub enum TimeMoment {
-    /// Absolute timestamp in nanoseconds to compare against block_timestamp.
-    Timestamp(WrappedTimestamp),
-    /// Relative duration in nanoseconds starting from the moment the transfers are enabled.
-    Duration(WrappedDuration),
-}
-
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct LockupInformation {
     /// The amount in yocto-NEAR tokens locked for this account.
     pub lockup_amount: WrappedBalance,
-    /// The time moment when the lockup amount will become available.
-    /// It's either an absolute timestamp or a duration from the moment the transfers are enabled.
-    pub lockup_time: TimeMoment,
+    /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
+    /// lockup amount of tokens.
+    pub lockup_duration: WrappedDuration,
+    /// The optional absolute lockup timestamp in nanoseconds which locks the tokens until this
+    /// timestamp passes.
+    pub lockup_timestamp: Option<WrappedTimestamp>,
     /// The information to indicate when the lockup period starts.
     pub transfers_information: TransfersInformation,
 }
@@ -119,7 +111,7 @@ pub enum ReleaseInformation {
     None,
     /// The vesting is going on schedule.
     Vesting(VestingSchedule),
-    /// The duration when the full lockup amount will be available. The funds are linearly released
+    /// The duration when the full lockup amount will be available. The tokens are linearly released
     /// from the moment transfers are enabled.
     ReleaseDuration(WrappedDuration),
     /// The information about the early termination of the vesting schedule.

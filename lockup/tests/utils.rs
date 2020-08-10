@@ -2,7 +2,7 @@
 
 extern crate lockup_contract;
 
-use self::lockup_contract::{TimeMoment, VestingSchedule, WrappedDuration};
+use self::lockup_contract::{VestingSchedule, WrappedDuration, WrappedTimestamp};
 use lockup_contract::types::TransfersInformation;
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
@@ -59,7 +59,8 @@ fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
 #[serde(crate = "near_sdk::serde")]
 pub struct InitLockupArgs {
     pub owner_account_id: AccountId,
-    pub lockup_time: TimeMoment,
+    pub lockup_duration: WrappedDuration,
+    pub lockup_timestamp: Option<WrappedTimestamp>,
     pub transfers_information: TransfersInformation,
     pub vesting_schedule: Option<VestingSchedule>,
     pub release_duration: Option<WrappedDuration>,
