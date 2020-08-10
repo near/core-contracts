@@ -79,7 +79,8 @@ unsafe fn sub(a: &U256, b: &U256, res: &mut U256) {
     }
 }
 
-/// Arguments:
+/// Initializes the token contract with the total supply given to the owner.
+/// Arguments (64 bytes):
 /// - 0..32 - `sha256` of the owner address.
 /// - 32..64 - U256 of the total supply
 #[no_mangle]
@@ -106,7 +107,8 @@ pub unsafe fn init() {
     storage_write(LEN, buf.as_ptr() as _, LEN, buf.as_ptr() as u64 + LEN, 0);
 }
 
-/// Arguments:
+/// Transfer the amount from the `sha256(predecessor_account_id)` to the new receiver address.
+/// Arguments (64 bytes):
 /// - 0..32 - `sha256` of the receiver address.
 /// - 32..64 - U256 is transfer amount
 #[no_mangle]
@@ -152,7 +154,8 @@ pub unsafe fn transfer() {
     storage_write(LEN, buf.as_ptr() as u64, LEN, new_balance.as_ptr() as _, 1);
 }
 
-/// Arguments:
+/// Returns the balance of the given address.
+/// Arguments (64 bytes):
 /// - 0..32 - `sha256` of the address to check the balance.
 #[no_mangle]
 pub unsafe fn get_balance() {
