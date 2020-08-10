@@ -32,7 +32,7 @@ pub struct LockupInformation {
     pub transfers_information: TransfersInformation,
 }
 
-/// Contains information when the lockup period starts.
+/// Contains information about the transfers. Whether transfers are enabled or disabled.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub enum TransfersInformation {
