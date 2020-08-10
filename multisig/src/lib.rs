@@ -156,11 +156,6 @@ impl MultiSigContract {
     pub fn delete_request(&mut self, request_id: RequestId) {
         self.assert_valid_request(request_id);
         let request_with_signer = self.requests.get(&request_id).expect("No such request");
-        assert_eq!(
-            request_with_signer.signer_pk,
-            env::signer_account_pk(),
-            "Only the creator of the request can delete"
-        );
         // can't delete requests before 15min
         assert!(
             env::block_timestamp() > request_with_signer.added_timestamp + REQUEST_COOLDOWN,
