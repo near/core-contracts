@@ -71,8 +71,7 @@ impl LockupContract {
                     .saturating_add(self.lockup_information.lockup_duration.0),
                 self.lockup_information
                     .lockup_timestamp
-                    .map(|t| t.0)
-                    .unwrap_or(0),
+                    .map_or(0, |t| t.0),
             );
             if lockup_timestamp <= env::block_timestamp() {
                 return self.get_unvested_amount();
