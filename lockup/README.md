@@ -353,7 +353,41 @@ Arguments in JSON format
 Command
 
 ```bash
-near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
+near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
+```
+
+#### Other examples of initialization
+
+##### Adding lockup timestamp with relative lockup period of 14 days (whichever is later).
+
+```json
+{
+    "owner_account_id": "owner1",
+    "lockup_duration": "1209600000000000",
+    "lockup_timestamp": "1661990400000000000",
+    "transfers_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+}
+```
+
+##### With release duration for 2 years as linear release and 14 days lockup period.
+
+```json
+{
+    "owner_account_id": "owner1",
+    "lockup_duration": "1209600000000000",
+    "transfers_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "release_duration": "63072000000000000",
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+}
 ```
 
 ### Staking flow
