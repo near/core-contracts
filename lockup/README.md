@@ -34,7 +34,7 @@ Once the `cliff_timestamp` passed, the tokens are vested on a pro rata basis fro
 The release of tokens can also be scheduled to be linear from the moment transfers are enabled.
 To achieve this it's possible to specify release duration. Once the transfers are enabled, the release schedule will
 start from the timestamp of the vote.
-Release schedule can't be terminated by the foundation.
+Release schedule can not be terminated by the foundation.
 
 ### Staking
 
