@@ -278,8 +278,8 @@ impl LockupContract {
         self.assert_transfers_disabled();
         self.assert_no_termination();
 
-        let transfer_poll_account_id = match &self.lockup_information.lockup_start_information {
-            LockupStartInformation::TransfersDisabled {
+        let transfer_poll_account_id = match &self.lockup_information.transfers_information {
+            TransfersInformation::TransfersDisabled {
                 transfer_poll_account_id,
             } => transfer_poll_account_id,
             _ => unreachable!(),

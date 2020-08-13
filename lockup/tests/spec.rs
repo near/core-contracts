@@ -5,13 +5,13 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use lockup_contract::LockupStartInformation;
+use lockup_contract::TransfersInformation;
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
 use near_sdk::json_types::U128;
+use near_sdk::serde_json::{self, json};
 use near_sdk::AccountId;
-use serde_json::json;
 use utils::{call_lockup, new_root, ntoy, InitLockupArgs};
 
 #[quickcheck]
@@ -21,9 +21,12 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
         lockup_duration: lockup_duration.into(),
-        lockup_start_information: LockupStartInformation::TransfersEnabled {
-            lockup_timestamp: lockup_timestamp.saturating_add(1).into(),
+        lockup_timestamp: None,
+        transfers_information: TransfersInformation::TransfersEnabled {
+            transfers_timestamp: lockup_timestamp.saturating_add(1).into(),
         },
+        vesting_schedule: None,
+        release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: "staking".into(),
     };
@@ -92,9 +95,12 @@ fn staking() {
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
         lockup_duration: 1000000000.into(),
-        lockup_start_information: LockupStartInformation::TransfersDisabled {
+        lockup_timestamp: None,
+        transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
+        vesting_schedule: None,
+        release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
     };
