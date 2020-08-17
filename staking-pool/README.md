@@ -535,3 +535,27 @@ Add additional gas by adding the parameter: --gas 10000000000000000
 Your function call is incorrect or your contract is not updated
 
 
+
+
+## Compatibility table
+
+**Code hash (staking_pool.wasm or staking_contract.wasm)**|**Last commit containing code hash**|**Number of Betanet validators (17th Aug 2020)**
+:-----:|:-----:|:-----:
+J1arLz48fgXcGyCPVckFwLnewNH6j1uw79thsvwqGYTY|cad998e|8
+2t9mkYfoE65EYvBpWgk3KiFAZRNew8Vr2g4KgFVwbkTr|493ed14|0
+CRwwK8vkQcwjny2Udmb4KvbNkaXEUQtWBuKJ46JoQJ64|dca6d61|0
+Fac6XzkaZaUQXGtpT64XtYcpuNVNKv6vL1whtXG8AmLX|fa3e2c6|0
+BrQV5TiRnHjawsiistTBzzHg3NT5do4RCg4o6U1ZwYhK|c36213a|0
+FHdeEHyAsureZEAg4SuWeeAWmnag62tFLYhmA6or2oLu|dc33a67|1
+sPbUPie2UWzdxD8NTj1X1iGiFKVUxgFmNV6UUresYC3|2c82bb3|0
+tr6KMjTzcg3fB84uxSYeMMyNQNiS2X1RSuudkahqir1|2b31187|1
+Vkm9sb5VuMmLkb5BceiLVFBsdGsqSfSbxgMNZ2exXQA|3814cc2|10
+Ct33Rcjfxb6zvG9KsFa8X1KGhX4QRYHzNojCXHriocfD|a197c4c|6
+27VUpHCYsSdDwTLnaJyqSyswQ8pqKm7NeKWXDJ2NAgkr|6b6ea6f|0
+3ybeNEpLR8NiGpH4oiHvCtGaSiQWaSbVt6QiYYm8ocYj|e37d68a|0
+CCmHpdruTvoaj7zN4eWGsBdKm7fLwtczSAGUZvwoLpnc|4e10330|0
+C6SMKr1DL32kpa5CTKL5czfaHoDpVYqRFUqDb6rQzd6o|a569389|0
+B7Ddmqi9rS1jVmrAhziMzVQ2xwQLKh7tSdxqpUfnPti|25fbc10|0
+H3ex28BwVZLwBySuwi1XL7RGznLK3o7K3qV1cLm7Kxdk|b0d0e2f|0
+CwWJMqGfqtFKMbe2uqbXnnbptbM7QqeokwAB9WTVduFS|f7a8151|0
+B7SLzRnSP4KS4EaUGStAhJXcHoW9cQXGLdpEsUmKWYBx|95c9023|0
