@@ -1,7 +1,7 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::AccountId;
-use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 construct_uint! {
@@ -18,21 +18,28 @@ pub type WrappedBalance = U128;
 
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct LockupInformation {
     /// The amount in yocto-NEAR tokens locked for this account.
     pub lockup_amount: WrappedBalance,
     /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
     /// lockup amount of tokens.
     pub lockup_duration: WrappedDuration,
+    /// The optional absolute lockup timestamp in nanoseconds which locks the tokens until this
+    /// timestamp passes.
+    pub lockup_timestamp: Option<WrappedTimestamp>,
     /// The information to indicate when the lockup period starts.
-    pub lockup_start_information: LockupStartInformation,
+    pub transfers_information: TransfersInformation,
 }
 
-/// Contains information when the lockup period starts.
+/// Contains information about the transfers. Whether transfers are enabled or disabled.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-pub enum LockupStartInformation {
+#[serde(crate = "near_sdk::serde")]
+pub enum TransfersInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
-    TransfersEnabled { lockup_timestamp: WrappedTimestamp },
+    TransfersEnabled {
+        transfers_timestamp: WrappedTimestamp,
+    },
     /// The account ID of the transfers poll contract, to check if the transfers are enabled.
     /// The lockup period will start when the transfer voted to be enabled.
     /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
@@ -43,6 +50,7 @@ pub enum LockupStartInformation {
 /// Describes the status of transactions with the staking pool contract or terminated unvesting
 /// amount withdrawal.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq)]
+#[serde(crate = "near_sdk::serde")]
 pub enum TransactionStatus {
     /// There are no transactions in progress.
     Idle,
@@ -66,6 +74,7 @@ pub struct StakingInformation {
 
 /// Contains information about vesting schedule.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
     pub start_timestamp: WrappedTimestamp,
@@ -96,11 +105,15 @@ impl VestingSchedule {
 
 /// Contains information about vesting that contains vesting schedule and termination information.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-pub enum VestingInformation {
+#[serde(crate = "near_sdk::serde")]
+pub enum ReleaseInformation {
     /// No vesting.
     None,
     /// The vesting is going on schedule.
     Vesting(VestingSchedule),
+    /// The duration when the full lockup amount will be available. The tokens are linearly released
+    /// from the moment transfers are enabled.
+    ReleaseDuration(WrappedDuration),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.
     /// Once the unvested amount is transferred out, `VestingInformation` is removed.
@@ -112,6 +125,7 @@ pub enum VestingInformation {
 #[derive(
     BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq, Copy, Clone, Debug,
 )]
+#[serde(crate = "near_sdk::serde")]
 pub enum TerminationStatus {
     /// Initial stage of the termination in case there are deficit on the account.
     VestingTerminatedWithDeficit,
@@ -129,6 +143,7 @@ pub enum TerminationStatus {
 
 /// Contains information about early termination of the vesting schedule.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct TerminationInformation {
     /// The amount of tokens that are unvested and has to be transferred back to NEAR Foundation.
     /// These tokens are effectively locked and can't be transferred out and can't be restaked.

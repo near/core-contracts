@@ -2,8 +2,11 @@
 
 ## Overview
 
-This contract acts as an escrow that locks and holds an owner's tokens for a lockup period. A lockup period either starts
-at the given timestamp or from the moment transfers are enabled by voting.
+This contract acts as an escrow that locks and holds an owner's tokens for a lockup period. A lockup period starts
+from the moment transfers are enabled by voting and lasts for the specified duration.
+It's also possible to lock tokens until the absolute timestamp. In this case the tokens will be available after the
+lockup period or after the timestamp, whichever is later.
+
 If transfers are not enabled yet, the contract keeps the account ID of the transfer poll contract.
 When the transfer poll is resolved, it returns the timestamp when it was resolved and it's used as the beginning of the
 lockup period.
@@ -12,7 +15,7 @@ Once all tokens are unlocked, everything is vested, and transfers are enabled, t
 account. This will allow the owner to turn this contract account into a regular account, claim the remaining tokens, and remove the contract
 or delete the account.
 
-### Vesting
+### Vesting schedule
 
 The contract can contain a vesting schedule and serve as a vesting agreement between the NEAR Foundation (Foundation) and an employee (owner of contract).
 Vesting schedule is described by three timestamps in nanoseconds:
@@ -25,6 +28,13 @@ Vesting schedule is described by three timestamps in nanoseconds:
 In addition to the lockup period that starts from the moment the transfers are enabled, vesting schedule also locks
 all tokens until `cliff_timestamp`.
 Once the `cliff_timestamp` passed, the tokens are vested on a pro rata basis from the `start_timestamp` to the `end_timestamp`.
+
+### Release schedule
+
+The release of tokens can also be scheduled to be linear from the moment transfers are enabled.
+To achieve this it's possible to specify release duration. Once the transfers are enabled, the release schedule will
+start from the timestamp of the vote.
+Release schedule can not be terminated by the foundation.
 
 ### Staking
 
@@ -61,10 +71,12 @@ This can be done through a regular transfer action from an account with liquid b
 
 The contract can be used for the following purposes:
 - Lock tokens until the transfers are voted to be enabled.
+- Lock tokens for the lockup period and until the absolute timestamp, whichever is later.
 - Lock tokens for the lockup period without a vesting schedule. All tokens will be unlocked at once once the lockup period passed.
 - Lock tokens for the lockup period with a vesting schedule.
   - If the NEAR Foundation account ID is provided during initialization, the NEAR Foundation can terminate vesting schedule.
   - If the NEAR Foundation account ID is not provided, the vesting schedule can't be terminated.
+- Lock tokens for the lockup period with the release duration. Tokens are linearly released on transfers are enabled.
 
 ### Guarantees
 
@@ -76,6 +88,15 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
 
 ## Change Log
+
+### `0.3.0`
+
+- Introduced optional release duration
+- Introduced optional absolute lockup timestamp.
+- Updated `init` arguments
+    - Added optional absolute `lockup_timestamp`.
+    - Renamed `lockup_start_information` to `transfers_information`. Also renamed internal timestamp to `transfers_timestamp`.
+    - Added optional `release_duration` to linearly release tokens.
 
 ### `0.2.0`
 
@@ -109,11 +130,17 @@ The initialization method has the following interface.
 /// Initializes lockup contract.
 /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
 ///    methods on this contract.
-/// - `lockup_duration` - the duration in nanoseconds of the lockup period.
-/// - `lockup_start_information` - the information when the lockup period starts, either
-///    transfers are already enabled, then it contains the timestamp, or the transfers are
-///    currently disabled and it contains the account ID of the transfer poll contract.
+/// - `lockup_duration` - the duration in nanoseconds of the lockup period from the moment
+///    the transfers are enabled.
+/// - `lockup_timestamp` - the optional absolute lockup timestamp in nanoseconds which locks
+///    the tokens until this timestamp passes.
+/// - `transfers_information` - the information about the transfers. Either transfers are
+///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
+///    are currently disabled and it contains the account ID of the transfer poll contract.
 /// - `vesting_schedule` - if present, describes the vesting schedule.
+/// - `release_duration` - is the duration when the full lockup amount will be available.
+///    The tokens are linearly released from the moment transfers are enabled. It can not be
+///    provided with the vesting schedule.
 /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
 /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
 ///    terminate vesting schedule.
@@ -121,8 +148,10 @@ The initialization method has the following interface.
 pub fn new(
     owner_account_id: AccountId,
     lockup_duration: WrappedDuration,
-    lockup_start_information: LockupStartInformation,
+    lockup_timestamp: Option<WrappedTimestamp>,
+    transfers_information: TransfersInformation,
     vesting_schedule: Option<VestingSchedule>,
+    release_duration: Option<WrappedDuration>,
     staking_pool_whitelist_account_id: AccountId,
     foundation_account_id: Option<AccountId>,
 ) -> Self;
@@ -131,10 +160,12 @@ pub fn new(
 It requires to provide `LockupStartInformation` and `VestingSchedule`
 
 ```rust
-/// Contains information when the lockup period starts.
-pub enum LockupStartInformation {
+/// Contains information about the transfers. Whether transfers are enabled or disabled.
+pub enum TransfersInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
-    TransfersEnabled { lockup_timestamp: WrappedTimestamp },
+    TransfersEnabled {
+        transfers_timestamp: WrappedTimestamp,
+    },
     /// The account ID of the transfers poll contract, to check if the transfers are enabled.
     /// The lockup period will start when the transfer voted to be enabled.
     /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
@@ -304,7 +335,7 @@ Arguments in JSON format
 {
     "owner_account_id": "owner1",
     "lockup_duration": "31536000000000000",
-    "lockup_start_information": {
+    "transfers_information": {
         "TransfersDisabled": {
             "transfer_poll_account_id": "transfers-poll"
         }
@@ -322,7 +353,41 @@ Arguments in JSON format
 Command
 
 ```bash
-near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "lockup_start_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
+near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
+```
+
+#### Other examples of initialization
+
+##### Adding lockup timestamp with relative lockup period of 14 days (whichever is later).
+
+```json
+{
+    "owner_account_id": "owner1",
+    "lockup_duration": "1209600000000000",
+    "lockup_timestamp": "1661990400000000000",
+    "transfers_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+}
+```
+
+##### With release duration for 2 years as linear release and 14 days lockup period.
+
+```json
+{
+    "owner_account_id": "owner1",
+    "lockup_duration": "1209600000000000",
+    "transfers_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfers-poll"
+        }
+    },
+    "release_duration": "63072000000000000",
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+}
 ```
 
 ### Staking flow

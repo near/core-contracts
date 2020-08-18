@@ -1,6 +1,6 @@
 //! A smart contract that allows tokens to be locked up.
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
 use near_sdk::{env, ext_contract, near_bindgen, AccountId};
 
@@ -31,7 +31,7 @@ pub mod owner;
 pub use crate::owner::*;
 
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
@@ -120,8 +120,8 @@ pub struct LockupContract {
     /// Information about lockup schedule and the amount.
     pub lockup_information: LockupInformation,
 
-    /// Information about vesting.
-    pub vesting_information: VestingInformation,
+    /// Information about tokens release schedule.
+    pub release_information: ReleaseInformation,
 
     /// Account ID of the staking pool whitelist contract.
     pub staking_pool_whitelist_account_id: AccountId,
@@ -146,11 +146,17 @@ impl LockupContract {
     /// Initializes lockup contract.
     /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
     ///    methods on this contract.
-    /// - `lockup_duration` - the duration in nanoseconds of the lockup period.
-    /// - `lockup_start_information` - the information when the lockup period starts, either
-    ///    transfers are already enabled, then it contains the timestamp, or the transfers are
-    ///    currently disabled and it contains the account ID of the transfer poll contract.
+    /// - `lockup_duration` - the duration in nanoseconds of the lockup period from the moment
+    ///    the transfers are enabled.
+    /// - `lockup_timestamp` - the optional absolute lockup timestamp in nanoseconds which locks
+    ///    the tokens until this timestamp passes.
+    /// - `transfers_information` - the information about the transfers. Either transfers are
+    ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
+    ///    are currently disabled and it contains the account ID of the transfer poll contract.
     /// - `vesting_schedule` - if present, describes the vesting schedule.
+    /// - `release_duration` - is the duration when the full lockup amount will be available.
+    ///    The tokens are linearly released from the moment transfers are enabled. It can not be
+    ///    provided with the vesting schedule.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
     /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
     ///    terminate vesting schedule.
@@ -158,8 +164,10 @@ impl LockupContract {
     pub fn new(
         owner_account_id: AccountId,
         lockup_duration: WrappedDuration,
-        lockup_start_information: LockupStartInformation,
+        lockup_timestamp: Option<WrappedTimestamp>,
+        transfers_information: TransfersInformation,
         vesting_schedule: Option<VestingSchedule>,
+        release_duration: Option<WrappedDuration>,
         staking_pool_whitelist_account_id: AccountId,
         foundation_account_id: Option<AccountId>,
     ) -> Self {
@@ -178,9 +186,9 @@ impl LockupContract {
                 "Foundation account can't be added without vesting schedule"
             )
         }
-        if let LockupStartInformation::TransfersDisabled {
+        if let TransfersInformation::TransfersDisabled {
             transfer_poll_account_id,
-        } = &lockup_start_information
+        } = &transfers_information
         {
             assert!(
                 env::is_valid_account_id(transfer_poll_account_id.as_bytes()),
@@ -190,20 +198,26 @@ impl LockupContract {
         let lockup_information = LockupInformation {
             lockup_amount: env::account_balance().into(),
             lockup_duration,
-            lockup_start_information,
+            lockup_timestamp,
+            transfers_information,
         };
-        let vesting_information = match vesting_schedule {
-            Some(vesting_schedule) => {
-                vesting_schedule.assert_valid();
-                VestingInformation::Vesting(vesting_schedule)
-            }
-            None => VestingInformation::None,
+        let release_information = if let Some(vesting_schedule) = vesting_schedule {
+            vesting_schedule.assert_valid();
+            assert!(
+                release_duration.is_none(),
+                "The release duration can't be provided with the vesting schedule"
+            );
+            ReleaseInformation::Vesting(vesting_schedule)
+        } else if let Some(release_duration) = release_duration {
+            ReleaseInformation::ReleaseDuration(release_duration)
+        } else {
+            ReleaseInformation::None
         };
 
         Self {
             owner_account_id,
             lockup_information,
-            vesting_information,
+            release_information,
             staking_information: None,
             staking_pool_whitelist_account_id,
             foundation_account_id,
@@ -224,30 +238,60 @@ mod tests {
 
     pub type AccountId = String;
 
-    fn lockup_only_setup() -> (VMContext, LockupContract) {
-        let context = get_context(
+    fn basic_context() -> VMContext {
+        get_context(
             system_account(),
             to_yocto(LOCKUP_NEAR),
             0,
             to_ts(GENESIS_TIME_IN_DAYS),
             false,
-        );
-        testing_env!(context.clone());
-        // Contract Setup:
-        // - Now is genesis time.
-        // - Lockup amount is 1000 near tokens.
-        // - Lockup for 1 year.
-        // - Owner has 2 keys
-        let contract = LockupContract::new(
+        )
+    }
+
+    fn new_vesting_schedule(offset_in_days: u64) -> Option<VestingSchedule> {
+        Some(VestingSchedule {
+            start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR + offset_in_days).into(),
+            cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS + offset_in_days).into(),
+            end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3 + offset_in_days).into(),
+        })
+    }
+
+    fn new_contract(
+        transfers_enabled: bool,
+        vesting_schedule: Option<VestingSchedule>,
+        release_duration: Option<WrappedDuration>,
+        foundation_account: bool,
+    ) -> LockupContract {
+        let lockup_start_information = if transfers_enabled {
+            TransfersInformation::TransfersEnabled {
+                transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+            }
+        } else {
+            TransfersInformation::TransfersDisabled {
+                transfer_poll_account_id: AccountId::from("transfers"),
+            }
+        };
+        let foundation_account_id = if foundation_account {
+            Some(account_foundation())
+        } else {
+            None
+        };
+        LockupContract::new(
             account_owner(),
             to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-            },
             None,
+            lockup_start_information,
+            vesting_schedule,
+            release_duration,
             AccountId::from("whitelist"),
-            None,
-        );
+            foundation_account_id,
+        )
+    }
+
+    fn lockup_only_setup() -> (VMContext, LockupContract) {
+        let context = basic_context();
+        testing_env!(context.clone());
+        let contract = new_contract(true, None, None, false);
         (context, contract)
     }
 
@@ -312,28 +356,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "Can only be called by NEAR Foundation")]
     fn test_call_by_non_foundation() {
-        let mut context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-            },
-            Some(VestingSchedule {
-                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
-                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
-            }),
-            AccountId::from("whitelist"),
-            Some(account_foundation()),
-        );
+        let mut contract = new_contract(true, new_vesting_schedule(0), None, true);
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         context.predecessor_account_id = non_owner();
         context.signer_account_id = non_owner();
@@ -345,24 +370,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "Transfers are disabled")]
     fn test_transfers_not_enabled() {
-        let mut context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersDisabled {
-                transfer_poll_account_id: AccountId::from("transfers"),
-            },
-            None,
-            AccountId::from("whitelist"),
-            None,
-        );
+        let mut contract = new_contract(false, None, None, false);
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 1);
         context.predecessor_account_id = account_owner();
         context.signer_account_id = account_owner();
@@ -375,24 +385,9 @@ mod tests {
 
     #[test]
     fn test_enable_transfers() {
-        let mut context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersDisabled {
-                transfer_poll_account_id: AccountId::from("transfers"),
-            },
-            None,
-            AccountId::from("whitelist"),
-            None,
-        );
+        let mut contract = new_contract(false, None, None, false);
         context.is_view = true;
         testing_env!(context.clone());
         assert!(!contract.are_transfers_enabled());
@@ -421,7 +416,7 @@ mod tests {
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 10);
         testing_env!(context.clone());
-        // Not unlocked yet
+        // Unlocked yet
         assert_eq!(
             contract.get_owners_balance().0,
             to_yocto(LOCKUP_NEAR).into()
@@ -435,24 +430,9 @@ mod tests {
 
     #[test]
     fn test_check_transfers_vote_false() {
-        let mut context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersDisabled {
-                transfer_poll_account_id: AccountId::from("transfers"),
-            },
-            None,
-            AccountId::from("whitelist"),
-            None,
-        );
+        let mut contract = new_contract(false, None, None, false);
         context.is_view = true;
         testing_env!(context.clone());
         assert!(!contract.are_transfers_enabled());
@@ -858,50 +838,89 @@ mod tests {
     #[test]
     #[should_panic(expected = "Foundation account can't be added without vesting schedule")]
     fn test_init_foundation_key_no_vesting() {
-        let context = get_context(
-            system_account(),
-            to_yocto(LOCKUP_NEAR),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let context = basic_context();
         testing_env!(context.clone());
-        LockupContract::new(
+        new_contract(true, None, None, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "Foundation account can't be added without vesting schedule")]
+    fn test_init_foundation_key_no_vesting_with_release() {
+        let context = basic_context();
+        testing_env!(context.clone());
+        new_contract(true, None, Some(to_nanos(YEAR).into()), true);
+    }
+
+    #[test]
+    fn test_lock_timestmap() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let contract = LockupContract::new(
             account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+            0.into(),
+            Some(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
+            TransfersInformation::TransfersDisabled {
+                transfer_poll_account_id: AccountId::from("transfers"),
             },
             None,
+            None,
             AccountId::from("whitelist"),
-            Some(account_foundation()),
+            None,
         );
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert!(!contract.are_transfers_enabled());
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+    }
+
+    #[test]
+    fn test_lock_timestmap_transfer_enabled() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let contract = LockupContract::new(
+            account_owner(),
+            0.into(),
+            Some(to_ts(GENESIS_TIME_IN_DAYS + YEAR).into()),
+            TransfersInformation::TransfersEnabled {
+                transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR / 2).into(),
+            },
+            None,
+            None,
+            AccountId::from("whitelist"),
+            None,
+        );
+
+        context.is_view = true;
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(1000));
+        assert_eq!(
+            contract.get_liquid_owners_balance().0,
+            to_yocto(1000) - MIN_BALANCE_FOR_STORAGE
+        );
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
     }
 
     #[test]
     fn test_termination_no_staking() {
-        let mut context = get_context(
-            system_account(),
-            to_yocto(1000),
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-            },
-            Some(VestingSchedule {
-                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
-                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
-            }),
-            AccountId::from("whitelist"),
-            Some(account_foundation()),
-        );
+        let mut contract = new_contract(true, new_vesting_schedule(0), None, true);
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -973,30 +992,49 @@ mod tests {
     }
 
     #[test]
+    fn test_release_duration() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let contract = new_contract(true, None, Some(to_nanos(4 * YEAR).into()), false);
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(1000));
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(250));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(500));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
+        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(500));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
+        testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(750));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
+        assert_eq!(contract.get_locked_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+    }
+
+    #[test]
     fn test_termination_before_cliff() {
         let lockup_amount = to_yocto(1000);
-        let mut context = get_context(
-            system_account(),
-            lockup_amount,
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-            },
-            Some(VestingSchedule {
-                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR).into(),
-                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 4).into(),
-            }),
-            AccountId::from("whitelist"),
-            Some(account_foundation()),
-        );
+        let mut contract = new_contract(true, new_vesting_schedule(YEAR), None, true);
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1068,28 +1106,9 @@ mod tests {
     #[test]
     fn test_termination_with_staking() {
         let lockup_amount = to_yocto(1000);
-        let mut context = get_context(
-            system_account(),
-            lockup_amount,
-            0,
-            to_ts(GENESIS_TIME_IN_DAYS),
-            false,
-        );
+        let mut context = basic_context();
         testing_env!(context.clone());
-        let mut contract = LockupContract::new(
-            account_owner(),
-            to_nanos(YEAR).into(),
-            LockupStartInformation::TransfersEnabled {
-                lockup_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-            },
-            Some(VestingSchedule {
-                start_timestamp: to_ts(GENESIS_TIME_IN_DAYS - YEAR).into(),
-                cliff_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
-                end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3).into(),
-            }),
-            AccountId::from("whitelist"),
-            Some(account_foundation()),
-        );
+        let mut contract = new_contract(true, new_vesting_schedule(0), None, true);
 
         context.is_view = true;
         testing_env!(context.clone());

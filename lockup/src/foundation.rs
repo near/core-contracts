@@ -30,7 +30,7 @@ impl LockupContract {
             TerminationStatus::ReadyToWithdraw
         };
 
-        self.vesting_information = VestingInformation::Terminating(TerminationInformation {
+        self.release_information = ReleaseInformation::Terminating(TerminationInformation {
             unvested_amount,
             status,
         });
