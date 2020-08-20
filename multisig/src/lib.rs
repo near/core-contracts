@@ -28,9 +28,7 @@ pub struct FunctionCallPermission {
 /// Lowest level action that can be performed by the multisig contract.
 pub enum MultiSigRequestAction {
     /// Transfers given amount to receiver.
-    Transfer {
-        amount: U128,
-    },
+    Transfer { amount: U128 },
     /// Create a new account.
     CreateAccount,
     /// Deploys contract to receiver's account. Can upgrade given contract as well.
@@ -42,9 +40,7 @@ pub enum MultiSigRequestAction {
         permission: Option<FunctionCallPermission>,
     },
     /// Deletes key, either one of the keys from multisig or key from another account.
-    DeleteKey {
-        public_key: Base58PublicKey,
-    },
+    DeleteKey { public_key: Base58PublicKey },
     /// Call function on behalf of this contract.
     FunctionCall {
         method_name: String,
@@ -54,16 +50,12 @@ pub enum MultiSigRequestAction {
     },
     /// Sets number of confirmations required to authorize requests.
     /// Can not be bundled with any other actions or transactions.
-    SetNumConfirmations {
-        num_confirmations: u32,
-    },
+    SetNumConfirmations { num_confirmations: u32 },
     /// Sets number of active requests (unconfirmed requests) per access key
     /// Default is 12 unconfirmed requests at a time
     /// The REQUEST_COOLDOWN for requests is 15min
     /// Worst gas attack a malicious keyholder could do is 12 requests every 15min
-    SetActiveRequestsLimit {
-        active_requests_limit: u32,
-    },
+    SetActiveRequestsLimit { active_requests_limit: u32 },
 }
 
 // The request the user makes specifying the receiving account and actions they want to execute (1 tx)
@@ -125,12 +117,17 @@ impl MultiSigContract {
             "Predecessor account must much current account"
         );
         // track how many requests this key has made
-        let num_requests = self.num_requests_pk.get(&env::signer_account_pk()).unwrap_or(0) + 1;
+        let num_requests = self
+            .num_requests_pk
+            .get(&env::signer_account_pk())
+            .unwrap_or(0)
+            + 1;
         assert!(
             num_requests <= self.active_requests_limit,
             "Account has too many active requests. Confirm or delete some."
         );
-        self.num_requests_pk.insert(&env::signer_account_pk(), &num_requests);
+        self.num_requests_pk
+            .insert(&env::signer_account_pk(), &num_requests);
         // add the request
         let request_added = MultiSigRequestWithSigner {
             signer_pk: env::signer_account_pk(),
@@ -187,8 +184,7 @@ impl MultiSigContract {
                                 .map(|x| x.into())
                                 .unwrap_or(DEFAULT_ALLOWANCE),
                             permission.receiver_id,
-                            permission
-                                .method_names.join(",").into_bytes(),
+                            permission.method_names.join(",").into_bytes(),
                         )
                     } else {
                         // wallet UI should warn user if receiver_id == env::current_account_id(), adding FAK will render multisig useless
@@ -196,9 +192,14 @@ impl MultiSigContract {
                     }
                 }
                 MultiSigRequestAction::DeleteKey { public_key } => {
-                    let pk:PublicKey = public_key.into();
+                    let pk: PublicKey = public_key.into();
                     // delete outstanding requests by public_key
-                    let request_ids:Vec<u32> = self.requests.iter().filter(|(_k, r)| r.signer_pk == pk).map(|(k, _r)| k).collect();
+                    let request_ids: Vec<u32> = self
+                        .requests
+                        .iter()
+                        .filter(|(_k, r)| r.signer_pk == pk)
+                        .map(|(k, _r)| k)
+                        .collect();
                     for request_id in request_ids {
                         self.remove_request(request_id);
                     }
@@ -223,7 +224,9 @@ impl MultiSigContract {
                     self.num_confirmations = num_confirmations;
                     return PromiseOrValue::Value(true);
                 }
-                MultiSigRequestAction::SetActiveRequestsLimit { active_requests_limit } => {
+                MultiSigRequestAction::SetActiveRequestsLimit {
+                    active_requests_limit,
+                } => {
                     self.assert_one_action_only(receiver_id, num_actions);
                     self.active_requests_limit = active_requests_limit;
                     return PromiseOrValue::Value(true);
@@ -245,7 +248,7 @@ impl MultiSigContract {
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
             let request = self.remove_request(request_id);
             /********************************
-            NOTE: If the tx execution fails for any reason, the request and confirmations are removed already, so the client has to start all over 
+            NOTE: If the tx execution fails for any reason, the request and confirmations are removed already, so the client has to start all over
             ********************************/
             self.execute_request(request)
         } else {
@@ -263,7 +266,10 @@ impl MultiSigContract {
         // remove confirmations for this request
         self.confirmations.remove(&request_id);
         // remove the original request
-        let request_with_signer = self.requests.remove(&request_id).expect("Failed to remove existing element");
+        let request_with_signer = self
+            .requests
+            .remove(&request_id)
+            .expect("Failed to remove existing element");
         // decrement num_requests for original request signer
         let original_signer_pk = request_with_signer.signer_pk;
         let mut num_requests = self.num_requests_pk.get(&original_signer_pk).unwrap_or(0);
@@ -271,7 +277,8 @@ impl MultiSigContract {
         if num_requests > 0 {
             num_requests = num_requests - 1;
         }
-        self.num_requests_pk.insert(&original_signer_pk, &num_requests);
+        self.num_requests_pk
+            .insert(&original_signer_pk, &num_requests);
         // return request
         request_with_signer.request
     }
@@ -288,7 +295,7 @@ impl MultiSigContract {
             self.requests.get(&request_id).is_some(),
             "No such request: either wrong number or already confirmed"
         );
-        // request must have 
+        // request must have
         assert!(
             self.confirmations.get(&request_id).is_some(),
             "Internal error: confirmations mismatch requests"
@@ -296,11 +303,12 @@ impl MultiSigContract {
     }
     // Prevents a request from being bundled with other actions
     fn assert_one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
-        assert_eq!(receiver_id, env::current_account_id(), "This method only works when receiver_id is equal to current_account_id");
         assert_eq!(
-            num_actions, 1,
-            "This method should be a separate request"
+            receiver_id,
+            env::current_account_id(),
+            "This method only works when receiver_id is equal to current_account_id"
         );
+        assert_eq!(num_actions, 1, "This method should be a separate request");
     }
     /********************************
     View methods
@@ -510,7 +518,7 @@ mod tests {
         // TODO: confirm that funds were transferred out via promise.
         assert_eq!(c.requests.len(), 0);
     }
-    
+
     #[test]
     fn test_multi_add_request_and_confirm() {
         let amount = 1_000;
@@ -563,14 +571,15 @@ mod tests {
             amount
         ));
         let mut c = MultiSigContract::new(1);
-        let new_key:Base58PublicKey = Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-            .unwrap()
-            .into();
+        let new_key: Base58PublicKey =
+            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
+                .unwrap()
+                .into();
         let request = MultiSigRequest {
             receiver_id: bob(),
             actions: vec![MultiSigRequestAction::AddKey {
                 public_key: new_key.clone(),
-                permission: None
+                permission: None,
             }],
         };
         // make request
@@ -707,6 +716,5 @@ mod tests {
                 }],
             });
         }
-        
     }
 }
