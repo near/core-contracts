@@ -176,6 +176,7 @@ impl MultiSigContract {
                     public_key,
                     permission,
                 } => {
+                    self.assert_self_request(receiver_id.clone());
                     if let Some(permission) = permission {
                         promise.add_access_key(
                             public_key.into(),
@@ -192,6 +193,7 @@ impl MultiSigContract {
                     }
                 }
                 MultiSigRequestAction::DeleteKey { public_key } => {
+                    self.assert_self_request(receiver_id.clone());
                     let pk: PublicKey = public_key.into();
                     // delete outstanding requests by public_key
                     let request_ids: Vec<u32> = self
@@ -301,13 +303,17 @@ impl MultiSigContract {
             "Internal error: confirmations mismatch requests"
         );
     }
-    // Prevents a request from being bundled with other actions
-    fn assert_one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
+    // Prevents request from approving tx on another account
+    fn assert_self_request(&mut self, receiver_id: AccountId) {
         assert_eq!(
             receiver_id,
             env::current_account_id(),
             "This method only works when receiver_id is equal to current_account_id"
         );
+    }
+    // Prevents a request from being bundled with other actions
+    fn assert_one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
+        self.assert_self_request(receiver_id);
         assert_eq!(num_actions, 1, "This method should be a separate request");
     }
     /********************************
@@ -575,8 +581,9 @@ mod tests {
             Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
                 .unwrap()
                 .into();
+        // vm current_account_id is alice, receiver_id must be alice
         let request = MultiSigRequest {
-            receiver_id: bob(),
+            receiver_id: alice(),
             actions: vec![MultiSigRequestAction::AddKey {
                 public_key: new_key.clone(),
                 permission: None,
@@ -594,7 +601,7 @@ mod tests {
             amount
         ));
         let request2 = MultiSigRequest {
-            receiver_id: bob(),
+            receiver_id: alice(),
             actions: vec![MultiSigRequestAction::Transfer {
                 amount: amount.into(),
             }],
@@ -606,7 +613,7 @@ mod tests {
         assert_eq!(c.get_num_requests_pk(new_key.clone()), 1);
         // self delete key
         let request3 = MultiSigRequest {
-            receiver_id: bob(),
+            receiver_id: alice(),
             actions: vec![MultiSigRequestAction::DeleteKey {
                 public_key: new_key.clone(),
             }],
@@ -616,6 +623,33 @@ mod tests {
         // should be empty now
         assert_eq!(c.requests.len(), 0);
         assert_eq!(c.get_num_requests_pk(new_key.clone()), 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_panics_add_key_different_account() {
+        let amount = 1_000;
+        testing_env!(context_with_key(
+            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
+                .unwrap()
+                .into(),
+            amount
+        ));
+        let mut c = MultiSigContract::new(1);
+        let new_key: Base58PublicKey =
+            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
+                .unwrap()
+                .into();
+        // vm current_account_id is alice, receiver_id must be alice
+        let request = MultiSigRequest {
+            receiver_id: bob(),
+            actions: vec![MultiSigRequestAction::AddKey {
+                public_key: new_key.clone(),
+                permission: None,
+            }],
+        };
+        // make request
+        c.add_request_and_confirm(request);
     }
 
     #[test]
