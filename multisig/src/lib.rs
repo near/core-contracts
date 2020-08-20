@@ -203,7 +203,9 @@ impl MultiSigContract {
                         .map(|(k, _r)| k)
                         .collect();
                     for request_id in request_ids {
-                        self.remove_request(request_id);
+                        // remove confirmations for this request
+                        self.confirmations.remove(&request_id);
+                        self.requests.remove(&request_id);
                     }
                     // remove num_requests_pk entry for public_key
                     self.num_requests_pk.remove(&pk);
