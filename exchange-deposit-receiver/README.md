@@ -9,12 +9,11 @@ the account.
 
 To avoid creating the account before any tokens from the user are received, the exchanges can also receive tokens
 directly into their hot wallet, but every deposit has to be marked to be able to properly attribute it to the owner.
-It's usually done with an additional `memo` field in the transaction. NEAR doesn't support comments on the transfers.
-But NEAR does have function calls and the ability to attach tokens with the function call.
+This is usually done with an additional `memo` field in the transaction. Although NEAR doesn't support comments on the transfers, it does have function calls which can have tokens attached.
 
 ## Overview
 
-The goal of this contract is to provide a contract endpoint to be able to deposit tokens with a memo.
+The goal of this contract is to provide a contract endpoint for depositing tokens with a memo.
 
 ### The process is the following:
 - An exchange deploys this contract on their hot wallet account. The exchange also maintains the full access to this account by
