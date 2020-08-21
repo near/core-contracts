@@ -3,7 +3,7 @@
 ## Background
 
 Exchanges usually create a new account for each a user to deposit their tokens. On NEAR, the account cannot be created
-without a deposit to cover the occupied storage. It cost tokens on exchange side to create such account before the user
+without a deposit to cover the occupied storage. Thus it costs the exchange tokens to create a new account before the user
 can deposit tokens. So if the user did not deposit tokens into the account, the exchange spent tokens on the creation of
 the account.
 
