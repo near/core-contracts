@@ -2,9 +2,9 @@
 
 ## Background
 
-Exchanges usually creates an new account for a user to deposit their tokens. On NEAR, the account can't be created
+Exchanges usually create a new account for each a user to deposit their tokens. On NEAR, the account cannot be created
 without a deposit to cover the occupied storage. It cost tokens on exchange side to create such account before the user
-can deposit tokens. So if the user doesn't deposit tokens to the account, the exchange spent tokens on the creation of
+can deposit tokens. So if the user did not deposit tokens into the account, the exchange spent tokens on the creation of
 the account.
 
 To avoid creating the account before any tokens from the user are received, the exchanges can also receive tokens
