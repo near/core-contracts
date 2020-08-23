@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-WHITELIST_ACCOUNT_ID="whitelist.${MASTER_ACCOUNT_ID}"
-ACCOUNT_ID="pool.${MASTER_ACCOUNT_ID}"
+WHITELIST_ACCOUNT_ID="lockup-whitelist.${MASTER_ACCOUNT_ID}"
+ACCOUNT_ID="poolv1.${MASTER_ACCOUNT_ID}"
 
 echo "Deploying staking pool factory contract to $ACCOUNT_ID with 50 NEAR"
 
@@ -30,7 +30,7 @@ echo "Whitelisting staking pool factory $ACCOUNT_ID on whitelist contract $WHITE
 
 REPL=$(cat <<-END
 await new Promise(resolve => setTimeout(resolve, 100));
-const account = await near.account("$MASTER_ACCOUNT_ID");
+const account = await near.account("$FOUNDATION_ACCOUNT_ID");
 const contractName = "$WHITELIST_ACCOUNT_ID";
 const args = {factory_account_id: "$ACCOUNT_ID"};
 await account.signAndSendTransaction(

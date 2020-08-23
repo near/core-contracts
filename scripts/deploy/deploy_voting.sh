@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-ACCOUNT_ID="vote.${MASTER_ACCOUNT_ID}"
+ACCOUNT_ID="transfer-vote.${MASTER_ACCOUNT_ID}"
 
 echo "Deploying voting contract to $ACCOUNT_ID with 15 NEAR"
 

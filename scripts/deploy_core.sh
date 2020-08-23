@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-if [ -z "${NODE_ENV}" ]; then
-  echo "NODE_ENV is required, e.g. \`export NODE_ENV=testnet\`"
+if [ -z "${NEAR_ENV}" ]; then
+  echo "NEAR_ENV is required, e.g. \`export NEAR_ENV=testnet\`"
   exit 1
 fi
 
@@ -11,8 +11,13 @@ if [ -z "${MASTER_ACCOUNT_ID}" ]; then
   exit 1
 fi
 
-echo "Using NODE_ENV=${NODE_ENV}"
+if [ -z "${FOUNDATION_ACCOUNT_ID}"]; then
+  echo "FOUNDATION_ACCOUNT_ID is required, e.g. \`export FOUNDATION_ACCOUNT_ID=foundation.near\`"
+fi
+
+echo "Using NEAR_ENV=${NEAR_ENV}"
 echo "Using MASTER_ACCOUNT_ID=${MASTER_ACCOUNT_ID}"
+echo "Using FOUNDATION_ACCOUNT_ID=${FOUNDATION_ACCOUNT_ID}"
 
 # Verifying master account exist
 AMOUNT=$(near state $MASTER_ACCOUNT_ID | grep "amount")

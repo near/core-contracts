@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-ACCOUNT_ID="whitelist.${MASTER_ACCOUNT_ID}"
+ACCOUNT_ID="lockup-whitelist.${MASTER_ACCOUNT_ID}"
 
 echo "Deploying whitelist contract to $ACCOUNT_ID with 15 NEAR"
 
@@ -11,7 +11,7 @@ await new Promise(resolve => setTimeout(resolve, 100));
 const fs = require('fs');
 const account = await near.account("$MASTER_ACCOUNT_ID");
 const contractName = "$ACCOUNT_ID";
-const newArgs = {foundation_account_id: "$MASTER_ACCOUNT_ID"};
+const newArgs = {foundation_account_id: "$FOUNDATION_ACCOUNT_ID"};
 await account.signAndSendTransaction(
     contractName,
     [
