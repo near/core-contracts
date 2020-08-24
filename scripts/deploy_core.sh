@@ -22,7 +22,14 @@ echo "Using FOUNDATION_ACCOUNT_ID=${FOUNDATION_ACCOUNT_ID}"
 # Verifying master account exist
 AMOUNT=$(near state $MASTER_ACCOUNT_ID | grep "amount")
 if [ -z "$AMOUNT" ]; then
-  echo "Can't get state for ${MASTER_ACCOUNT_ID}. Maybe the account doesn't exist."
+  echo "Can't get state for master account ${MASTER_ACCOUNT_ID}. Maybe the account doesn't exist."
+  exit 1
+fi
+
+# Verifying foundation account exist
+AMOUNT=$(near state $FOUNDATION_ACCOUNT_ID | grep "amount")
+if [ -z "$AMOUNT" ]; then
+  echo "Can't get state for foundation account ${FOUNDATION_ACCOUNT_ID}. Maybe the account doesn't exist."
   exit 1
 fi
 
