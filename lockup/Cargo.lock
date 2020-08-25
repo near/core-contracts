@@ -712,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "lockup-contract"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "env_logger",
  "lazy_static",
@@ -825,7 +825,7 @@ dependencies = [
  "lazy_static",
  "near-crypto",
  "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-errors 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-errors 1.1.0",
  "num-rational",
  "primitive-types",
  "rand",
@@ -896,8 +896,8 @@ version = "0.1.0"
 source = "git+https://github.com/nearprotocol/nearcore.git#b26a0daf1dae70dc30623307c4281007286ce3dd"
 dependencies = [
  "near-primitives",
- "near-runtime-fees 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-logic 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-runtime-fees 1.1.0",
+ "near-vm-logic 1.1.0",
  "serde",
 ]
 
@@ -912,9 +912,9 @@ dependencies = [
 
 [[package]]
 name = "near-runtime-fees"
-version = "1.1.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd66d099e6f047bf594aa01eb1a083d6f14b2234d30db02c57aaf941e8eb003a"
+checksum = "8d11ba7681bd6669ae735af9771191251c6996b2ff30483ca1fde37a6bbf25b0"
 dependencies = [
  "num-rational",
  "serde",
@@ -935,16 +935,16 @@ dependencies = [
 
 [[package]]
 name = "near-sdk"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9029864061ff35b166072d9f407d91da4c76cfd0a190913fa5576148c6b0be45"
+checksum = "963610ae7ce6729de19c8fe0da230f878bf3a04de022aa2045ff7c5fa2b13095"
 dependencies = [
  "base64",
  "borsh",
  "bs58",
- "near-runtime-fees 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "near-runtime-fees 2.0.0",
  "near-sdk-macros",
- "near-vm-logic 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "near-vm-logic 2.0.0",
  "serde",
  "serde_json",
  "wee_alloc",
@@ -952,9 +952,9 @@ dependencies = [
 
 [[package]]
 name = "near-sdk-core"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e3adcdcb947537027bf3ac8b3e89079abab8b1ecef257debaf5352d97157756"
+checksum = "1552953310b5d7a6caaba67b0d65799c773c90fe5a06443fc55b0ace77e96eb5"
 dependencies = [
  "Inflector",
  "proc-macro2",
@@ -964,9 +964,9 @@ dependencies = [
 
 [[package]]
 name = "near-sdk-macros"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aca63d45c527d8053d42ecc747fb1fb73555350f1b0e0fb1e7f76ed2fabd6266"
+checksum = "c36b52b39323ee871f222243e20c7bbeb3dfe677d397baa32853e91229cd88bd"
 dependencies = [
  "near-sdk-core",
  "proc-macro2",
@@ -1008,9 +1008,9 @@ dependencies = [
 
 [[package]]
 name = "near-vm-errors"
-version = "1.1.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09c1dbda905e8671a88b89f1c3235078bf0a8af12f0bc337cdf3d29c4bea84ee"
+checksum = "d195c45caa46fc6cb0a3c3c623219c3bf5dcfa367ec9266313ff560d115c1d95"
 dependencies = [
  "borsh",
  "near-rpc-error-macro 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1025,8 +1025,8 @@ dependencies = [
  "base64",
  "bs58",
  "byteorder",
- "near-runtime-fees 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-errors 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-runtime-fees 1.1.0",
+ "near-vm-errors 1.1.0",
  "serde",
  "sha2",
  "sha3",
@@ -1034,15 +1034,15 @@ dependencies = [
 
 [[package]]
 name = "near-vm-logic"
-version = "1.1.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "487d328ce63c26cc61ce5e1ab3862f9bc8961b23be3456493a9cf37421425d32"
+checksum = "e5701ec6de5426f5528c5a97e2b690c60b9ffcb01d31d5482999fdc56ab16a05"
 dependencies = [
  "base64",
  "bs58",
  "byteorder",
- "near-runtime-fees 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "near-vm-errors 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "near-runtime-fees 2.0.0",
+ "near-vm-errors 2.0.0",
  "serde",
  "sha2",
  "sha3",
@@ -1054,9 +1054,9 @@ version = "1.1.0"
 source = "git+https://github.com/nearprotocol/nearcore.git#b26a0daf1dae70dc30623307c4281007286ce3dd"
 dependencies = [
  "cached",
- "near-runtime-fees 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-errors 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-logic 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-runtime-fees 1.1.0",
+ "near-vm-errors 1.1.0",
+ "near-vm-logic 1.1.0",
  "parity-wasm",
  "pwasm-utils",
  "wasmer-runtime",
@@ -1090,10 +1090,10 @@ dependencies = [
  "near-metrics",
  "near-primitives",
  "near-runtime-configs",
- "near-runtime-fees 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-runtime-fees 1.1.0",
  "near-store",
- "near-vm-errors 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
- "near-vm-logic 1.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
+ "near-vm-errors 1.1.0",
+ "near-vm-logic 1.1.0",
  "near-vm-runner",
  "num-bigint",
  "num-rational",

@@ -50,11 +50,15 @@ pub trait ExtStakingPool {
 
     fn deposit(&mut self);
 
+    fn deposit_and_stake(&mut self);
+
     fn withdraw(&mut self, amount: WrappedBalance);
 
     fn stake(&mut self, amount: WrappedBalance);
 
     fn unstake(&mut self, amount: WrappedBalance);
+
+    fn unstake_all(&mut self);
 }
 
 #[ext_contract(ext_whitelist)]
@@ -77,15 +81,24 @@ pub trait ExtLockupContractOwner {
 
     fn on_staking_pool_deposit(&mut self, amount: WrappedBalance) -> bool;
 
+    fn on_staking_pool_deposit_and_stake(&mut self, amount: WrappedBalance) -> bool;
+
     fn on_staking_pool_withdraw(&mut self, amount: WrappedBalance) -> bool;
 
     fn on_staking_pool_stake(&mut self, amount: WrappedBalance) -> bool;
 
     fn on_staking_pool_unstake(&mut self, amount: WrappedBalance) -> bool;
 
+    fn on_staking_pool_unstake_all(&mut self) -> bool;
+
     fn on_get_result_from_transfer_poll(&mut self, #[callback] poll_result: PollResult) -> bool;
 
     fn on_get_account_total_balance(&mut self, #[callback] total_balance: WrappedBalance);
+
+    fn on_get_account_unstaked_balance_to_withdraw_by_owner(
+        &mut self,
+        #[callback] unstaked_balance: WrappedBalance,
+    );
 }
 
 #[ext_contract(ext_self_foundation)]
