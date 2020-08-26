@@ -89,6 +89,17 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 
 ## Change Log
 
+### `1.0.0`
+
+- Fix a bug with the prepaid gas exceeded during the foundation callback by increasing base gas.
+- Include minimum amount of gas needed for every call.
+- Add new helper methods for the owner to avoid dealing with yoctoNEAR during staking.
+    - `deposit_and_stake`, `unstake_all`, `withdraw_all_from_staking_pool`
+- Add a new view method to `get_balance` of the account, that includes all tokens on this account and all tokens deposited to a staking pool.
+- Cover foundation termination flow with the integration tests.
+- Cover release schedule flow with integration tests.
+- Updated `near-sdk` to `2.0.0`
+
 ### `0.3.0`
 
 - Introduced optional release duration

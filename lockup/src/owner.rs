@@ -460,7 +460,7 @@ impl LockupContract {
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
     ///
-    /// Transfers the given extra amount to the given receiver account ID.
+    /// Transfers the given amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
     pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise {
         self.assert_owner();

@@ -69,9 +69,7 @@ impl LockupContract {
                 transfers_timestamp
                     .0
                     .saturating_add(self.lockup_information.lockup_duration.0),
-                self.lockup_information
-                    .lockup_timestamp
-                    .map_or(0, |t| t.0),
+                self.lockup_information.lockup_timestamp.map_or(0, |t| t.0),
             );
             if lockup_timestamp <= env::block_timestamp() {
                 return self.get_unvested_amount();
@@ -143,13 +141,18 @@ impl LockupContract {
     }
 
     /// The balance of the account owner. It includes vested and extra tokens that may have been
-    /// deposited to this account.
+    /// deposited to this account, but excludes locked tokens.
     /// NOTE: Some of this tokens may be deposited to the staking pool.
     /// This method also doesn't account for tokens locked for the contract storage.
     pub fn get_owners_balance(&self) -> WrappedBalance {
         (env::account_balance() + self.get_known_deposited_balance().0)
             .saturating_sub(self.get_locked_amount().0)
             .into()
+    }
+
+    /// Returns total balance of the account including tokens deposited on the staking pool.
+    pub fn get_balance(&self) -> WrappedBalance {
+        (env::account_balance() + self.get_known_deposited_balance().0).into()
     }
 
     /// The amount of tokens the owner can transfer now from the account.
