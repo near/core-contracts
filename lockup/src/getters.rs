@@ -79,12 +79,12 @@ impl LockupContract {
         self.lockup_information.lockup_amount
     }
 
-    /// Get the amount of tokens that are already vested, but still locked due to lockup.
+    /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
     pub fn get_locked_vested_amount(&self) -> WrappedBalance {
         (self.get_locked_amount().0 - self.get_unvested_amount().0).into()
     }
 
-    /// Get the amount of tokens that are locked in this account due to vesting.
+    /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
     pub fn get_unvested_amount(&self) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount.0;
@@ -156,6 +156,7 @@ impl LockupContract {
     }
 
     /// The amount of tokens the owner can transfer now from the account.
+    /// Transfers have to be enabled.
     pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
         std::cmp::min(self.get_owners_balance().0, self.get_account_balance().0).into()
     }

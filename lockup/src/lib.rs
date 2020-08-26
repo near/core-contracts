@@ -156,6 +156,8 @@ impl Default for LockupContract {
 
 #[near_bindgen]
 impl LockupContract {
+    /// Requires 25 TGas (1 * BASE_GAS)
+    ///
     /// Initializes lockup contract.
     /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
     ///    methods on this contract.

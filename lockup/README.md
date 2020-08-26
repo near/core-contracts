@@ -93,7 +93,7 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 
 - Fix a bug with the prepaid gas exceeded during the foundation callback by increasing base gas.
 - Include minimum amount of gas needed for every call.
-- Add new helper methods for the owner to avoid dealing with yoctoNEAR during staking.
+- Add new helper methods for the owner for staking.
     - `deposit_and_stake`, `unstake_all`, `withdraw_all_from_staking_pool`
 - Add a new view method to `get_balance` of the account, that includes all tokens on this account and all tokens deposited to a staking pool.
 - Cover foundation termination flow with the integration tests.
@@ -138,6 +138,8 @@ pub type WrappedBalance = U128;
 The initialization method has the following interface.
 
 ```rust
+/// Requires 25 TGas (1 * BASE_GAS)
+///
 /// Initializes lockup contract.
 /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
 ///    methods on this contract.
@@ -207,57 +209,108 @@ create an access key on the owner's account restricted to the staking methods an
 
 ```rust
 /// OWNER'S METHOD
+///
+/// Requires 75 TGas (3 * BASE_GAS)
+///
 /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
 /// are enabled, they can't be disabled anymore.
-pub fn check_transfers_vote(&mut self) -> Promise;
+pub fn check_transfers_vote(&mut self) -> bool;
 
 /// OWNER'S METHOD
-/// Transfers the given extra amount to the given receiver account ID.
+///
+/// Requires 50 TGas (2 * BASE_GAS)
+///
+/// Transfers the given amount to the given receiver account ID.
 /// This requires transfers to be enabled within the voting contract.
-pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise;
+pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId);
 
 /// OWNER'S METHOD
+///
+/// Requires 50 TGas (2 * BASE_GAS)
+///
 /// Adds full access key with the given public key to the account once the contract is fully
 /// vested, lockup duration has expired and transfers are enabled.
 /// This will allow owner to use this account as a regular account and remove the contract.
-pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise;
+pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey);
 ```
 
 #### Staking methods
 
 ```rust
 /// OWNER'S METHOD
+///
+/// Requires 75 TGas (3 * BASE_GAS)
+///
 /// Selects staking pool contract at the given account ID. The staking pool first has to be
 /// checked against the staking pool whitelist contract.
-pub fn select_staking_pool(&mut self, staking_pool_account_id: AccountId) -> Promise;
+pub fn select_staking_pool(&mut self, staking_pool_account_id: AccountId) -> bool;
 
 /// OWNER'S METHOD
+///
+/// Requires 25 TGas (1 * BASE_GAS)
+///
 /// Unselects the current staking pool.
 /// It requires that there are no known deposits left on the currently selected staking pool.
 pub fn unselect_staking_pool(&mut self);
 
 /// OWNER'S METHOD
+///
+/// Requires 100 TGas (4 * BASE_GAS)
+///
 /// Deposits the given extra amount to the staking pool
-pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> Promise;
+pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> bool;
 
 /// OWNER'S METHOD
+///
+/// Requires 125 TGas (5 * BASE_GAS)
+///
+/// Deposits and stakes the given extra amount to the selected staking pool
+pub fn deposit_and_stake(&mut self, amount: WrappedBalance) -> bool;
+
+/// OWNER'S METHOD
+///
+/// Requires 125 TGas (5 * BASE_GAS)
+///
 /// Withdraws the given amount from the staking pool
-pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> Promise;
+pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> bool;
 
 /// OWNER'S METHOD
+///
+/// Requires 175 TGas (7 * BASE_GAS)
+///
+/// Tries to withdraws all unstaked balance from the staking pool.
+pub fn withdraw_all_from_staking_pool(&mut self) -> bool;
+
+/// OWNER'S METHOD
+///
+/// Requires 125 TGas (5 * BASE_GAS)
+///
 /// Stakes the given extra amount at the staking pool
-pub fn stake(&mut self, amount: WrappedBalance) -> Promise;
+pub fn stake(&mut self, amount: WrappedBalance) -> bool;
 
 /// OWNER'S METHOD
+///
+/// Requires 125 TGas (5 * BASE_GAS)
+///
 /// Unstakes the given amount at the staking pool
-pub fn unstake(&mut self, amount: WrappedBalance) -> Promise;
+pub fn unstake(&mut self, amount: WrappedBalance) -> bool;
 
 /// OWNER'S METHOD
+///
+/// Requires 125 TGas (5 * BASE_GAS)
+///
+/// Unstakes all tokens at the staking pool
+pub fn unstake_all(&mut self) -> bool;
+
+/// OWNER'S METHOD
+///
+/// Requires 75 TGas (3 * BASE_GAS)
+///
 /// Retrieves total balance from the staking pool and remembers it internally.
 /// This method is helpful when the owner received some rewards for staking and wants to
 /// transfer them back to this account for withdrawal. In order to know the actual liquid
 /// balance on the account, this contract needs to query the staking pool.
-pub fn refresh_staking_pool_balance(&mut self) -> Promise;
+pub fn refresh_staking_pool_balance(&mut self);
 ```
 
 ### Foundation methods
@@ -267,17 +320,26 @@ terminate vesting schedule.
 
 ```rust
 /// FOUNDATION'S METHOD
+///
+/// Requires 25 TGas (1 * BASE_GAS)
+///
 /// Terminates vesting schedule and locks the remaining unvested amount.
 pub fn terminate_vesting(&mut self);
 
 /// FOUNDATION'S METHOD
+///
+/// Requires 175 TGas (7 * BASE_GAS)
+///
 /// When the vesting is terminated and there are deficit of the tokens on the account, the
 /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
-pub fn termination_prepare_to_withdraw(&mut self) -> Promise;
+pub fn termination_prepare_to_withdraw(&mut self) -> bool;
 
 /// FOUNDATION'S METHOD
+///
+/// Requires 75 TGas (3 * BASE_GAS)
+///
 /// Withdraws the unvested amount from the early termination of the vesting schedule.
-pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise;
+pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> bool;
 ```
 
 ### View methods
@@ -306,22 +368,26 @@ pub fn get_terminated_unvested_balance(&self) -> WrappedBalance;
 /// the unvested balance from the early-terminated vesting schedule.
 pub fn get_terminated_unvested_balance_deficit(&self) -> WrappedBalance;
 
-/// Get the amount of tokens that are locked in this account due to lockup or vesting.
+/// Get the amount of tokens that are already vested or released, but still locked due to lockup.
 pub fn get_locked_amount(&self) -> WrappedBalance;
 
 /// Get the amount of tokens that are already vested, but still locked due to lockup.
 pub fn get_locked_vested_amount(&self) -> WrappedBalance;
 
-/// Get the amount of tokens that are locked in this account due to vesting.
+/// Get the amount of tokens that are locked in this account due to vesting or release schedule.
 pub fn get_unvested_amount(&self) -> WrappedBalance;
 
 /// The balance of the account owner. It includes vested and extra tokens that may have been
-/// deposited to this account.
+/// deposited to this account, but excludes locked tokens.
 /// NOTE: Some of this tokens may be deposited to the staking pool.
 /// This method also doesn't account for tokens locked for the contract storage.
 pub fn get_owners_balance(&self) -> WrappedBalance;
 
+/// Returns total balance of the account including tokens deposited on the staking pool.
+pub fn get_balance(&self) -> WrappedBalance;
+
 /// The amount of tokens the owner can transfer now from the account.
+/// Transfers have to be enabled.
 pub fn get_liquid_owners_balance(&self) -> WrappedBalance;
 
 /// Returns `true` if transfers are enabled, `false` otherwise.
@@ -364,7 +430,7 @@ Arguments in JSON format
 Command
 
 ```bash
-near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near
+near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near --gas=25000000000000
 ```
 
 #### Other examples of initialization
@@ -406,23 +472,15 @@ near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "315360
 #### Select staking pool
 
 ```bash
-near call lockup1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1
+near call lockup1 select_staking_pool '{"staking_pool_account_id": "staking_pool_pro"}' --accountId=owner1 --gas=75000000000000
 ```
 
-#### Deposit to the staking pool
+#### Deposit and stake to the staking pool
 
-Deposit `1000` NEAR tokens.
-
-```bash
-near call lockup1 deposit_to_staking_pool '{"amount": "1000000000000000000000000000"}' --accountId=owner1
-```
-
-#### Stake on the staking pool
-
-Stake `1000` NEAR tokens.
+Deposit and stake `1000` NEAR tokens.
 
 ```bash
-near call lockup1 stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1
+near call lockup1 deposit_and_stake '{"amount": "1000000000000000000000000000"}' --accountId=owner1 --gas=125000000000000
 ```
 
 #### Refresh the current total balance on the staking pool
@@ -432,7 +490,7 @@ It's because the contract doesn't know about the accumulated rewards.
 In order for the contract to get the new total balance, the owner has to call `refresh_staking_pool_balance`.
 
 ```bash
-near call lockup1 refresh_staking_pool_balance '{}' --accountId=owner1
+near call lockup1 refresh_staking_pool_balance '{}' --accountId=owner1 --gas=75000000000000
 ```
 
 #### Checking owner's balance
@@ -446,25 +504,24 @@ near view lockup1 get_owners_balance '{}'
 
 #### Unstake from the staking pool
 
-Let's say the owner checked staked balance by calling view method on the staking pool directly and decided to unstake.
-Unstake `1010` NEAR tokens.
+Let's say the owner checked staked balance by calling view method on the staking pool directly and decided to unstake everything.
 
 ```bash
-near call lockup1 unstake '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+near call lockup1 unstake_all '{}' --accountId=owner1 --gas=125000000000000
 ```
 
 #### Withdraw from the staking pool
 
-Wait 4 epochs (about 48 hours) and now can withdraw `1010` NEAR tokens from the staking pool.
+Wait 4 epochs (about 48 hours) and now can withdraw all NEAR tokens from the staking pool.
 
 ```bash
-near call lockup1 withdraw_from_staking_pool '{"amount": "1010000000000000000000000000"}' --accountId=owner1
+near call lockup1 withdraw_all_from_staking_pool '{}' --accountId=owner1 --gas=175000000000000
 ```
 
 #### Check transfers vote
 
 ```bash
-near call lockup1 check_transfers_vote '{}' --accountId=owner1
+near call lockup1 check_transfers_vote '{}' --accountId=owner1 --gas=75000000000000
 ```
 
 Let's assume transfers are enabled now.
@@ -479,8 +536,27 @@ near view lockup1 get_liquid_owners_balance '{}'
 Transfer 10 NEAR to `owner-sub-account`.
 
 ```bash
-near call lockup1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1
+near call lockup1 transfer '{"amount": "10000000000000000000000000", "receiver_id": "owner-sub-account"}' --accountId=owner1 --gas=50000000000000
 ```
+
+#### Adding full access key
+
+Once everything is unlocked the owner can add a full access key on the lockup account. This allows to withdraw remaining tokens locked due to contract storage.
+The owner first should generate a new key-pair (private and public keys). Then the owner should pass the public key from this key-pair.
+
+```bash
+near call lockup1 add_full_access_key '{"new_public_key": "CE3QAXyVLeScmY9YeEyR3Tw9yXfjBPzFLzroTranYtVb"}' --accountId=owner1 --gas=50000000000000
+```
+
+Now owner should be able to delete this account and claim all tokens.
+WARNING: This should only be done if there is no tokens delegated to a staking pool. Otherwise those tokens might be lost.
+
+This command with delete `lockup1` and transfer all tokens remaining tokens from the lockup account to `owner1`
+
+```bash
+near delete lockup1 owner1
+```
+
 
 ### Vesting termination by NEAR Foundation
 
@@ -491,7 +567,7 @@ If the employee was terminated, the foundation needs to terminate vesting.
 To initiate termination NEAR Foundation has to issue the following command:
 
 ```bash
-near call lockup1 terminate_vesting '' --accountId=near
+near call lockup1 terminate_vesting '' --accountId=near --gas=25000000000000
 ```
 
 This will block the account until the termination process is completed.
@@ -513,17 +589,16 @@ The current termination status should be `VestingTerminatedWithDeficit`.
 
 The NEAR Foundation needs to first unstake tokens in the staking pool and then once tokens
 become liquid, withdraw them from the staking pool to the contract. This is done by calling `termination_prepare_to_withdraw`.
-These calls require quite a bit of callbacks, so the amount of gas has to be slightly more than default of `100 * 10^12`.
 
 ```bash
-near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=175000000000000
 ```
 
 The first will unstake everything from the staking pool. This should advance the termination status to `EverythingUnstaked`.
 In 4 epochs, or about 48 hours, the Foundation can call the same command again:
 
 ```bash
-near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=200000000000000
+near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=175000000000000
 ```
 
 If everything went okay, the status should be advanced to `ReadyToWithdraw`.
@@ -533,7 +608,7 @@ If everything went okay, the status should be advanced to `ReadyToWithdraw`.
 Once the termination status is `ReadyToWithdraw`. The Foundation can proceed with withdrawing the unvested balance.
 
 ```bash
-near call lockup1 termination_withdraw '{"receiver_id": "near"}' --accountId=near
+near call lockup1 termination_withdraw '{"receiver_id": "near"}' --accountId=near --gas=75000000000000
 ```
 
 In case of successful withdrawal, the unvested balance will become `0` and the owner can use this contract again.
