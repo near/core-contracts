@@ -13,6 +13,16 @@ Mutlisig uses set of `FunctionCall` `AccessKey`s as a set of allowed N keys.
 When contract is being setup, it should be initialized with set of keys that will be initially managing this account.
 All operations going forward will require `K` signatures to be performed.
 
+## Minification of Binary
+
+In `/res` there is a script `minify.sh` that can be run to minimize the final binary produced by `./build.sh`.
+Details on this script can be found here: https://github.com/near/near-sdk-rs/blob/master/minifier/minify.sh
+Should be able to run after running
+```
+cargo install wasm-snip wasm-gc
+```
+Removed `wasm-strip` step from script since it doesn't shrink much and wabt install is more cumbersome.
+
 ### Initialization
 
 ### Request
