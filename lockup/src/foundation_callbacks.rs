@@ -202,17 +202,13 @@ impl LockupContract {
                     .as_bytes(),
             );
             // Decreasing lockup amount after withdrawal.
-            self.lockup_information.lockup_amount.0 = self
-                .lockup_information
-                .lockup_amount
-                .0
-                .saturating_sub(amount.0);
+            self.lockup_information.termination_withdrawn_tokens += amount.0;
             let unvested_amount = self.get_terminated_unvested_balance().0;
             if unvested_amount > amount.0 {
                 // There is still unvested balance remaining.
                 let remaining_balance = unvested_amount - amount.0;
-                self.release_information =
-                    ReleaseInformation::Terminating(TerminationInformation {
+                self.vesting_information =
+                    VestingInformation::Terminating(TerminationInformation {
                         unvested_amount: remaining_balance.into(),
                         status: TerminationStatus::ReadyToWithdraw,
                     });
@@ -224,7 +220,7 @@ impl LockupContract {
                         .as_bytes(),
                 );
             } else {
-                self.release_information = ReleaseInformation::None;
+                self.vesting_information = VestingInformation::None;
                 self.foundation_account_id = None;
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }

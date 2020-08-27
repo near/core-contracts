@@ -1,13 +1,18 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::AccountId;
+use near_sdk::{AccountId, Balance};
 use uint::construct_uint;
 
 construct_uint! {
     /// 256-bit unsigned integer.
     pub struct U256(4);
 }
+
+/// Raw type for duration in nanoseconds
+pub type Duration = u64;
+/// Raw type for timestamp in nanoseconds
+pub type Timestamp = u64;
 
 /// Timestamp in nanosecond wrapped into a struct for JSON serialization as a string.
 pub type WrappedTimestamp = U64;
@@ -17,17 +22,24 @@ pub type WrappedDuration = U64;
 pub type WrappedBalance = U128;
 
 /// Contains information about token lockups.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-#[serde(crate = "near_sdk::serde")]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub struct LockupInformation {
     /// The amount in yocto-NEAR tokens locked for this account.
-    pub lockup_amount: WrappedBalance,
+    pub lockup_amount: Balance,
+    /// The amount of tokens that were withdrawn by NEAR foundation due to early termination
+    /// of vesting.
+    /// This amount has to be accounted separately from the lockup_amount to make sure
+    /// linear release is not being affected.
+    pub termination_withdrawn_tokens: Balance,
     /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
     /// lockup amount of tokens.
-    pub lockup_duration: WrappedDuration,
+    pub lockup_duration: Duration,
+    /// If present, the duration when the full lockup amount will be available. The tokens are
+    /// linearly released from the moment transfers are enabled.
+    pub release_duration: Option<Duration>,
     /// The optional absolute lockup timestamp in nanoseconds which locks the tokens until this
     /// timestamp passes.
-    pub lockup_timestamp: Option<WrappedTimestamp>,
+    pub lockup_timestamp: Option<Timestamp>,
     /// The information to indicate when the lockup period starts.
     pub transfers_information: TransfersInformation,
 }
@@ -104,16 +116,12 @@ impl VestingSchedule {
 }
 
 /// Contains information about vesting that contains vesting schedule and termination information.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-#[serde(crate = "near_sdk::serde")]
-pub enum ReleaseInformation {
+#[derive(BorshDeserialize, BorshSerialize)]
+pub enum VestingInformation {
     /// No vesting.
     None,
     /// The vesting is going on schedule.
     Vesting(VestingSchedule),
-    /// The duration when the full lockup amount will be available. The tokens are linearly released
-    /// from the moment transfers are enabled.
-    ReleaseDuration(WrappedDuration),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.
     /// Once the unvested amount is transferred out, `VestingInformation` is removed.
