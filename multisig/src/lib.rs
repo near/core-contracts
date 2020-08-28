@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::convert::TryFrom;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::Map;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
 use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
-use serde::{Deserialize, Serialize};
+use near_sdk::serde::{Deserialize, Serialize};
 
 /// Unlimited allowance for multisig keys.
 const DEFAULT_ALLOWANCE: u128 = 0;
@@ -17,15 +17,16 @@ pub type RequestId = u32;
 
 /// Permissions for function call access key.
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct FunctionCallPermission {
     allowance: Option<U128>,
     receiver_id: AccountId,
     method_names: Vec<String>,
 }
 
-#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-#[serde(tag = "type")]
 /// Lowest level action that can be performed by the multisig contract.
+#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(tag = "type", crate = "near_sdk::serde")]
 pub enum MultiSigRequestAction {
     /// Transfers given amount to receiver.
     Transfer { amount: U128 },
@@ -60,6 +61,7 @@ pub enum MultiSigRequestAction {
 
 // The request the user makes specifying the receiving account and actions they want to execute (1 tx)
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct MultiSigRequest {
     receiver_id: AccountId,
     actions: Vec<MultiSigRequestAction>,
@@ -67,6 +69,7 @@ pub struct MultiSigRequest {
 
 // An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
 #[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
     signer_pk: PublicKey,
@@ -78,9 +81,9 @@ pub struct MultiSigRequestWithSigner {
 pub struct MultiSigContract {
     num_confirmations: u32,
     request_nonce: RequestId,
-    requests: Map<RequestId, MultiSigRequestWithSigner>,
-    confirmations: Map<RequestId, HashSet<PublicKey>>,
-    num_requests_pk: Map<PublicKey, u32>,
+    requests: UnorderedMap<RequestId, MultiSigRequestWithSigner>,
+    confirmations: UnorderedMap<RequestId, HashSet<PublicKey>>,
+    num_requests_pk: UnorderedMap<PublicKey, u32>,
     // per key
     active_requests_limit: u32,
 }
@@ -102,9 +105,9 @@ impl MultiSigContract {
         Self {
             num_confirmations,
             request_nonce: 0,
-            requests: Map::new(b"r".to_vec()),
-            confirmations: Map::new(b"c".to_vec()),
-            num_requests_pk: Map::new(b"k".to_vec()),
+            requests: UnorderedMap::new(b"r".to_vec()),
+            confirmations: UnorderedMap::new(b"c".to_vec()),
+            num_requests_pk: UnorderedMap::new(b"k".to_vec()),
             active_requests_limit: 12,
         }
     }
