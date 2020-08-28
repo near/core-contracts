@@ -765,7 +765,7 @@ checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 [[package]]
 name = "near-crypto"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "arrayref",
  "blake2",
@@ -789,7 +789,7 @@ dependencies = [
 [[package]]
 name = "near-metrics"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "lazy_static",
  "log",
@@ -799,7 +799,7 @@ dependencies = [
 [[package]]
 name = "near-pool"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "borsh",
  "near-crypto",
@@ -810,7 +810,7 @@ dependencies = [
 [[package]]
 name = "near-primitives"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "base64",
  "borsh",
@@ -841,7 +841,7 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-core"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -865,7 +865,7 @@ dependencies = [
 [[package]]
 name = "near-rpc-error-macro"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "near-rpc-error-core 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
  "proc-macro2",
@@ -892,7 +892,7 @@ dependencies = [
 [[package]]
 name = "near-runtime-configs"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "near-primitives",
  "near-runtime-fees 2.1.1",
@@ -913,7 +913,7 @@ dependencies = [
 [[package]]
 name = "near-runtime-fees"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "num-rational",
  "serde",
@@ -922,7 +922,7 @@ dependencies = [
 [[package]]
 name = "near-runtime-standalone"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "near-crypto",
  "near-pool",
@@ -976,7 +976,7 @@ dependencies = [
 [[package]]
 name = "near-store"
 version = "0.1.0"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "borsh",
  "byteorder",
@@ -1009,7 +1009,7 @@ dependencies = [
 [[package]]
 name = "near-vm-errors"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "borsh",
  "near-rpc-error-macro 0.1.0 (git+https://github.com/nearprotocol/nearcore.git)",
@@ -1035,7 +1035,7 @@ dependencies = [
 [[package]]
 name = "near-vm-logic"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "base64",
  "bs58",
@@ -1050,7 +1050,7 @@ dependencies = [
 [[package]]
 name = "near-vm-runner"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "cached",
  "near-runtime-fees 2.1.1",
@@ -1078,7 +1078,7 @@ dependencies = [
 [[package]]
 name = "node-runtime"
 version = "2.1.1"
-source = "git+https://github.com/nearprotocol/nearcore.git#53fb6c68f5634fabe0bbdcc8ae194fe92d5a4b33"
+source = "git+https://github.com/nearprotocol/nearcore.git#b360eed99c0b9b7105e4660b060e8e9d2f66b0e8"
 dependencies = [
  "borsh",
  "byteorder",

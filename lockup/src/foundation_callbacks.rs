@@ -98,7 +98,7 @@ impl LockupContract {
     ) -> PromiseOrValue<bool> {
         assert_self();
         if unstaked_balance.0 > 0 {
-            // Need to unstake
+            // Need to withdraw
             env::log(
                 format!(
                     "Termination Step: Withdrawing {} from the staking pool @{}",
