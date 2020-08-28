@@ -89,7 +89,7 @@ impl ExternalUser {
         &self.signer
     }
 
-    pub fn account(&self, runtime: &mut RuntimeStandalone) -> Account {
+    pub fn account(&self, runtime: &RuntimeStandalone) -> Account {
         runtime
             .view_account(&self.account_id)
             .expect("Account should be there")
@@ -195,6 +195,22 @@ impl ExternalUser {
                 MAX_GAS,
                 0,
             )
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn init_transfer_poll(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        transfer_poll_account_id: AccountId,
+    ) -> TxResult {
+        let tx = self
+            .new_tx(runtime, transfer_poll_account_id)
+            .create_account()
+            .transfer(ntoy(30))
+            .deploy_contract(FAKE_VOTING_WASM_BYTES.to_vec())
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();

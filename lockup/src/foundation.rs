@@ -4,6 +4,9 @@ use near_sdk::{near_bindgen, AccountId, Promise};
 #[near_bindgen]
 impl LockupContract {
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 25 TGas (1 * BASE_GAS)
+    ///
     /// Terminates vesting schedule and locks the remaining unvested amount.
     pub fn terminate_vesting(&mut self) {
         self.assert_called_by_foundation();
@@ -37,6 +40,9 @@ impl LockupContract {
     }
 
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 175 TGas (7 * BASE_GAS)
+    ///
     /// When the vesting is terminated and there are deficit of the tokens on the account, the
     /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
     pub fn termination_prepare_to_withdraw(&mut self) -> Promise {
@@ -111,6 +117,9 @@ impl LockupContract {
     }
 
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 75 TGas (3 * BASE_GAS)
+    ///
     /// Withdraws the unvested amount from the early termination of the vesting schedule.
     pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise {
         self.assert_called_by_foundation();

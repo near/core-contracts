@@ -69,9 +69,7 @@ impl LockupContract {
                 transfers_timestamp
                     .0
                     .saturating_add(self.lockup_information.lockup_duration.0),
-                self.lockup_information
-                    .lockup_timestamp
-                    .map_or(0, |t| t.0),
+                self.lockup_information.lockup_timestamp.map_or(0, |t| t.0),
             );
             if lockup_timestamp <= env::block_timestamp() {
                 return self.get_unvested_amount();
@@ -81,12 +79,12 @@ impl LockupContract {
         self.lockup_information.lockup_amount
     }
 
-    /// Get the amount of tokens that are already vested, but still locked due to lockup.
+    /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
     pub fn get_locked_vested_amount(&self) -> WrappedBalance {
         (self.get_locked_amount().0 - self.get_unvested_amount().0).into()
     }
 
-    /// Get the amount of tokens that are locked in this account due to vesting.
+    /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
     pub fn get_unvested_amount(&self) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount.0;
@@ -143,7 +141,7 @@ impl LockupContract {
     }
 
     /// The balance of the account owner. It includes vested and extra tokens that may have been
-    /// deposited to this account.
+    /// deposited to this account, but excludes locked tokens.
     /// NOTE: Some of this tokens may be deposited to the staking pool.
     /// This method also doesn't account for tokens locked for the contract storage.
     pub fn get_owners_balance(&self) -> WrappedBalance {
@@ -152,7 +150,13 @@ impl LockupContract {
             .into()
     }
 
+    /// Returns total balance of the account including tokens deposited on the staking pool.
+    pub fn get_balance(&self) -> WrappedBalance {
+        (env::account_balance() + self.get_known_deposited_balance().0).into()
+    }
+
     /// The amount of tokens the owner can transfer now from the account.
+    /// Transfers have to be enabled.
     pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
         std::cmp::min(self.get_owners_balance().0, self.get_account_balance().0).into()
     }
