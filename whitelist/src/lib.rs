@@ -1,9 +1,9 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::Set;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::LookupSet;
 use near_sdk::{env, near_bindgen, AccountId};
 
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -13,11 +13,11 @@ pub struct WhitelistContract {
     pub foundation_account_id: AccountId,
 
     /// The whitelisted account IDs of approved staking pool contracts.
-    pub whitelist: Set<AccountId>,
+    pub whitelist: LookupSet<AccountId>,
 
     /// The whitelist of staking pool factories. Any account from this list can whitelist staking
     /// pools.
-    pub factory_whitelist: Set<AccountId>,
+    pub factory_whitelist: LookupSet<AccountId>,
 }
 
 impl Default for WhitelistContract {
@@ -38,8 +38,8 @@ impl WhitelistContract {
         );
         Self {
             foundation_account_id,
-            whitelist: Set::new(b"w".to_vec()),
-            factory_whitelist: Set::new(b"f".to_vec()),
+            whitelist: LookupSet::new(b"w".to_vec()),
+            factory_whitelist: LookupSet::new(b"f".to_vec()),
         }
     }
 
