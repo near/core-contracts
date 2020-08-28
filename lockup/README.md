@@ -91,6 +91,8 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 
 ### `1.0.0`
 
+- Make `release_duration` independent from the `vesting_schedule`. They are not allowed to be used simultaneously.
+- Internal. Remove some JSON serialization on inner structures.
 - Fix a bug with the prepaid gas exceeded during the foundation callback by increasing base gas.
 - Include minimum amount of gas needed for every call.
 - Add new helper methods for the owner for staking.
@@ -150,10 +152,14 @@ The initialization method has the following interface.
 /// - `transfers_information` - the information about the transfers. Either transfers are
 ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
 ///    are currently disabled and it contains the account ID of the transfer poll contract.
-/// - `vesting_schedule` - if present, describes the vesting schedule.
+/// - `vesting_schedule` - if present, describes the vesting schedule for employees. Vesting
+///    schedule affects the amount of tokens the NEAR Foundation will get in case of
+///    employment termination as well as the amount of tokens available for transfer by
+///    the employee.
 /// - `release_duration` - is the duration when the full lockup amount will be available.
-///    The tokens are linearly released from the moment transfers are enabled. It can not be
-///    provided with the vesting schedule.
+///    The tokens are linearly released from the moment transfers are enabled. If it's used
+///    in addition to the vesting schedule, then the amount of tokens available to transfer
+///    is subject to the minimum between vested tokens and released tokens.
 /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
 /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
 ///    terminate vesting schedule.
