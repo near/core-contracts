@@ -29,7 +29,7 @@ impl LockupContract {
 
     /// Returns the current termination status or `None` in case of no termination.
     pub fn get_termination_status(&self) -> Option<TerminationStatus> {
-        if let ReleaseInformation::Terminating(termination_information) = &self.release_information
+        if let VestingInformation::Terminating(termination_information) = &self.vesting_information
         {
             Some(termination_information.status)
         } else {
@@ -40,9 +40,9 @@ impl LockupContract {
     /// The amount of tokens that are not going to be vested, because the vesting schedule was
     /// terminated earlier.
     pub fn get_terminated_unvested_balance(&self) -> WrappedBalance {
-        if let ReleaseInformation::Terminating(TerminationInformation {
+        if let VestingInformation::Terminating(TerminationInformation {
             unvested_amount, ..
-        }) = &self.release_information
+        }) = &self.vesting_information
         {
             *unvested_amount
         } else {
@@ -61,6 +61,7 @@ impl LockupContract {
 
     /// Get the amount of tokens that are locked in this account due to lockup or vesting.
     pub fn get_locked_amount(&self) -> WrappedBalance {
+        let lockup_amount = self.lockup_information.lockup_amount;
         if let TransfersInformation::TransfersEnabled {
             transfers_timestamp,
         } = &self.lockup_information.transfers_information
@@ -68,34 +69,56 @@ impl LockupContract {
             let lockup_timestamp = std::cmp::max(
                 transfers_timestamp
                     .0
-                    .saturating_add(self.lockup_information.lockup_duration.0),
-                self.lockup_information
-                    .lockup_timestamp
-                    .map_or(0, |t| t.0),
+                    .saturating_add(self.lockup_information.lockup_duration),
+                self.lockup_information.lockup_timestamp.unwrap_or(0),
             );
-            if lockup_timestamp <= env::block_timestamp() {
-                return self.get_unvested_amount();
+            let block_timestamp = env::block_timestamp();
+            if lockup_timestamp <= block_timestamp {
+                let unreleased_amount =
+                    if let &Some(release_duration) = &self.lockup_information.release_duration {
+                        let end_timestamp = transfers_timestamp.0.saturating_add(release_duration);
+                        if block_timestamp >= end_timestamp {
+                            // Everything is released
+                            0
+                        } else {
+                            let time_left = U256::from(end_timestamp - block_timestamp);
+                            let unreleased_amount = U256::from(lockup_amount) * time_left
+                                / U256::from(release_duration);
+                            // The unreleased amount can't be larger than lockup_amount because the
+                            // time_left is smaller than total_time.
+                            unreleased_amount.as_u128()
+                        }
+                    } else {
+                        0
+                    };
+
+                return (std::cmp::max(
+                    unreleased_amount
+                        .saturating_sub(self.lockup_information.termination_withdrawn_tokens),
+                    self.get_unvested_amount().0,
+                ))
+                .into();
             }
         }
         // The entire balance is still locked before the lockup timestamp.
-        self.lockup_information.lockup_amount
+        (lockup_amount - self.lockup_information.termination_withdrawn_tokens).into()
     }
 
-    /// Get the amount of tokens that are already vested, but still locked due to lockup.
+    /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
     pub fn get_locked_vested_amount(&self) -> WrappedBalance {
         (self.get_locked_amount().0 - self.get_unvested_amount().0).into()
     }
 
-    /// Get the amount of tokens that are locked in this account due to vesting.
+    /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
     pub fn get_unvested_amount(&self) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
-        let lockup_amount = self.lockup_information.lockup_amount.0;
-        match &self.release_information {
-            ReleaseInformation::None => {
+        let lockup_amount = self.lockup_information.lockup_amount;
+        match &self.vesting_information {
+            VestingInformation::None => {
                 // Everything is vested and unlocked
                 0.into()
             }
-            ReleaseInformation::Vesting(vesting_schedule) => {
+            VestingInformation::Vesting(vesting_schedule) => {
                 if block_timestamp < vesting_schedule.cliff_timestamp.0 {
                     // Before the cliff, nothing is vested
                     lockup_amount.into()
@@ -115,35 +138,14 @@ impl LockupContract {
                     unvested_amount.as_u128().into()
                 }
             }
-            ReleaseInformation::ReleaseDuration(release_duration) => {
-                if let TransfersInformation::TransfersEnabled {
-                    transfers_timestamp,
-                } = &self.lockup_information.transfers_information
-                {
-                    let end_timestamp = transfers_timestamp.0.saturating_add(release_duration.0);
-                    if block_timestamp >= end_timestamp {
-                        // After the end, everything is vested
-                        0.into()
-                    } else {
-                        let time_left = U256::from(end_timestamp - block_timestamp);
-                        let unreleased_amount =
-                            U256::from(lockup_amount) * time_left / U256::from(release_duration.0);
-                        // The unreleased amount can't be larger than lockup_amount because the
-                        // time_left is smaller than total_time.
-                        unreleased_amount.as_u128().into()
-                    }
-                } else {
-                    lockup_amount.into()
-                }
-            }
-            ReleaseInformation::Terminating(termination_information) => {
+            VestingInformation::Terminating(termination_information) => {
                 termination_information.unvested_amount
             }
         }
     }
 
     /// The balance of the account owner. It includes vested and extra tokens that may have been
-    /// deposited to this account.
+    /// deposited to this account, but excludes locked tokens.
     /// NOTE: Some of this tokens may be deposited to the staking pool.
     /// This method also doesn't account for tokens locked for the contract storage.
     pub fn get_owners_balance(&self) -> WrappedBalance {
@@ -152,7 +154,13 @@ impl LockupContract {
             .into()
     }
 
+    /// Returns total balance of the account including tokens deposited on the staking pool.
+    pub fn get_balance(&self) -> WrappedBalance {
+        (env::account_balance() + self.get_known_deposited_balance().0).into()
+    }
+
     /// The amount of tokens the owner can transfer now from the account.
+    /// Transfers have to be enabled.
     pub fn get_liquid_owners_balance(&self) -> WrappedBalance {
         std::cmp::min(self.get_owners_balance().0, self.get_account_balance().0).into()
     }

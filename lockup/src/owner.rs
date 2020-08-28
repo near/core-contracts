@@ -4,6 +4,9 @@ use near_sdk::{near_bindgen, AccountId, Promise, PublicKey};
 #[near_bindgen]
 impl LockupContract {
     /// OWNER'S METHOD
+    ///
+    /// Requires 75 TGas (3 * BASE_GAS)
+    ///
     /// Selects staking pool contract at the given account ID. The staking pool first has to be
     /// checked against the staking pool whitelist contract.
     pub fn select_staking_pool(&mut self, staking_pool_account_id: AccountId) -> Promise {
@@ -38,6 +41,9 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 25 TGas (1 * BASE_GAS)
+    ///
     /// Unselects the current staking pool.
     /// It requires that there are no known deposits left on the currently selected staking pool.
     pub fn unselect_staking_pool(&mut self) {
@@ -68,6 +74,9 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 100 TGas (4 * BASE_GAS)
+    ///
     /// Deposits the given extra amount to the staking pool
     pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
         self.assert_owner();
@@ -111,6 +120,55 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 125 TGas (5 * BASE_GAS)
+    ///
+    /// Deposits and stakes the given extra amount to the selected staking pool
+    pub fn deposit_and_stake(&mut self, amount: WrappedBalance) -> Promise {
+        self.assert_owner();
+        assert!(amount.0 > 0, "Amount should be positive");
+        self.assert_staking_pool_is_idle();
+        self.assert_no_termination();
+        assert!(
+            self.get_account_balance().0 >= amount.0,
+            "The balance that can be deposited to the staking pool is lower than the extra amount"
+        );
+
+        env::log(
+            format!(
+                "Depositing and staking {} to the staking pool @{}",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
+            )
+            .as_bytes(),
+        );
+
+        self.set_staking_pool_status(TransactionStatus::Busy);
+
+        ext_staking_pool::deposit_and_stake(
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            amount.0,
+            gas::staking_pool::DEPOSIT_AND_STAKE,
+        )
+        .then(ext_self_owner::on_staking_pool_deposit_and_stake(
+            amount,
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            gas::owner_callbacks::ON_STAKING_POOL_DEPOSIT_AND_STAKE,
+        ))
+    }
+
+    /// OWNER'S METHOD
+    ///
+    /// Requires 75 TGas (3 * BASE_GAS)
+    ///
     /// Retrieves total balance from the staking pool and remembers it internally.
     /// This method is helpful when the owner received some rewards for staking and wants to
     /// transfer them back to this account for withdrawal. In order to know the actual liquid
@@ -151,6 +209,9 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 125 TGas (5 * BASE_GAS)
+    ///
     /// Withdraws the given amount from the staking pool
     pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> Promise {
         self.assert_owner();
@@ -191,6 +252,51 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 175 TGas (7 * BASE_GAS)
+    ///
+    /// Tries to withdraws all unstaked balance from the staking pool
+    pub fn withdraw_all_from_staking_pool(&mut self) -> Promise {
+        self.assert_owner();
+        self.assert_staking_pool_is_idle();
+        self.assert_no_termination();
+
+        env::log(
+            format!(
+                "Going to query the unstaked balance at the staking pool @{}",
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
+            )
+            .as_bytes(),
+        );
+
+        self.set_staking_pool_status(TransactionStatus::Busy);
+
+        ext_staking_pool::get_account_unstaked_balance(
+            env::current_account_id(),
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            NO_DEPOSIT,
+            gas::staking_pool::GET_ACCOUNT_UNSTAKED_BALANCE,
+        )
+        .then(
+            ext_self_owner::on_get_account_unstaked_balance_to_withdraw_by_owner(
+                &env::current_account_id(),
+                NO_DEPOSIT,
+                gas::owner_callbacks::ON_GET_ACCOUNT_UNSTAKED_BALANCE_TO_WITHDRAW_BY_OWNER,
+            ),
+        )
+    }
+
+    /// OWNER'S METHOD
+    ///
+    /// Requires 125 TGas (5 * BASE_GAS)
+    ///
     /// Stakes the given extra amount at the staking pool
     pub fn stake(&mut self, amount: WrappedBalance) -> Promise {
         self.assert_owner();
@@ -231,6 +337,9 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 125 TGas (5 * BASE_GAS)
+    ///
     /// Unstakes the given amount at the staking pool
     pub fn unstake(&mut self, amount: WrappedBalance) -> Promise {
         self.assert_owner();
@@ -271,6 +380,48 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 125 TGas (5 * BASE_GAS)
+    ///
+    /// Unstakes all tokens at the staking pool
+    pub fn unstake_all(&mut self) -> Promise {
+        self.assert_owner();
+        self.assert_staking_pool_is_idle();
+        self.assert_no_termination();
+
+        env::log(
+            format!(
+                "Unstaking all tokens from the staking pool @{}",
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
+            )
+            .as_bytes(),
+        );
+
+        self.set_staking_pool_status(TransactionStatus::Busy);
+
+        ext_staking_pool::unstake_all(
+            &self
+                .staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id,
+            NO_DEPOSIT,
+            gas::staking_pool::UNSTAKE_ALL,
+        )
+        .then(ext_self_owner::on_staking_pool_unstake_all(
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            gas::owner_callbacks::ON_STAKING_POOL_UNSTAKE_ALL,
+        ))
+    }
+
+    /// OWNER'S METHOD
+    ///
+    /// Requires 75 TGas (3 * BASE_GAS)
+    ///
     /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
     /// are enabled, they can't be disabled anymore.
     pub fn check_transfers_vote(&mut self) -> Promise {
@@ -306,7 +457,10 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
-    /// Transfers the given extra amount to the given receiver account ID.
+    ///
+    /// Requires 50 TGas (2 * BASE_GAS)
+    ///
+    /// Transfers the given amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
     pub fn transfer(&mut self, amount: WrappedBalance, receiver_id: AccountId) -> Promise {
         self.assert_owner();
@@ -331,6 +485,9 @@ impl LockupContract {
     }
 
     /// OWNER'S METHOD
+    ///
+    /// Requires 50 TGas (2 * BASE_GAS)
+    ///
     /// Adds full access key with the given public key to the account once the contract is fully
     /// vested, lockup duration has expired and transfers are enabled.
     /// This will allow owner to use this account as a regular account and remove the contract.
