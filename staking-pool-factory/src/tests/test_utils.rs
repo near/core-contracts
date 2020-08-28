@@ -40,6 +40,7 @@ pub fn testing_env_with_promise_results(context: VMContext, promise_result: Prom
         Default::default(),
         vec![promise_result],
         storage,
+        Default::default(),
     )));
 }
 
