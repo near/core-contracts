@@ -42,6 +42,18 @@ pub fn exchange_deposit();
 
 ## API examples
 
+First create an account. Here we use `coin_exchange` as an example
+
+```bash
+near create_account coin_exchange --masterAccount=<account>
+```
+
+Now deploy the contract
+
+```bash
+near deploy --wasmFile=<contract_binary> --accountId=coin_exchange
+```
+
 Send `10` NEAR tokens to the exchange account `coin_exchange` with memo `USER_123` from user `token_owner`.
 
 Command:
@@ -51,3 +63,7 @@ near call coin_exchange exchange_deposit 'USER_123' --accountId=token_owner --am
 ```
 
 NOTE: This command temporarily doesn't work due to near-cli assumption about JSON input format. See https://github.com/near/near-cli/issues/503
+As a temporary workaround, the above command can be changed to
+```bash
+near call coin_exchange exchange_deposit '{"": "USER_123"}' --accountId=token_owner --amount=10
+```
