@@ -9,10 +9,11 @@ use near_primitives::{
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
-use serde::de::DeserializeOwned;
-use serde_json::json;
+use near_sdk::serde::de::DeserializeOwned;
+use near_sdk::serde_json::{self, json};
 
 pub const FACTORY_ACCOUNT_ID: &str = "factory";
+const MAX_GAS: u64 = 300000000000000;
 
 pub fn ntoy(near_amount: Balance) -> Balance {
     near_amount * 10u128.pow(24)
@@ -120,7 +121,7 @@ impl ExternalUser {
     ) -> TxResult {
         let tx = self
             .new_tx(runtime, receiver_id.to_string())
-            .function_call(method.into(), args.to_vec(), 10000000000000000, deposit)
+            .function_call(method.into(), args.to_vec(), MAX_GAS, deposit)
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -140,7 +141,7 @@ impl ExternalUser {
             .function_call(
                 "new".into(),
                 serde_json::to_vec(&json!({"staking_pool_whitelist_account_id": staking_pool_whitelist_account_id.to_string()})).unwrap(),
-                10000000000000000,
+                MAX_GAS,
                 0,
             )
             .sign(&self.signer);
@@ -162,7 +163,7 @@ impl ExternalUser {
             .function_call(
                 "new".into(),
                 serde_json::to_vec(&json!({"foundation_account_id": self.account_id()})).unwrap(),
-                1000000000000000,
+                MAX_GAS,
                 0,
             )
             .sign(&self.signer);
