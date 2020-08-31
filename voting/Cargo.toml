@@ -8,12 +8,12 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "1.0.0"
+near-sdk = "2.0.0"
 
 [profile.release]
 codegen-units = 1
 # Tell `rustc` to optimize for small code size.
-opt-level = "z"
+opt-level = "s"
 lto = true
 debug = false
 panic = "abort"
