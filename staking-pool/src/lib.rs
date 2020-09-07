@@ -183,6 +183,10 @@ impl StakingContract {
             "The owner account ID is invalid"
         );
         let account_balance = env::account_balance();
+        assert!(
+            account_balance > STAKE_SHARE_PRICE_GUARANTEE_FUND,
+            "Account balance too low"
+        );
         let total_staked_balance = account_balance - STAKE_SHARE_PRICE_GUARANTEE_FUND;
         assert_eq!(
             env::account_locked_balance(),
@@ -514,10 +518,11 @@ mod tests {
             owner: String,
             stake_public_key: String,
             reward_fee_fraction: RewardFeeFraction,
+            initial_balance: Balance,
         ) -> Self {
             let context = VMContextBuilder::new()
                 .current_account_id(owner.clone())
-                .account_balance(ntoy(30))
+                .account_balance(initial_balance)
                 .finish();
             testing_env!(context.clone());
             let contract = StakingContract::new(
@@ -530,7 +535,7 @@ mod tests {
             Emulator {
                 contract,
                 epoch_height: 0,
-                amount: ntoy(30),
+                amount: initial_balance,
                 locked_amount: 0,
                 last_total_staked_balance,
                 last_total_stake_shares,
@@ -589,6 +594,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         emulator.update_context(bob(), 0);
         emulator.contract.internal_restake();
@@ -619,6 +625,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         let deposit_amount = ntoy(1_000_000);
         emulator.update_context(bob(), deposit_amount);
@@ -645,6 +652,7 @@ mod tests {
                 numerator: 10,
                 denominator: 100,
             },
+            ntoy(30),
         );
         let deposit_amount = ntoy(1_000_000);
         emulator.update_context(bob(), deposit_amount);
@@ -708,6 +716,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         let deposit_amount = ntoy(1_000_000);
         emulator.update_context(bob(), deposit_amount);
@@ -763,6 +772,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         let deposit_amount = ntoy(1_000_000);
         emulator.update_context(bob(), deposit_amount);
@@ -802,6 +812,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         emulator.update_context(alice(), ntoy(1_000_000));
         emulator.contract.deposit();
@@ -859,6 +870,7 @@ mod tests {
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         let initial_balance = 100;
         emulator.update_context(alice(), initial_balance);
@@ -876,11 +888,23 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Account balance too low")]
+    fn test_low_balance_create() {
+        Emulator::new(
+            owner(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            zero_fee(),
+            STAKE_SHARE_PRICE_GUARANTEE_FUND, //minimum, edge case
+        );
+    }
+
+    #[test]
     fn test_rewards() {
         let mut emulator = Emulator::new(
             owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
             zero_fee(),
+            ntoy(30),
         );
         let initial_balance = ntoy(100);
         emulator.update_context(alice(), initial_balance);
