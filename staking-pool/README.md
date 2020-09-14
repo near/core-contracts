@@ -370,10 +370,8 @@ pub fn update_staking_key(&mut self, stake_public_key: Base58PublicKey);
 pub fn update_reward_fee_fraction(&mut self, reward_fee_fraction: RewardFeeFraction);
 
 /// Owner's method.
-/// Vote on a given proposal on a given voting contract account ID on behalf of the pool.
-/// NOTE: This method allows the owner to call `vote(proposal_id: U64)` on any contract on
-/// behalf of this staking pool.
-pub fn vote(&mut self, voting_account_id: AccountId, proposal_id: ProposalId) -> Promise;
+/// Calls `vote(is_vote)` on the given voting contract account ID on behalf of the pool.
+pub fn vote(&mut self, voting_account_id: AccountId, is_vote: bool) -> Promise;
 
 /// Owner's method.
 /// Pauses pool staking.
