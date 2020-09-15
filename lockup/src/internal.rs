@@ -31,12 +31,11 @@ impl LockupContract {
     }
 
     pub fn assert_vesting(&self, vesting_schedule: &VestingSchedule, salt: &[u8]) {
-        let provided_hash = hash_vesting_schedule(vesting_schedule, salt);
-        if let VestingInformation::Vesting(provided_hash) = &self.vesting_information {
-            // OK
-        } else {
-            env::panic(b"Presented vesting doesn't match or vesting was already terminated");
-        }
+        match &self.vesting_information {
+            VestingInformation::VestingHash(hash) => assert!(&hash_vesting_schedule(vesting_schedule, salt) == hash, "Presented vesting doesn't match or vesting was terminated"),
+            VestingInformation::VestingSchedule(vs) => assert!(vesting_schedule == vs, "Presented vesting doesn't match or vesting was terminated"),
+            _ => env::panic(b"Vesting was terminated"),
+        };
     }
 
     pub fn assert_no_termination(&self) {
@@ -88,15 +87,11 @@ impl LockupContract {
     }
 
     pub fn assert_called_by_foundation(&self) {
-        if let Some(foundation_account_id) = &self.foundation_account_id {
-            assert_eq!(
-                &env::predecessor_account_id(),
-                foundation_account_id,
-                "Can only be called by NEAR Foundation"
-            )
-        } else {
-            env::panic(b"No NEAR Foundation account is specified in the contract");
-        }
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.foundation_account_id,
+            "Can only be called by NEAR Foundation"
+        );
     }
 
     pub fn assert_owner(&self) {

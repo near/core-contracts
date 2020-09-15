@@ -88,7 +88,7 @@ pub struct StakingInformation {
 }
 
 /// Contains information about vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
@@ -118,11 +118,23 @@ impl VestingSchedule {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[serde(tag = "type", content = "value")]
+pub enum VestingScheduleOrHash {
+    Hash(String),
+    VestingSchedule(VestingSchedule),
+}
+
 /// Contains information about vesting that contains vesting schedule and termination information.
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum VestingInformation {
+    None,
     /// Vesting schedule is hashed for privacy and only will be revealed if foundation needs to pull the funds.
-    Vesting(Hash),
+    /// Can only be starting before lockups are unlocked.
+    VestingHash(Hash),
+    /// Explicit vesting schedule.
+    VestingSchedule(VestingSchedule),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.
     /// Once the unvested amount is transferred out, `VestingInformation` is removed.
@@ -151,7 +163,7 @@ pub enum TerminationStatus {
 }
 
 /// Contains information about early termination of the vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct TerminationInformation {
     /// The amount of tokens that are unvested and has to be transferred back to NEAR Foundation.

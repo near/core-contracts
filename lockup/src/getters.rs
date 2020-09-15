@@ -1,5 +1,7 @@
-use crate::*;
+use near_sdk::json_types::U128;
 use near_sdk::near_bindgen;
+
+use crate::*;
 
 #[near_bindgen]
 impl LockupContract {
@@ -92,12 +94,17 @@ impl LockupContract {
                         0
                     };
 
-                return (std::cmp::max(
+                let unvested_amount = match &self.vesting_information {
+                    VestingInformation::VestingSchedule(vs) => self.get_unvested_amount(vs.clone()),
+                    VestingInformation::Terminating(terminating) => terminating.unvested_amount,
+                    // There is either no information because vesting is private.
+                    _ => U128(0),
+                };
+                return std::cmp::max(
                     unreleased_amount
                         .saturating_sub(self.lockup_information.termination_withdrawn_tokens),
-                    self.get_unvested_amount().0,
-                ))
-                .into();
+                    unvested_amount.0)
+                    .into();
             }
         }
         // The entire balance is still locked before the lockup timestamp.
@@ -105,8 +112,8 @@ impl LockupContract {
     }
 
     /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
-    pub fn get_locked_vested_amount(&self) -> WrappedBalance {
-        (self.get_locked_amount().0 - self.get_unvested_amount().0).into()
+    pub fn get_locked_vested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
+        (self.get_locked_amount().0 - self.get_unvested_amount(vesting_schedule).0).into()
     }
 
     /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
@@ -114,11 +121,9 @@ impl LockupContract {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount;
         match &self.vesting_information {
-//            VestingInformation::None => {
-//                // Everything is vested and unlocked
-//                0.into()
-//            }
-            VestingInformation::Vesting(_) => {
+            VestingInformation::Terminating(termination_information) => termination_information.unvested_amount,
+            VestingInformation::None => U128::from(0),
+            _ => {
                 if block_timestamp < vesting_schedule.cliff_timestamp.0 {
                     // Before the cliff, nothing is vested
                     lockup_amount.into()
@@ -137,9 +142,6 @@ impl LockupContract {
                     // time_left is smaller than total_time.
                     unvested_amount.as_u128().into()
                 }
-            }
-            VestingInformation::Terminating(termination_information) => {
-                termination_information.unvested_amount
             }
         }
     }

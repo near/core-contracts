@@ -5,7 +5,7 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use lockup_contract::{TerminationStatus, TransfersInformation, VestingSchedule, WrappedBalance};
+use lockup_contract::{TerminationStatus, TransfersInformation, VestingSchedule, WrappedBalance, hash_vesting_schedule, VestingScheduleOrHash};
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
@@ -27,7 +27,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
         transfers_information: TransfersInformation::TransfersEnabled {
             transfers_timestamp: lockup_timestamp.saturating_add(1).into(),
         },
-        vesting_schedule: None,
+        // vesting_schedule: VestingScheduleOrHash::,
         release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: "staking".into(),
@@ -543,11 +543,12 @@ fn termination_with_staking() {
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
-        vesting_schedule: Some(VestingSchedule {
-            start_timestamp: start_timestamp.into(),
-            cliff_timestamp: (start_timestamp + 1000).into(),
-            end_timestamp: (start_timestamp + 4000).into(),
-        }),
+        vesting_schedule: VestingScheduleOrHash::Hash(
+            near_sdk::base64::encode(&hash_vesting_schedule(&VestingSchedule {
+                start_timestamp: start_timestamp.into(),
+                cliff_timestamp: (start_timestamp + 1000).into(),
+                end_timestamp: (start_timestamp + 4000).into(),
+        }, &vec![1, 2, 3]))),
         release_duration: None,
         foundation_account_id: Some(foundation.account_id.clone()),
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),

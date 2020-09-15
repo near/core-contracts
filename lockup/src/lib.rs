@@ -1,34 +1,29 @@
 //! A smart contract that allows tokens to be locked up.
 
+use near_sdk::{AccountId, env, ext_contract, near_bindgen};
+use near_sdk::base64::decode;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
-use near_sdk::{env, ext_contract, near_bindgen, AccountId};
 
-pub mod types;
+pub use crate::foundation::*;
+pub use crate::foundation_callbacks::*;
+pub use crate::getters::*;
+pub use crate::internal::*;
+pub use crate::owner::*;
+pub use crate::owner_callbacks::*;
 pub use crate::types::*;
-
-pub mod utils;
 pub use crate::utils::*;
 
+pub mod types;
+pub mod utils;
 pub mod owner_callbacks;
-pub use crate::owner_callbacks::*;
-
 pub mod foundation;
-pub use crate::foundation::*;
-
 pub mod foundation_callbacks;
-pub use crate::foundation_callbacks::*;
-
 pub mod gas;
 
 pub mod getters;
-pub use crate::getters::*;
-
 pub mod internal;
-pub use crate::internal::*;
-
 pub mod owner;
-pub use crate::owner::*;
 
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
@@ -185,7 +180,7 @@ impl LockupContract {
         lockup_duration: WrappedDuration,
         lockup_timestamp: Option<WrappedTimestamp>,
         transfers_information: TransfersInformation,
-        vesting_schedule: Hash,
+        vesting_schedule: VestingScheduleOrHash,
         release_duration: Option<WrappedDuration>,
         staking_pool_whitelist_account_id: AccountId,
         foundation_account_id: AccountId,
@@ -216,7 +211,10 @@ impl LockupContract {
             lockup_timestamp: lockup_timestamp.map(|d| d.0),
             transfers_information,
         };
-        let vesting_information = VestingInformation::Vesting(vesting_schedule);
+        let vesting_information = match vesting_schedule {
+            VestingScheduleOrHash::Hash(hash) => VestingInformation::VestingHash(decode(&hash).expect("Failed to deserialize")),
+            VestingScheduleOrHash::VestingSchedule(vs) => VestingInformation::VestingSchedule(vs),
+        };
 
         Self {
             owner_account_id,
@@ -232,17 +230,20 @@ impl LockupContract {
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use near_sdk::{testing_env, MockedBlockchain, PromiseResult, VMContext};
     use std::convert::TryInto;
 
-    mod test_utils;
+    use near_sdk::{MockedBlockchain, PromiseResult, testing_env, VMContext};
+    use near_sdk::base64::encode;
+
     use test_utils::*;
+
+    use super::*;
+
+    mod test_utils;
 
     pub type AccountId = String;
 
-    const SALT: Vec<u8> = vec![1, 2, 3];
+    const SALT: [u8; 3] = [1, 2, 3];
 
     fn basic_context() -> VMContext {
         get_context(
@@ -262,12 +263,12 @@ mod tests {
         }
     }
 
-    fn no_vesting_schedule_hash() -> Hash {
-        hash_vesting_schedule(&VestingSchedule {
+    fn no_vesting_schedule() -> VestingSchedule {
+        VestingSchedule {
             start_timestamp: to_ts(0).into(),
             cliff_timestamp: to_ts(0).into(),
             end_timestamp: to_ts(0).into()
-        }, &SALT)
+        }
     }
 
     fn new_contract(
@@ -284,11 +285,12 @@ mod tests {
                 transfer_poll_account_id: AccountId::from("transfers"),
             }
         };
-        let vesting_hash = if let Some(vs) = vesting_schedule {
-            hash_vesting_schedule(&vs, &SALT)
+        let vesting_hash = VestingScheduleOrHash::Hash(
+            encode(&hash_vesting_schedule(&if let Some(vs) = vesting_schedule {
+            vs
         } else {
-            no_vesting_schedule_hash()
-        };
+            no_vesting_schedule()
+        }, &SALT)));
         LockupContract::new(
             account_owner(),
             to_nanos(YEAR).into(),
@@ -316,7 +318,7 @@ mod tests {
         testing_env!(context.clone());
 
         assert_eq!(contract.get_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(LOCKUP_NEAR));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(LOCKUP_NEAR));
 
         // Checking values in 1 day after genesis time
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 1);
@@ -355,16 +357,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No NEAR Foundation account is specified in the contract")]
-    fn test_no_foundation_call() {
+    #[should_panic(expected = "Presented vesting doesn't match or vesting was terminated")]
+    fn test_vesting_doesnt_match() {
         let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
-        context.predecessor_account_id = non_owner();
+        context.predecessor_account_id = account_foundation();
         context.signer_account_id = non_owner();
         testing_env!(context.clone());
 
         let not_real_vesting = new_vesting_schedule(100);
-        contract.terminate_vesting(not_real_vesting, SALT);
+        contract.terminate_vesting(not_real_vesting, SALT.to_vec());
     }
 
     #[test]
@@ -379,7 +381,7 @@ mod tests {
         context.signer_account_id = non_owner();
         testing_env!(context.clone());
 
-        contract.terminate_vesting(vesting_schedule, SALT);
+        contract.terminate_vesting(vesting_schedule, SALT.to_vec());
     }
 
     #[test]
@@ -851,22 +853,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Foundation account can't be added without vesting schedule")]
-    fn test_init_foundation_key_no_vesting() {
-        let context = basic_context();
-        testing_env!(context.clone());
-        new_contract(true, None, None);
-    }
-
-    #[test]
-    #[should_panic(expected = "Foundation account can't be added without vesting schedule")]
-    fn test_init_foundation_key_no_vesting_with_release() {
-        let context = basic_context();
-        testing_env!(context.clone());
-        new_contract(true, None, Some(to_nanos(YEAR).into()));
-    }
-
-    #[test]
     fn test_lock_timestmap() {
         let mut context = basic_context();
         testing_env!(context.clone());
@@ -877,7 +863,7 @@ mod tests {
             TransfersInformation::TransfersDisabled {
                 transfer_poll_account_id: AccountId::from("transfers"),
             },
-            no_vesting_schedule_hash(),
+            VestingScheduleOrHash::Hash(encode(&hash_vesting_schedule(&no_vesting_schedule(), &SALT))),
             None,
             AccountId::from("whitelist"),
             account_foundation(),
@@ -887,18 +873,18 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(1000));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(no_vesting_schedule()).0, to_yocto(0));
         assert!(!contract.are_transfers_enabled());
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(1000));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(no_vesting_schedule()).0, to_yocto(0));
     }
 
     #[test]
@@ -912,7 +898,7 @@ mod tests {
             TransfersInformation::TransfersEnabled {
                 transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR / 2).into(),
             },
-            no_vesting_schedule_hash(),
+            VestingScheduleOrHash::Hash(encode(&hash_vesting_schedule(&no_vesting_schedule(), &SALT))),
             None,
             AccountId::from("whitelist"),
             account_foundation(),
@@ -926,9 +912,9 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(1000) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(0));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(no_vesting_schedule()).0, to_yocto(0));
     }
 
     #[test]
@@ -936,44 +922,55 @@ mod tests {
         let mut context = basic_context();
         testing_env!(context.clone());
         let vesting_schedule = new_vesting_schedule(0);
-        let mut contract = new_contract(true, Some(vesting_schedule.clone()), None);
+        let mut contract = LockupContract::new(
+            account_owner(),
+            to_nanos(YEAR).into(),
+            None,
+            TransfersInformation::TransfersEnabled {
+                transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+            },
+            VestingScheduleOrHash::VestingSchedule(vesting_schedule.clone()),
+            None,
+            AccountId::from("whitelist"),
+            account_foundation(),
+        );
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(500));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
 
         // Terminating
         context.is_view = false;
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule, SALT);
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(250));
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -1002,7 +999,7 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(750) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(0));
         assert_eq!(contract.get_termination_status(), None);
     }
@@ -1017,22 +1014,22 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(1000));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(no_vesting_schedule()).0, to_yocto(0));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(250));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(250));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(750));
         assert_eq!(contract.get_locked_amount().0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(500));
+        assert_eq!(contract.get_locked_vested_amount(no_vesting_schedule()).0, to_yocto(500));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
@@ -1047,39 +1044,39 @@ mod tests {
         let mut context = basic_context();
         testing_env!(context.clone());
         let vesting_schedule = new_vesting_schedule(0);
-        let mut contract = new_contract(true, Some(vesting_schedule.clone()), Some(to_nanos(4 * YEAR).into()));
+        let contract = new_contract(true, Some(vesting_schedule.clone()), Some(to_nanos(4 * YEAR).into()));
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(250));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(250));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(750));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(500));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(0));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 4 * YEAR);
         testing_env!(context.clone());
@@ -1088,61 +1085,69 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(1000) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(0));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(0));
     }
 
+    // Vesting post transfers is not supported by Hash vesting.
     #[test]
     fn test_vesting_post_transfers_and_release_duration() {
         let mut context = basic_context();
         testing_env!(context.clone());
         let vesting_schedule = new_vesting_schedule(YEAR * 2);
-        let contract = new_contract(
-            true,
-            Some(vesting_schedule.clone()),
+        let contract = LockupContract::new(
+            account_owner(),
+            to_nanos(YEAR).into(),
+            None,
+            TransfersInformation::TransfersEnabled {
+                transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+            },
+            VestingScheduleOrHash::VestingSchedule(vesting_schedule.clone()),
             Some(to_nanos(4 * YEAR).into()),
+            AccountId::from("whitelist"),
+            account_foundation(),
         );
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(1000));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(1000));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(1000));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(1000));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(250));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(250));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(750));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(500));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(500));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 4 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 5 * YEAR);
         testing_env!(context.clone());
@@ -1151,9 +1156,9 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(1000) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, to_yocto(0));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(0));
     }
 
     #[test]
@@ -1171,32 +1176,32 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
 
         // Terminating
         context.is_view = false;
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule, SALT);
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(250));
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -1222,8 +1227,8 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(0));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(0));
         assert_eq!(contract.get_termination_status(), None);
 
@@ -1234,7 +1239,7 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(750) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(0));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(0));
     }
 
     #[test]
@@ -1250,23 +1255,23 @@ mod tests {
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_unvested_amount().0, lockup_amount);
-        assert_eq!(contract.get_locked_vested_amount().0, 0);
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, lockup_amount);
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, 0);
 
         // Terminating
         context.is_view = false;
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule, SALT);
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_unvested_amount().0, lockup_amount);
-        assert_eq!(contract.get_locked_vested_amount().0, 0);
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, lockup_amount);
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, 0);
         assert_eq!(contract.get_terminated_unvested_balance().0, lockup_amount);
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -1294,10 +1299,10 @@ mod tests {
 
         context.is_view = true;
         testing_env!(context.clone());
-        assert_eq!(contract.get_unvested_amount().0, MIN_BALANCE_FOR_STORAGE);
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, MIN_BALANCE_FOR_STORAGE);
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
-        assert_eq!(contract.get_locked_vested_amount().0, 0);
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, 0);
         assert_eq!(
             contract.get_terminated_unvested_balance().0,
             MIN_BALANCE_FOR_STORAGE
@@ -1325,8 +1330,8 @@ mod tests {
         assert_eq!(contract.get_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         context.is_view = false;
 
         context.predecessor_account_id = account_owner();
@@ -1371,8 +1376,8 @@ mod tests {
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_known_deposited_balance().0, stake_amount);
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
         context.is_view = false;
 
         // Foundation terminating
@@ -1380,15 +1385,15 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule, SALT);
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
         assert_eq!(
             contract.get_terminated_unvested_balance_deficit().0,
@@ -1457,9 +1462,9 @@ mod tests {
         assert_eq!(contract.get_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_locked_amount().0, lockup_amount);
-        assert_eq!(contract.get_unvested_amount().0, to_yocto(750));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, to_yocto(750));
         assert_eq!(contract.get_terminated_unvested_balance().0, to_yocto(750));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
         assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
         assert_eq!(contract.get_known_deposited_balance().0, 0);
         assert_eq!(
@@ -1485,8 +1490,8 @@ mod tests {
         assert_eq!(contract.get_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(51));
         assert_eq!(contract.get_locked_amount().0, to_yocto(250));
-        assert_eq!(contract.get_locked_vested_amount().0, to_yocto(250));
-        assert_eq!(contract.get_unvested_amount().0, 0);
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, to_yocto(250));
+        assert_eq!(contract.get_unvested_amount(vesting_schedule.clone()).0, 0);
         assert_eq!(contract.get_terminated_unvested_balance().0, 0);
         assert_eq!(contract.get_terminated_unvested_balance_deficit().0, 0);
         assert_eq!(contract.get_termination_status(), None);
@@ -1499,7 +1504,7 @@ mod tests {
             contract.get_liquid_owners_balance().0,
             to_yocto(301) - MIN_BALANCE_FOR_STORAGE
         );
-        assert_eq!(contract.get_locked_vested_amount().0, 0);
+        assert_eq!(contract.get_locked_vested_amount(vesting_schedule.clone()).0, 0);
         assert_eq!(contract.get_locked_amount().0, 0);
     }
 }
