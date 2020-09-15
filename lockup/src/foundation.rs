@@ -8,9 +8,9 @@ impl LockupContract {
     /// Requires 25 TGas (1 * BASE_GAS)
     ///
     /// Terminates vesting schedule and locks the remaining unvested amount.
-    pub fn terminate_vesting(&mut self) {
+    pub fn terminate_vesting(&mut self, vesting_schedule: VestingSchedule, salt: Vec<u8>) {
         self.assert_called_by_foundation();
-        self.assert_vesting();
+        self.assert_vesting(&vesting_schedule, &salt);
         let unvested_amount = self.get_unvested_amount();
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 

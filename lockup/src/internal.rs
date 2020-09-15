@@ -30,11 +30,12 @@ impl LockupContract {
         }
     }
 
-    pub fn assert_vesting(&self) {
-        if let VestingInformation::Vesting(_) = &self.vesting_information {
+    pub fn assert_vesting(&self, vesting_schedule: &VestingSchedule, salt: &[u8]) {
+        let provided_hash = hash_vesting_schedule(vesting_schedule, salt);
+        if let VestingInformation::Vesting(provided_hash) = &self.vesting_information {
             // OK
         } else {
-            env::panic(b"There is no vesting in progress");
+            env::panic(b"Presented vesting doesn't match or vesting was already terminated");
         }
     }
 

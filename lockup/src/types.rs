@@ -1,7 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{AccountId, Balance};
+use near_sdk::{AccountId, Balance, env};
 use uint::construct_uint;
 
 construct_uint! {
@@ -20,6 +20,9 @@ pub type WrappedTimestamp = U64;
 pub type WrappedDuration = U64;
 /// Balance wrapped into a struct for JSON serialization as a string.
 pub type WrappedBalance = U128;
+
+/// Hash of Vesting schedule.
+pub type Hash = Vec<u8>;
 
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -85,7 +88,7 @@ pub struct StakingInformation {
 }
 
 /// Contains information about vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
@@ -118,10 +121,8 @@ impl VestingSchedule {
 /// Contains information about vesting that contains vesting schedule and termination information.
 #[derive(BorshDeserialize, BorshSerialize)]
 pub enum VestingInformation {
-    /// No vesting.
-    None,
-    /// The vesting is going on schedule.
-    Vesting(VestingSchedule),
+    /// Vesting schedule is hashed for privacy and only will be revealed if foundation needs to pull the funds.
+    Vesting(Hash),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.
     /// Once the unvested amount is transferred out, `VestingInformation` is removed.
@@ -165,3 +166,7 @@ pub struct TerminationInformation {
 /// The result of the transfer poll.
 /// Contains The timestamp when the proposal was voted in.
 pub type PollResult = Option<WrappedTimestamp>;
+
+pub fn hash_vesting_schedule(vesting_schedule: &VestingSchedule, salt: &[u8]) -> Hash {
+    env::sha256(&[vesting_schedule.try_to_vec().expect("Failed to serialize"), salt.to_vec()].concat())
+}

@@ -110,15 +110,15 @@ impl LockupContract {
     }
 
     /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
-    pub fn get_unvested_amount(&self) -> WrappedBalance {
+    pub fn get_unvested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount;
         match &self.vesting_information {
-            VestingInformation::None => {
-                // Everything is vested and unlocked
-                0.into()
-            }
-            VestingInformation::Vesting(vesting_schedule) => {
+//            VestingInformation::None => {
+//                // Everything is vested and unlocked
+//                0.into()
+//            }
+            VestingInformation::Vesting(_) => {
                 if block_timestamp < vesting_schedule.cliff_timestamp.0 {
                     // Before the cliff, nothing is vested
                     lockup_amount.into()
