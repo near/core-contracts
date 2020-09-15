@@ -19,3 +19,9 @@ overflow-checks = true
 
 [dependencies]
 near-sdk = "2.0.0"
+
+[dev-dependencies]
+lazy_static = "1.4.0"
+near-test = { git = "https://github.com/ilblackdragon/balancer-near" }
+near-crypto = { git = "https://github.com/nearprotocol/nearcore.git" }
+near-primitives = { git = "https://github.com/nearprotocol/nearcore.git" }
