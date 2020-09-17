@@ -97,7 +97,7 @@ impl LockupContract {
                 let unvested_amount = match &self.vesting_information {
                     VestingInformation::VestingSchedule(vs) => self.get_unvested_amount(vs.clone()),
                     VestingInformation::Terminating(terminating) => terminating.unvested_amount,
-                    // There is either no information because vesting is private.
+                    // Vesting is private, so we can assume the vesting started before lockup date.
                     _ => U128(0),
                 };
                 return std::cmp::max(

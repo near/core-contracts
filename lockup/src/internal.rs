@@ -87,11 +87,15 @@ impl LockupContract {
     }
 
     pub fn assert_called_by_foundation(&self) {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.foundation_account_id,
-            "Can only be called by NEAR Foundation"
-        );
+        if let Some(foundation_account_id) = &self.foundation_account_id {
+            assert_eq!(
+                &env::predecessor_account_id(),
+                foundation_account_id,
+                "Can only be called by NEAR Foundation"
+            )
+        } else {
+            env::panic(b"No NEAR Foundation account is specified in the contract");
+        }
     }
 
     pub fn assert_owner(&self) {

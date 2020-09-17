@@ -1,7 +1,6 @@
 //! A smart contract that allows tokens to be locked up.
 
 use near_sdk::{AccountId, env, ext_contract, near_bindgen};
-use near_sdk::base64::decode;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base58PublicKey;
 
@@ -140,7 +139,7 @@ pub struct LockupContract {
     pub staking_information: Option<StakingInformation>,
 
     /// The account ID that the NEAR Foundation, that has the ability to terminate vesting.
-    pub foundation_account_id: AccountId,
+    pub foundation_account_id: Option<AccountId>,
 }
 
 impl Default for LockupContract {
@@ -183,7 +182,7 @@ impl LockupContract {
         vesting_schedule: VestingScheduleOrHash,
         release_duration: Option<WrappedDuration>,
         staking_pool_whitelist_account_id: AccountId,
-        foundation_account_id: AccountId,
+        foundation_account_id: Option<AccountId>,
     ) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
         assert!(
@@ -202,7 +201,7 @@ impl LockupContract {
                 env::is_valid_account_id(transfer_poll_account_id.as_bytes()),
                 "The transfer poll account ID is invalid"
             );
-        }
+        };
         let lockup_information = LockupInformation {
             lockup_amount: env::account_balance(),
             termination_withdrawn_tokens: 0,
@@ -212,9 +211,14 @@ impl LockupContract {
             transfers_information,
         };
         let vesting_information = match vesting_schedule {
-            VestingScheduleOrHash::Hash(hash) => VestingInformation::VestingHash(decode(&hash).expect("Failed to deserialize")),
+            VestingScheduleOrHash::None => VestingInformation::None,
+            VestingScheduleOrHash::Hash(hash) => {
+                let hash = hash.into();
+                VestingInformation::VestingHash(hash)
+            },
             VestingScheduleOrHash::VestingSchedule(vs) => VestingInformation::VestingSchedule(vs),
         };
+        assert!(vesting_information != VestingInformation::None || foundation_account_id.is_some(), "Must provide foundation if vesting is not None");
 
         Self {
             owner_account_id,
@@ -233,7 +237,6 @@ mod tests {
     use std::convert::TryInto;
 
     use near_sdk::{MockedBlockchain, PromiseResult, testing_env, VMContext};
-    use near_sdk::base64::encode;
 
     use test_utils::*;
 
@@ -285,21 +288,19 @@ mod tests {
                 transfer_poll_account_id: AccountId::from("transfers"),
             }
         };
-        let vesting_hash = VestingScheduleOrHash::Hash(
-            encode(&hash_vesting_schedule(&if let Some(vs) = vesting_schedule {
-            vs
-        } else {
-            no_vesting_schedule()
-        }, &SALT)));
+        let vesting_info = match vesting_schedule {
+            Some(vs) => VestingScheduleOrHash::Hash(hash_vesting_schedule(&vs, &SALT).into()),
+            None => VestingScheduleOrHash::None,
+        };
         LockupContract::new(
             account_owner(),
             to_nanos(YEAR).into(),
             None,
             lockup_start_information,
-            vesting_hash,
+            vesting_info,
             release_duration,
             AccountId::from("whitelist"),
-            account_foundation(),
+            Some(account_foundation()),
         )
     }
 
@@ -359,6 +360,22 @@ mod tests {
     #[test]
     #[should_panic(expected = "Presented vesting doesn't match or vesting was terminated")]
     fn test_vesting_doesnt_match() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let vesting_schedule = new_vesting_schedule(5);
+        let mut contract = new_contract(true, Some(vesting_schedule), None);
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.predecessor_account_id = account_foundation();
+        context.signer_account_id = non_owner();
+        testing_env!(context.clone());
+
+        let not_real_vesting = new_vesting_schedule(100);
+        contract.terminate_vesting(not_real_vesting, SALT.to_vec().into());
+    }
+
+    #[test]
+    #[should_panic(expected = "Vesting was terminated")]
+    fn test_terminate_no_vesting() {
         let (mut context, mut contract) = lockup_only_setup();
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         context.predecessor_account_id = account_foundation();
@@ -366,7 +383,7 @@ mod tests {
         testing_env!(context.clone());
 
         let not_real_vesting = new_vesting_schedule(100);
-        contract.terminate_vesting(not_real_vesting, SALT.to_vec());
+        contract.terminate_vesting(not_real_vesting, SALT.to_vec().into());
     }
 
     #[test]
@@ -381,7 +398,7 @@ mod tests {
         context.signer_account_id = non_owner();
         testing_env!(context.clone());
 
-        contract.terminate_vesting(vesting_schedule, SALT.to_vec());
+        contract.terminate_vesting(vesting_schedule, SALT.to_vec().into());
     }
 
     #[test]
@@ -863,10 +880,10 @@ mod tests {
             TransfersInformation::TransfersDisabled {
                 transfer_poll_account_id: AccountId::from("transfers"),
             },
-            VestingScheduleOrHash::Hash(encode(&hash_vesting_schedule(&no_vesting_schedule(), &SALT))),
+            VestingScheduleOrHash::Hash(hash_vesting_schedule(&no_vesting_schedule(), &SALT).into()),
             None,
             AccountId::from("whitelist"),
-            account_foundation(),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -898,10 +915,10 @@ mod tests {
             TransfersInformation::TransfersEnabled {
                 transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR / 2).into(),
             },
-            VestingScheduleOrHash::Hash(encode(&hash_vesting_schedule(&no_vesting_schedule(), &SALT))),
+            VestingScheduleOrHash::Hash(hash_vesting_schedule(&no_vesting_schedule(), &SALT).into()),
             None,
             AccountId::from("whitelist"),
-            account_foundation(),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -932,7 +949,7 @@ mod tests {
             VestingScheduleOrHash::VestingSchedule(vesting_schedule.clone()),
             None,
             AccountId::from("whitelist"),
-            account_foundation(),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -963,7 +980,7 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1106,7 +1123,7 @@ mod tests {
             VestingScheduleOrHash::VestingSchedule(vesting_schedule.clone()),
             Some(to_nanos(4 * YEAR).into()),
             AccountId::from("whitelist"),
-            account_foundation(),
+            Some(account_foundation()),
         );
 
         context.is_view = true;
@@ -1193,7 +1210,7 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1263,7 +1280,7 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1385,7 +1402,7 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec());
+        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
 
         context.is_view = true;
         testing_env!(context.clone());

@@ -1,5 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{U128, U64};
+use near_sdk::json_types::{U128, U64, Base64VecU8};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{AccountId, Balance, env};
 use uint::construct_uint;
@@ -122,7 +122,8 @@ impl VestingSchedule {
 #[serde(crate = "near_sdk::serde")]
 #[serde(tag = "type", content = "value")]
 pub enum VestingScheduleOrHash {
-    Hash(String),
+    None,
+    Hash(Base64VecU8),
     VestingSchedule(VestingSchedule),
 }
 

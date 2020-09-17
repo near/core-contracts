@@ -27,7 +27,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
         transfers_information: TransfersInformation::TransfersEnabled {
             transfers_timestamp: lockup_timestamp.saturating_add(1).into(),
         },
-        // vesting_schedule: VestingScheduleOrHash::,
+        vesting_schedule: VestingScheduleOrHash::None,
         release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: "staking".into(),
@@ -101,7 +101,7 @@ fn staking() {
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
-        vesting_schedule: None,
+        vesting_schedule: VestingScheduleOrHash::None,
         release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
@@ -328,7 +328,7 @@ fn staking_with_helpers() {
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
-        vesting_schedule: None,
+        vesting_schedule: VestingScheduleOrHash::None,
         release_duration: None,
         foundation_account_id: None,
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),

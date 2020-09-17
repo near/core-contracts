@@ -2,7 +2,7 @@
 
 extern crate lockup_contract;
 
-use self::lockup_contract::{VestingSchedule, WrappedDuration, WrappedTimestamp, VestingScheduleOrHash};
+use self::lockup_contract::{WrappedDuration, WrappedTimestamp, VestingScheduleOrHash};
 use lockup_contract::types::TransfersInformation;
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
