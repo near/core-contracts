@@ -105,7 +105,8 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 
 ### `2.0.0`
 
-- Changed `vesting_schedule` initialization argument to allow hide the vesting schedule behind a hash to keep it private.
+- Changed `vesting_schedule` initialization argument to allow it to hide the vesting schedule behind a hash to keep it private.
+- Added view method `get_vesting_information` to view internal vesting information.
 
 ### `1.0.0`
 
@@ -196,7 +197,7 @@ pub fn new(
 ) -> Self;
 ```
 
-It requires to provide `LockupStartInformation` and `VestingSchedule`
+It requires to provide `LockupStartInformation` and `VestingScheduleOrHash`
 
 ```rust
 /// Contains information about the transfers. Whether transfers are enabled or disabled.
