@@ -55,7 +55,7 @@ fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct InitLockupArgs {
     pub owner_account_id: AccountId,

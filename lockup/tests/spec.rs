@@ -5,16 +5,20 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use lockup_contract::{TerminationStatus, TransfersInformation, VestingSchedule, WrappedBalance, hash_vesting_schedule, VestingScheduleOrHash};
+use lockup_contract::{TerminationStatus, TransfersInformation, VestingSchedule, WrappedBalance, VestingScheduleOrHash};
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
 use near_sdk::borsh::BorshSerialize;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::{Base58PublicKey, U128, Base64VecU8};
 use near_sdk::serde_json::{self, json};
 use near_sdk::AccountId;
 use std::convert::TryInto;
 use utils::{call_lockup, new_root, ntoy, InitLockupArgs};
+
+pub fn hash_vesting_schedule(vesting_schedule: &VestingSchedule, salt: &[u8]) -> Vec<u8> {
+    near_primitives::hash::hash(&[vesting_schedule.try_to_vec().expect("Failed to serialize"), salt.to_vec()].concat()).try_to_vec().unwrap()
+}
 
 #[quickcheck]
 fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
@@ -536,6 +540,13 @@ fn termination_with_staking() {
 
     let start_timestamp = r.current_block().block_timestamp;
 
+    let vesting_schedule = VestingSchedule {
+        start_timestamp: start_timestamp.into(),
+        cliff_timestamp: (start_timestamp + 1000).into(),
+        end_timestamp: (start_timestamp + 4000).into(),
+    };
+    let vesting_schedule_str = serde_json::to_string(&json!({"vesting_schedule": vesting_schedule})).unwrap();
+    let salt = vec![1, 2, 3];
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
         lockup_duration: 1000000000.into(),
@@ -544,11 +555,7 @@ fn termination_with_staking() {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
         vesting_schedule: VestingScheduleOrHash::Hash(
-            near_sdk::base64::encode(&hash_vesting_schedule(&VestingSchedule {
-                start_timestamp: start_timestamp.into(),
-                cliff_timestamp: (start_timestamp + 1000).into(),
-                end_timestamp: (start_timestamp + 4000).into(),
-        }, &vec![1, 2, 3]))),
+            hash_vesting_schedule(&vesting_schedule, &salt).into()),
         release_duration: None,
         foundation_account_id: Some(foundation.account_id.clone()),
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
@@ -605,16 +612,16 @@ fn termination_with_staking() {
         .function_call(&mut r, &staking_pool_account_id, "ping", &[])
         .unwrap();
 
-    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", "");
+    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, 0);
 
     // Updating the timestamp to simulate some vesting
     r.current_block().block_timestamp = start_timestamp + 1500;
 
-    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", "");
+    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, (lockup_amount + ntoy(35)) * 3 / 8);
 
-    let res: WrappedBalance = call_lockup(&r, "get_unvested_amount", "");
+    let res: WrappedBalance = call_lockup(&r, "get_unvested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, (lockup_amount + ntoy(35)) * 5 / 8);
 
     // Terminating the vesting schedule
@@ -629,7 +636,10 @@ fn termination_with_staking() {
     r.current_block().block_timestamp = start_timestamp + 1499;
 
     foundation
-        .function_call(&mut r, LOCKUP_ACCOUNT_ID, "terminate_vesting", b"{}")
+        .function_call(&mut r, LOCKUP_ACCOUNT_ID, "terminate_vesting", &serde_json::to_vec(&json!({
+            "vesting_schedule": vesting_schedule,
+            "salt": Base64VecU8::from(salt)
+        })).unwrap())
         .unwrap();
 
     let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
@@ -839,7 +849,7 @@ fn test_release_schedule_unlock_transfers() {
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id,
         },
-        vesting_schedule: None,
+        vesting_schedule: VestingScheduleOrHash::None,
         release_duration: Some(1000000000000.into()),
         foundation_account_id: None,
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),

@@ -48,7 +48,7 @@ pub struct LockupInformation {
 }
 
 /// Contains information about the transfers. Whether transfers are enabled or disabled.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum TransfersInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
@@ -88,7 +88,7 @@ pub struct StakingInformation {
 }
 
 /// Contains information about vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, PartialEq, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
@@ -118,7 +118,7 @@ impl VestingSchedule {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 #[serde(tag = "type", content = "value")]
 pub enum VestingScheduleOrHash {

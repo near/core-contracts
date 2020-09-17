@@ -218,7 +218,7 @@ impl LockupContract {
             },
             VestingScheduleOrHash::VestingSchedule(vs) => VestingInformation::VestingSchedule(vs),
         };
-        assert!(vesting_information != VestingInformation::None || foundation_account_id.is_some(), "Must provide foundation if vesting is not None");
+        assert!(vesting_information == VestingInformation::None || foundation_account_id.is_some(), "Must provide foundation if vesting is not None");
 
         Self {
             owner_account_id,
