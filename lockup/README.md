@@ -360,7 +360,13 @@ terminate vesting schedule.
 /// Requires 25 TGas (1 * BASE_GAS)
 ///
 /// Terminates vesting schedule and locks the remaining unvested amount.
-pub fn terminate_vesting(&mut self, vesting_schedule: VestingSchedule, salt: Base64VecU8);
+/// If the lockup contract was initialized with the private vesting schedule, then
+/// this method expects to receive a `VestingScheduleWithSalt` to reveal the vesting schedule,
+/// otherwise it expects `None`.
+pub fn terminate_vesting(
+    &mut self,
+    vesting_schedule_with_salt: Option<VestingScheduleWithSalt>,
+);
 
 /// FOUNDATION'S METHOD
 ///
@@ -628,17 +634,22 @@ near delete lockup1 owner1
 
 If the employee was terminated, the foundation needs to terminate vesting.
 
-If the vesting schedule was private, the foundation has to pass the vesting schedule and the salt to reveal it.
-
 #### Initiate termination
 
 To initiate termination NEAR Foundation has to issue the following command:
 
 ```bash
-near call lockup1 terminate_vesting '{"vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, salt: ""}' --accountId=near --gas=25000000000000
+near call lockup1 terminate_vesting '' --accountId=near --gas=25000000000000
 ```
 
 This will block the account until the termination process is completed.
+
+But, if the vesting schedule was private, the foundation has to pass the vesting schedule and the salt to reveal it:
+
+```bash
+near call lockup1 terminate_vesting '"vesting_schedule_with_salt": {"vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, salt: "cmVhbGx5X2xvbmdfYW5kX3Zlcnlfc2VjcmV0X2hhc2g="}' --accountId=near --gas=25000000000000
+```
+
 
 #### Monitoring status
 

@@ -185,12 +185,18 @@ pub struct TerminationInformation {
 /// Contains The timestamp when the proposal was voted in.
 pub type PollResult = Option<WrappedTimestamp>;
 
-pub fn hash_vesting_schedule(vesting_schedule: &VestingSchedule, salt: &[u8]) -> Hash {
-    env::sha256(
-        &[
-            vesting_schedule.try_to_vec().expect("Failed to serialize"),
-            salt.to_vec(),
-        ]
-        .concat(),
-    )
+/// Contains a vesting schedule with a salt.
+#[derive(BorshSerialize, Deserialize, Serialize, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct VestingScheduleWithSalt {
+    /// The vesting schedule
+    pub vesting_schedule: VestingSchedule,
+    /// Salt to make the hash unique
+    pub salt: Base64VecU8,
+}
+
+impl VestingScheduleWithSalt {
+    pub fn hash(&self) -> Hash {
+        env::sha256(&self.try_to_vec().expect("Failed to serialize"))
+    }
 }

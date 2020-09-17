@@ -304,8 +304,16 @@ mod tests {
         } else {
             None
         };
-        let vesting_schedule = vesting_schedule
-            .map(|vs| VestingScheduleOrHash::VestingHash(hash_vesting_schedule(&vs, &SALT).into()));
+        let vesting_schedule = vesting_schedule.map(|vesting_schedule| {
+            VestingScheduleOrHash::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule,
+                    salt: SALT.to_vec().into(),
+                }
+                .hash()
+                .into(),
+            )
+        });
         LockupContract::new(
             account_owner(),
             to_nanos(YEAR).into(),
@@ -375,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Presented vesting doesn't match or vesting was terminated")]
+    #[should_panic(expected = "Presented vesting schedule and salt don't match the hash")]
     fn test_vesting_doesnt_match() {
         let mut context = basic_context();
         testing_env!(context.clone());
@@ -387,7 +395,56 @@ mod tests {
         testing_env!(context.clone());
 
         let not_real_vesting = new_vesting_schedule(100);
-        contract.terminate_vesting(not_real_vesting, SALT.to_vec().into());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: not_real_vesting,
+            salt: SALT.to_vec().into(),
+        }));
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected vesting schedule and salt, but it was not provided")]
+    fn test_vesting_schedule_and_salt_not_provided() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let vesting_schedule = new_vesting_schedule(5);
+        let mut contract = new_contract(true, Some(vesting_schedule), None, true);
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.predecessor_account_id = account_foundation();
+        context.signer_account_id = non_owner();
+        testing_env!(context.clone());
+
+        contract.terminate_vesting(None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Explicit vesting schedule exists")]
+    fn test_explicit_vesting() {
+        let mut context = basic_context();
+        testing_env!(context.clone());
+        let vesting_schedule = new_vesting_schedule(5);
+        let mut contract = LockupContract::new(
+            account_owner(),
+            to_nanos(YEAR).into(),
+            None,
+            TransfersInformation::TransfersEnabled {
+                transfers_timestamp: to_ts(GENESIS_TIME_IN_DAYS).into(),
+            },
+            Some(VestingScheduleOrHash::VestingSchedule(
+                vesting_schedule.clone(),
+            )),
+            None,
+            AccountId::from("whitelist"),
+            Some(account_foundation()),
+        );
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.predecessor_account_id = account_foundation();
+        context.signer_account_id = non_owner();
+        testing_env!(context.clone());
+
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule,
+            salt: SALT.to_vec().into(),
+        }));
     }
 
     #[test]
@@ -418,7 +475,7 @@ mod tests {
         context.signer_account_id = non_owner();
         testing_env!(context.clone());
 
-        contract.terminate_vesting(vesting_schedule, SALT.to_vec().into());
+        contract.terminate_vesting(None);
     }
 
     #[test]
@@ -1044,7 +1101,7 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
+        contract.terminate_vesting(None);
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1412,7 +1469,10 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: vesting_schedule.clone(),
+            salt: SALT.to_vec().into(),
+        }));
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1494,7 +1554,14 @@ mod tests {
         testing_env!(context.clone());
         assert_eq!(
             contract.get_vesting_information(),
-            VestingInformation::VestingHash(hash_vesting_schedule(&vesting_schedule, &SALT).into())
+            VestingInformation::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: SALT.to_vec().into()
+                }
+                .hash()
+                .into()
+            )
         );
         assert_eq!(contract.get_owners_balance().0, 0);
         assert_eq!(contract.get_liquid_owners_balance().0, 0);
@@ -1515,7 +1582,10 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: vesting_schedule.clone(),
+            salt: SALT.to_vec().into(),
+        }));
 
         context.is_view = true;
         testing_env!(context.clone());
@@ -1676,7 +1746,10 @@ mod tests {
         context.predecessor_account_id = account_foundation();
         context.signer_account_pk = public_key(3).into();
         testing_env!(context.clone());
-        contract.terminate_vesting(vesting_schedule.clone(), SALT.to_vec().into());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: vesting_schedule.clone(),
+            salt: SALT.to_vec().into(),
+        }));
 
         context.is_view = true;
         testing_env!(context.clone());

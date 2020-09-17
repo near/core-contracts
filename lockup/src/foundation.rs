@@ -1,5 +1,4 @@
-use near_sdk::{AccountId, near_bindgen, Promise};
-use near_sdk::json_types::Base64VecU8;
+use near_sdk::{near_bindgen, AccountId, Promise};
 
 use crate::*;
 
@@ -10,10 +9,15 @@ impl LockupContract {
     /// Requires 25 TGas (1 * BASE_GAS)
     ///
     /// Terminates vesting schedule and locks the remaining unvested amount.
-    pub fn terminate_vesting(&mut self, vesting_schedule: VestingSchedule, salt: Base64VecU8) {
+    /// If the lockup contract was initialized with the private vesting schedule, then
+    /// this method expects to receive a `VestingScheduleWithSalt` to reveal the vesting schedule,
+    /// otherwise it expects `None`.
+    pub fn terminate_vesting(
+        &mut self,
+        vesting_schedule_with_salt: Option<VestingScheduleWithSalt>,
+    ) {
         self.assert_called_by_foundation();
-        let salt: Vec<u8> = salt.into();
-        self.assert_vesting(&vesting_schedule, &salt);
+        let vesting_schedule = self.assert_vesting(vesting_schedule_with_salt);
         let unvested_amount = self.get_unvested_amount(vesting_schedule);
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 

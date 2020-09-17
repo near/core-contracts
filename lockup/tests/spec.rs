@@ -6,8 +6,10 @@ mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
 use lockup_contract::{
-    TerminationStatus, TransfersInformation, VestingSchedule, VestingScheduleOrHash, WrappedBalance,
+    TerminationStatus, TransfersInformation, VestingSchedule, VestingScheduleOrHash,
+    VestingScheduleWithSalt, WrappedBalance,
 };
+use near_primitives::hash::hash;
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
@@ -17,18 +19,6 @@ use near_sdk::serde_json::{self, json};
 use near_sdk::AccountId;
 use std::convert::TryInto;
 use utils::{call_lockup, new_root, ntoy, InitLockupArgs};
-
-pub fn hash_vesting_schedule(vesting_schedule: &VestingSchedule, salt: &[u8]) -> Vec<u8> {
-    near_primitives::hash::hash(
-        &[
-            vesting_schedule.try_to_vec().expect("Failed to serialize"),
-            salt.to_vec(),
-        ]
-        .concat(),
-    )
-    .try_to_vec()
-    .unwrap()
-}
 
 #[quickcheck]
 fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
@@ -566,7 +556,17 @@ fn termination_with_staking_hashed() {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
         vesting_schedule: Some(VestingScheduleOrHash::VestingHash(
-            hash_vesting_schedule(&vesting_schedule, &salt).into(),
+            hash(
+                &VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: salt.clone().into(),
+                }
+                .try_to_vec()
+                .unwrap(),
+            )
+            .as_ref()
+            .to_vec()
+            .into(),
         )),
         release_duration: None,
         foundation_account_id: Some(foundation.account_id.clone()),
@@ -655,8 +655,10 @@ fn termination_with_staking_hashed() {
             LOCKUP_ACCOUNT_ID,
             "terminate_vesting",
             &serde_json::to_vec(&json!({
-                "vesting_schedule": vesting_schedule,
-                "salt": Base64VecU8::from(salt)
+                "vesting_schedule_with_salt": VestingScheduleWithSalt {
+                    vesting_schedule,
+                    salt: salt.into()
+                },
             }))
             .unwrap(),
         )
