@@ -32,8 +32,15 @@ impl LockupContract {
 
     pub fn assert_vesting(&self, vesting_schedule: &VestingSchedule, salt: &[u8]) {
         match &self.vesting_information {
-            VestingInformation::VestingHash(hash) => assert!(&hash_vesting_schedule(vesting_schedule, salt) == hash, "Presented vesting doesn't match or vesting was terminated"),
-            VestingInformation::VestingSchedule(vs) => assert!(vesting_schedule == vs, "Presented vesting doesn't match or vesting was terminated"),
+            VestingInformation::VestingHash(hash) => assert_eq!(
+                &hash_vesting_schedule(vesting_schedule, salt),
+                &hash.0,
+                "Presented vesting doesn't match or vesting was terminated"
+            ),
+            VestingInformation::VestingSchedule(vs) => assert_eq!(
+                vesting_schedule, vs,
+                "Presented vesting doesn't match or vesting was terminated"
+            ),
             _ => env::panic(b"Vesting was terminated"),
         };
     }

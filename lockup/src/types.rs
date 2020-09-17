@@ -1,7 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{U128, U64, Base64VecU8};
+use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{AccountId, Balance, env};
+use near_sdk::{env, AccountId, Balance};
 use uint::construct_uint;
 
 construct_uint! {
@@ -118,22 +118,27 @@ impl VestingSchedule {
     }
 }
 
-#[derive(Serialize, Debug)]
+/// Initialization argument type to define the vesting schedule
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
-#[serde(tag = "type", content = "value")]
 pub enum VestingScheduleOrHash {
-    None,
-    Hash(Base64VecU8),
+    /// The vesting schedule is private and this is a hash of (vesting_schedule, salt).
+    /// In JSON, the hash has to be encoded with base64 to a string.
+    VestingHash(Base64VecU8),
+    /// The vesting schedule (public)
     VestingSchedule(VestingSchedule),
 }
 
 /// Contains information about vesting that contains vesting schedule and termination information.
-#[derive(BorshDeserialize, BorshSerialize, PartialEq)]
+#[derive(Serialize, BorshDeserialize, BorshSerialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub enum VestingInformation {
     None,
-    /// Vesting schedule is hashed for privacy and only will be revealed if foundation needs to pull the funds.
-    /// Can only be starting before lockups are unlocked.
-    VestingHash(Hash),
+    /// Vesting schedule is hashed for privacy and only will be revealed if the NEAR foundation
+    /// has to terminate vesting.
+    /// The contract assume the vesting schedule doesn't affect lockup release and duration, because
+    /// the vesting started before transfers were enabled and the duration is shorter or the same.
+    VestingHash(Base64VecU8),
     /// Explicit vesting schedule.
     VestingSchedule(VestingSchedule),
     /// The information about the early termination of the vesting schedule.
@@ -164,7 +169,7 @@ pub enum TerminationStatus {
 }
 
 /// Contains information about early termination of the vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct TerminationInformation {
     /// The amount of tokens that are unvested and has to be transferred back to NEAR Foundation.
@@ -181,5 +186,11 @@ pub struct TerminationInformation {
 pub type PollResult = Option<WrappedTimestamp>;
 
 pub fn hash_vesting_schedule(vesting_schedule: &VestingSchedule, salt: &[u8]) -> Hash {
-    env::sha256(&[vesting_schedule.try_to_vec().expect("Failed to serialize"), salt.to_vec()].concat())
+    env::sha256(
+        &[
+            vesting_schedule.try_to_vec().expect("Failed to serialize"),
+            salt.to_vec(),
+        ]
+        .concat(),
+    )
 }

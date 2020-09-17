@@ -67,6 +67,20 @@ The amount of NEAR tokens locked to maintain the minimum storage balance is `35`
 If there is still a termination balance deficit due to minimum required balance, the owner may decide to fund the deficit on this account to finish the termination process.
 This can be done through a regular transfer action from an account with liquid balance.
 
+### Private vesting schedule
+
+Since vesting schedule usually starts at the date of employment it allows to de-anonymize the owner of the lockup contract.
+To keep the identity private, the contract allows to hash the vesting schedule with some random salt and keep store the
+hash instead of the raw vesting schedule information. In case the NEAR foundation has to terminate the vesting schedule,
+it will provide the raw vesting schedule and the salt, effectively revealing the vesting schedule. The contract then
+will compare the hash with the internal hash and if they match proceed with the termination.
+
+NOTE: The private vesting schedule can only be used, if the lockup release period and the lockup duration are effectively
+shadowing the vesting duration. Meaning that the lockup release ends later than the vesting release and the lockup duration
+ends after the vesting cliff.
+Once the lockup schedule starts before the vesting schedule (e.g. employment starts after the transfers are enabled),
+the vesting schedule can't be kept private anymore.
+
 ## Technical details
 
 The contract can be used for the following purposes:
@@ -88,6 +102,10 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
 
 ## Change Log
+
+### `2.0.0`
+
+- Changed `vesting_schedule` initialization argument to allow hide the vesting schedule behind a hash to keep it private.
 
 ### `1.0.0`
 
@@ -152,10 +170,12 @@ The initialization method has the following interface.
 /// - `transfers_information` - the information about the transfers. Either transfers are
 ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
 ///    are currently disabled and it contains the account ID of the transfer poll contract.
-/// - `vesting_schedule` - if present, describes the vesting schedule for employees. Vesting
-///    schedule affects the amount of tokens the NEAR Foundation will get in case of
+/// - `vesting_schedule` - If provided, then it's either a base64 encoded hash of vesting
+///    schedule with salt or an explicit vesting schedule.
+///    Vesting schedule affects the amount of tokens the NEAR Foundation will get in case of
 ///    employment termination as well as the amount of tokens available for transfer by
-///    the employee.
+///    the employee. If Hash provided, it's expected that vesting started before lockup and
+///    it only needs to be revealed in case of termination.
 /// - `release_duration` - is the duration when the full lockup amount will be available.
 ///    The tokens are linearly released from the moment transfers are enabled. If it's used
 ///    in addition to the vesting schedule, then the amount of tokens available to transfer
@@ -169,7 +189,7 @@ pub fn new(
     lockup_duration: WrappedDuration,
     lockup_timestamp: Option<WrappedTimestamp>,
     transfers_information: TransfersInformation,
-    vesting_schedule: Option<VestingSchedule>,
+    vesting_schedule: Option<VestingScheduleOrHash>,
     release_duration: Option<WrappedDuration>,
     staking_pool_whitelist_account_id: AccountId,
     foundation_account_id: Option<AccountId>,
@@ -190,6 +210,15 @@ pub enum TransfersInformation {
     /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
     /// are enabled, they can't be disabled and don't need to be checked again.
     TransfersDisabled { transfer_poll_account_id: AccountId },
+}
+
+/// Initialization argument type to define the vesting schedule
+pub enum VestingScheduleOrHash {
+    /// The vesting schedule is private and this is a hash of (vesting_schedule, salt).
+    /// In JSON, the hash has to be encoded with base64 to a string.
+    VestingHash(Base64VecU8),
+    /// The vesting schedule (public)
+    VestingSchedule(VestingSchedule),
 }
 
 /// Contains information about vesting schedule.
@@ -330,7 +359,7 @@ terminate vesting schedule.
 /// Requires 25 TGas (1 * BASE_GAS)
 ///
 /// Terminates vesting schedule and locks the remaining unvested amount.
-pub fn terminate_vesting(&mut self);
+pub fn terminate_vesting(&mut self, vesting_schedule: VestingSchedule, salt: Base64VecU8);
 
 /// FOUNDATION'S METHOD
 ///
@@ -378,10 +407,15 @@ pub fn get_terminated_unvested_balance_deficit(&self) -> WrappedBalance;
 pub fn get_locked_amount(&self) -> WrappedBalance;
 
 /// Get the amount of tokens that are already vested, but still locked due to lockup.
-pub fn get_locked_vested_amount(&self) -> WrappedBalance;
+/// Takes raw vesting schedule, in case the internal vesting schedule is private.
+pub fn get_locked_vested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance;
 
 /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
-pub fn get_unvested_amount(&self) -> WrappedBalance;
+/// Takes raw vesting schedule, in case the internal vesting schedule is private.
+pub fn get_unvested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance;
+
+/// Returns internal vesting information.
+pub fn get_vesting_information(&self) -> VestingInformation;
 
 /// The balance of the account owner. It includes vested and extra tokens that may have been
 /// deposited to this account, but excludes locked tokens.
@@ -406,8 +440,8 @@ pub fn are_transfers_enabled(&self) -> bool;
 
 Initialize contract, assuming it's called from `near` account.
 The lockup contract account ID is `lockup1`.
-The owner account ID is `owner1`. Lockup Duration is 365 days.
-Transfers are currently disabled and can be enabled by checking transfer voting poll contract at `transfers-poll`.
+The owner account ID is `owner1`. Lockup Duration is 365 days. Release duration is 4 years (or 1461 days including leap year).
+Transfers are currently disabled and can be enabled by checking transfer voting poll contract at `transfer-vote.near`.
 Vesting is 4 years starting from `2018-09-01` to `2022-09-01` Pacific time.
 Staking pool whitelist contract is at `staking-pool-whitelist`.
 The foundation account ID that can terminate vesting is `near`.
@@ -420,14 +454,17 @@ Arguments in JSON format
     "lockup_duration": "31536000000000000",
     "transfers_information": {
         "TransfersDisabled": {
-            "transfer_poll_account_id": "transfers-poll"
+            "transfer_poll_account_id": "transfer-vote.near"
         }
     },
     "vesting_schedule": {
-        "start_timestamp": "1535760000000000000",
-        "cliff_timestamp": "1567296000000000000",
-        "end_timestamp": "1661990400000000000"
+        "VestingSchedule": {
+            "start_timestamp": "1535760000000000000",
+            "cliff_timestamp": "1567296000000000000",
+            "end_timestamp": "1661990400000000000"
+        },
     },
+    "release_duration": "126230400000000000",
     "staking_pool_whitelist_account_id": "staking-pool-whitelist",
     "foundation_account_id": "near"
 }
@@ -436,10 +473,32 @@ Arguments in JSON format
 Command
 
 ```bash
-near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfers-poll"}}, "vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near --gas=25000000000000
+near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "31536000000000000", "transfers_information": {"TransfersDisabled": {"transfer_poll_account_id": "transfer-vote.near"}}, "vesting_schedule": { "VestingSchedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}}, "release_duration": "126230400000000000", "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near --gas=25000000000000
 ```
 
 #### Other examples of initialization
+
+##### With private vesting schedule
+
+It contains the hash of the vesting schedule serialized with borsh concatenated with salt.
+
+```json
+{
+    "owner_account_id": "owner1",
+    "lockup_duration": "31536000000000000",
+    "transfers_information": {
+        "TransfersDisabled": {
+            "transfer_poll_account_id": "transfer-vote.near"
+        }
+    },
+    "vesting_schedule": {
+        "VestingHash": "cmVhbGx5X2xvbmdfYW5kX3Zlcnlfc2VjcmV0X2hhc2g=",
+    },
+    "release_duration": "126230400000000000",
+    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+    "foundation_account_id": "near"
+}
+```
 
 ##### Adding lockup timestamp with relative lockup period of 14 days (whichever is later).
 
@@ -568,12 +627,14 @@ near delete lockup1 owner1
 
 If the employee was terminated, the foundation needs to terminate vesting.
 
+If the vesting schedule was private, the foundation has to pass the vesting schedule and the salt to reveal it.
+
 #### Initiate termination
 
 To initiate termination NEAR Foundation has to issue the following command:
 
 ```bash
-near call lockup1 terminate_vesting '' --accountId=near --gas=25000000000000
+near call lockup1 terminate_vesting '{"vesting_schedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}, salt: ""}' --accountId=near --gas=25000000000000
 ```
 
 This will block the account until the termination process is completed.

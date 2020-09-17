@@ -2,7 +2,7 @@
 
 extern crate lockup_contract;
 
-use self::lockup_contract::{WrappedDuration, WrappedTimestamp, VestingScheduleOrHash};
+use self::lockup_contract::{VestingScheduleOrHash, WrappedDuration, WrappedTimestamp};
 use lockup_contract::types::TransfersInformation;
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
@@ -62,7 +62,7 @@ pub struct InitLockupArgs {
     pub lockup_duration: WrappedDuration,
     pub lockup_timestamp: Option<WrappedTimestamp>,
     pub transfers_information: TransfersInformation,
-    pub vesting_schedule: VestingScheduleOrHash,
+    pub vesting_schedule: Option<VestingScheduleOrHash>,
     pub release_duration: Option<WrappedDuration>,
     pub staking_pool_whitelist_account_id: AccountId,
     pub foundation_account_id: Option<AccountId>,

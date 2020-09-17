@@ -103,8 +103,9 @@ impl LockupContract {
                 return std::cmp::max(
                     unreleased_amount
                         .saturating_sub(self.lockup_information.termination_withdrawn_tokens),
-                    unvested_amount.0)
-                    .into();
+                    unvested_amount.0,
+                )
+                .into();
             }
         }
         // The entire balance is still locked before the lockup timestamp.
@@ -112,16 +113,20 @@ impl LockupContract {
     }
 
     /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
+    /// Takes raw vesting schedule, in case the internal vesting schedule is private.
     pub fn get_locked_vested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
         (self.get_locked_amount().0 - self.get_unvested_amount(vesting_schedule).0).into()
     }
 
     /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
+    /// Takes raw vesting schedule, in case the internal vesting schedule is private.
     pub fn get_unvested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();
         let lockup_amount = self.lockup_information.lockup_amount;
         match &self.vesting_information {
-            VestingInformation::Terminating(termination_information) => termination_information.unvested_amount,
+            VestingInformation::Terminating(termination_information) => {
+                termination_information.unvested_amount
+            }
             VestingInformation::None => U128::from(0),
             _ => {
                 if block_timestamp < vesting_schedule.cliff_timestamp.0 {
@@ -144,6 +149,11 @@ impl LockupContract {
                 }
             }
         }
+    }
+
+    /// Returns internal vesting information.
+    pub fn get_vesting_information(&self) -> VestingInformation {
+        self.vesting_information.clone()
     }
 
     /// The balance of the account owner. It includes vested and extra tokens that may have been
