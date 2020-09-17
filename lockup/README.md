@@ -384,6 +384,18 @@ pub fn termination_prepare_to_withdraw(&mut self) -> bool;
 pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> bool;
 ```
 
+Required type for termination:
+
+```rust
+/// Contains a vesting schedule with a salt.
+pub struct VestingScheduleWithSalt {
+    /// The vesting schedule
+    pub vesting_schedule: VestingSchedule,
+    /// Salt to make the hash unique
+    pub salt: Base64VecU8,
+}
+```
+
 ### View methods
 
 ```rust
