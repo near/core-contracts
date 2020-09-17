@@ -118,7 +118,7 @@ impl VestingSchedule {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 #[serde(tag = "type", content = "value")]
 pub enum VestingScheduleOrHash {

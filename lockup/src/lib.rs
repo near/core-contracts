@@ -162,10 +162,15 @@ impl LockupContract {
     /// - `transfers_information` - the information about the transfers. Either transfers are
     ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
     ///    are currently disabled and it contains the account ID of the transfer poll contract.
-    /// - `vesting_schedule` - Hash of vesting schedule with salt.
+    /// - `vesting_schedule` - A enum of three options:
+    ///      * No vesting;
+    ///      * Hash of vesting schedule with salt;
+    ///      * Explicit vesting schedule;
+    ///
     ///    Vesting schedule affects the amount of tokens the NEAR Foundation will get in case of
     ///    employment termination as well as the amount of tokens available for transfer by
-    ///    the employee. Only needs to be revealed in case of termination.
+    ///    the employee. If Hash provided, it's expected that vesting started before lockup and
+    ///    it only needs to be revealed in case of termination.
     /// - `release_duration` - is the duration when the full lockup amount will be available.
     ///    The tokens are linearly released from the moment transfers are enabled. If it's used
     ///    in addition to the vesting schedule, then the amount of tokens available to transfer
