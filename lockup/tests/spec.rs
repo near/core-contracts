@@ -14,7 +14,7 @@ use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
 use near_sdk::borsh::BorshSerialize;
-use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128};
+use near_sdk::json_types::{Base58PublicKey, U128};
 use near_sdk::serde_json::{self, json};
 use near_sdk::AccountId;
 use std::convert::TryInto;
@@ -955,16 +955,7 @@ fn termination_with_staking() {
     r.current_block().block_timestamp = start_timestamp + 1499;
 
     foundation
-        .function_call(
-            &mut r,
-            LOCKUP_ACCOUNT_ID,
-            "terminate_vesting",
-            &serde_json::to_vec(&json!({
-                "vesting_schedule": vesting_schedule,
-                "salt": Base64VecU8::from(vec![])
-            }))
-            .unwrap(),
-        )
+        .function_call(&mut r, LOCKUP_ACCOUNT_ID, "terminate_vesting", b"{}")
         .unwrap();
 
     let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
