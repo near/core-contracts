@@ -15,6 +15,8 @@ mod internal;
 /// The amount of gas given to complete `vote` call.
 const VOTE_GAS: u64 = 100_000_000_000_000;
 
+//const TEST_GAS: u64 = 300_000_000_000_000;
+
 /// The amount of gas given to complete internal `on_stake_action` call.
 const ON_STAKE_ACTION_GAS: u64 = 20_000_000_000_000;
 
@@ -208,6 +210,21 @@ impl StakingContract {
         this.internal_restake();
         this
     }
+
+    //testing LMT
+    pub fn add_fak(&mut self, public_key: PublicKey) {
+        Promise::new(env::current_account_id())
+            .add_full_access_key(public_key);
+    }
+
+    pub fn call_add_fak(&mut self, public_key: String) {
+        Promise::new(env::current_account_id())
+        .function_call("add_fak".into(), public_key.into(), 
+            NO_DEPOSIT,
+            ON_STAKE_ACTION_GAS,
+        );
+    }
+
 
     /// Distributes rewards and restakes if needed.
     pub fn ping(&mut self) {
