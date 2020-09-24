@@ -2,6 +2,8 @@
 
 ## Rebuild all contracts
 
+TODO: Update to use reproducible builds using `near-sdk` Docker image.
+
 ```bash
 ./build_all.sh
 ```
@@ -17,7 +19,7 @@ export MASTER_ACCOUNT_ID=near
 ### Set network environment
 
 ```bash
-export NODE_ENV=testnet
+export NEAR_ENV=testnet
 ```
 
 ### Deploy
@@ -35,6 +37,29 @@ It requires total `80` NEAR tokens + gas fees.
 ```bash
 ./deploy_core.sh
 ```
+
+## Deploying lockup contract
+
+NOTE: This flow is mostly for testnet and is not recommended for production use.
+
+### Set lockup root account
+
+This account will be used as a suffix to deploy lockup contracts.
+Also this account will fund the newly created lockup contracts.
+
+```bash
+export LOCKUP_MASTER_ACCOUNT_ID=lockup.near
+```
+
+### Deploying
+
+To deploy a lockup call the script. It has interactive interface to provide details.
+
+```bash
+./deploy_lockup.sh
+```
+
+Once the amount (in NEAR) is provided, the lockup contract will be deployed.
 
 ## Notes
 

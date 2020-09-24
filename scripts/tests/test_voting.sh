@@ -5,7 +5,7 @@ set -e
 nearup localnet --num-nodes 5 --binary-path /Users/ekwork/code/nearcore/target/debug/ --overwrite
 
 export MASTER_ACCOUNT_ID=node0
-export NODE_ENV=local
+export NEAR_ENV=local
 
 stop_nodes() {
   echo "STOOOP THE NODES!"

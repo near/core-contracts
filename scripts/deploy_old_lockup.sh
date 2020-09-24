@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-if [ -z "${NODE_ENV}" ]; then
-  echo "NODE_ENV is required, e.g. \`export NODE_ENV=testnet\`"
+if [ -z "${NEAR_ENV}" ]; then
+  echo "NEAR_ENV is required, e.g. \`export NEAR_ENV=testnet\`"
   exit 1
 fi
 
@@ -11,7 +11,7 @@ if [ -z "${MASTER_ACCOUNT_ID}" ]; then
   exit 1
 fi
 
-echo "Using NODE_ENV=${NODE_ENV}"
+echo "Using NEAR_ENV=${NEAR_ENV}"
 echo "Using MASTER_ACCOUNT_ID=${MASTER_ACCOUNT_ID}"
 
 # Verifying master account exist
