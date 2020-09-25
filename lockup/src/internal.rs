@@ -30,11 +30,31 @@ impl LockupContract {
         }
     }
 
-    pub fn assert_vesting(&self) {
-        if let VestingInformation::Vesting(_) = &self.vesting_information {
-            // OK
-        } else {
-            env::panic(b"There is no vesting in progress");
+    pub fn assert_vesting(
+        &self,
+        vesting_schedule_with_salt: Option<VestingScheduleWithSalt>,
+    ) -> VestingSchedule {
+        match &self.vesting_information {
+            VestingInformation::VestingHash(hash) => {
+                if let Some(vesting_schedule_with_salt) = vesting_schedule_with_salt {
+                    assert_eq!(
+                        &vesting_schedule_with_salt.hash(),
+                        &hash.0,
+                        "Presented vesting schedule and salt don't match the hash"
+                    );
+                    vesting_schedule_with_salt.vesting_schedule
+                } else {
+                    env::panic(b"Expected vesting schedule and salt, but it was not provided")
+                }
+            }
+            VestingInformation::VestingSchedule(vesting_schedule) => {
+                assert!(
+                    vesting_schedule_with_salt.is_none(),
+                    "Explicit vesting schedule exists"
+                );
+                vesting_schedule.clone()
+            }
+            _ => env::panic(b"Vesting was terminated"),
         }
     }
 

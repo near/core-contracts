@@ -1,5 +1,6 @@
-use crate::*;
 use near_sdk::{near_bindgen, AccountId, Promise};
+
+use crate::*;
 
 #[near_bindgen]
 impl LockupContract {
@@ -8,10 +9,16 @@ impl LockupContract {
     /// Requires 25 TGas (1 * BASE_GAS)
     ///
     /// Terminates vesting schedule and locks the remaining unvested amount.
-    pub fn terminate_vesting(&mut self) {
+    /// If the lockup contract was initialized with the private vesting schedule, then
+    /// this method expects to receive a `VestingScheduleWithSalt` to reveal the vesting schedule,
+    /// otherwise it expects `None`.
+    pub fn terminate_vesting(
+        &mut self,
+        vesting_schedule_with_salt: Option<VestingScheduleWithSalt>,
+    ) {
         self.assert_called_by_foundation();
-        self.assert_vesting();
-        let unvested_amount = self.get_unvested_amount();
+        let vesting_schedule = self.assert_vesting(vesting_schedule_with_salt);
+        let unvested_amount = self.get_unvested_amount(vesting_schedule);
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 
         env::log(

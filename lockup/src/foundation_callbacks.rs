@@ -220,8 +220,8 @@ impl LockupContract {
                         .as_bytes(),
                 );
             } else {
-                self.vesting_information = VestingInformation::None;
                 self.foundation_account_id = None;
+                self.vesting_information = VestingInformation::None;
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }
         } else {

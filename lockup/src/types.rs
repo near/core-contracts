@@ -1,7 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{U128, U64};
+use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{AccountId, Balance};
+use near_sdk::{env, AccountId, Balance};
 use uint::construct_uint;
 
 construct_uint! {
@@ -20,6 +20,9 @@ pub type WrappedTimestamp = U64;
 pub type WrappedDuration = U64;
 /// Balance wrapped into a struct for JSON serialization as a string.
 pub type WrappedBalance = U128;
+
+/// Hash of Vesting schedule.
+pub type Hash = Vec<u8>;
 
 /// Contains information about token lockups.
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -45,7 +48,7 @@ pub struct LockupInformation {
 }
 
 /// Contains information about the transfers. Whether transfers are enabled or disabled.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum TransfersInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
@@ -85,7 +88,7 @@ pub struct StakingInformation {
 }
 
 /// Contains information about vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, PartialEq, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct VestingSchedule {
     /// The timestamp in nanosecond when the vesting starts. E.g. the start date of employment.
@@ -115,13 +118,29 @@ impl VestingSchedule {
     }
 }
 
+/// Initialization argument type to define the vesting schedule
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub enum VestingScheduleOrHash {
+    /// The vesting schedule is private and this is a hash of (vesting_schedule, salt).
+    /// In JSON, the hash has to be encoded with base64 to a string.
+    VestingHash(Base64VecU8),
+    /// The vesting schedule (public)
+    VestingSchedule(VestingSchedule),
+}
+
 /// Contains information about vesting that contains vesting schedule and termination information.
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, BorshDeserialize, BorshSerialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub enum VestingInformation {
-    /// No vesting.
     None,
-    /// The vesting is going on schedule.
-    Vesting(VestingSchedule),
+    /// Vesting schedule is hashed for privacy and only will be revealed if the NEAR foundation
+    /// has to terminate vesting.
+    /// The contract assume the vesting schedule doesn't affect lockup release and duration, because
+    /// the vesting started before transfers were enabled and the duration is shorter or the same.
+    VestingHash(Base64VecU8),
+    /// Explicit vesting schedule.
+    VestingSchedule(VestingSchedule),
     /// The information about the early termination of the vesting schedule.
     /// It means the termination of the vesting is currently in progress.
     /// Once the unvested amount is transferred out, `VestingInformation` is removed.
@@ -150,7 +169,7 @@ pub enum TerminationStatus {
 }
 
 /// Contains information about early termination of the vesting schedule.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct TerminationInformation {
     /// The amount of tokens that are unvested and has to be transferred back to NEAR Foundation.
@@ -165,3 +184,19 @@ pub struct TerminationInformation {
 /// The result of the transfer poll.
 /// Contains The timestamp when the proposal was voted in.
 pub type PollResult = Option<WrappedTimestamp>;
+
+/// Contains a vesting schedule with a salt.
+#[derive(BorshSerialize, Deserialize, Serialize, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct VestingScheduleWithSalt {
+    /// The vesting schedule
+    pub vesting_schedule: VestingSchedule,
+    /// Salt to make the hash unique
+    pub salt: Base64VecU8,
+}
+
+impl VestingScheduleWithSalt {
+    pub fn hash(&self) -> Hash {
+        env::sha256(&self.try_to_vec().expect("Failed to serialize"))
+    }
+}

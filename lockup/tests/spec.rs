@@ -5,7 +5,11 @@ extern crate quickcheck_macros;
 mod utils;
 
 use crate::utils::{call_view, wait_epoch, ExternalUser, LOCKUP_ACCOUNT_ID};
-use lockup_contract::{TerminationStatus, TransfersInformation, VestingSchedule, WrappedBalance};
+use lockup_contract::{
+    TerminationStatus, TransfersInformation, VestingSchedule, VestingScheduleOrHash,
+    VestingScheduleWithSalt, WrappedBalance,
+};
+use near_primitives::hash::hash;
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::Balance;
 use near_runtime_standalone::RuntimeStandalone;
@@ -491,7 +495,7 @@ fn staking_with_helpers() {
 }
 
 #[test]
-fn termination_with_staking() {
+fn termination_with_staking_hashed() {
     let lockup_amount = ntoy(1000);
     let (mut r, foundation, owner) = basic_setup();
 
@@ -536,6 +540,14 @@ fn termination_with_staking() {
 
     let start_timestamp = r.current_block().block_timestamp;
 
+    let vesting_schedule = VestingSchedule {
+        start_timestamp: start_timestamp.into(),
+        cliff_timestamp: (start_timestamp + 1000).into(),
+        end_timestamp: (start_timestamp + 4000).into(),
+    };
+    let vesting_schedule_str =
+        serde_json::to_string(&json!({ "vesting_schedule": vesting_schedule })).unwrap();
+    let salt: Vec<u8> = [vec![1, 2, 3], b"VERY_LONG_SALT".to_vec()].concat();
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
         lockup_duration: 1000000000.into(),
@@ -543,11 +555,19 @@ fn termination_with_staking() {
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id: "transfer-poll".to_string(),
         },
-        vesting_schedule: Some(VestingSchedule {
-            start_timestamp: start_timestamp.into(),
-            cliff_timestamp: (start_timestamp + 1000).into(),
-            end_timestamp: (start_timestamp + 4000).into(),
-        }),
+        vesting_schedule: Some(VestingScheduleOrHash::VestingHash(
+            hash(
+                &VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: salt.clone().into(),
+                }
+                .try_to_vec()
+                .unwrap(),
+            )
+            .as_ref()
+            .to_vec()
+            .into(),
+        )),
         release_duration: None,
         foundation_account_id: Some(foundation.account_id.clone()),
         staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
@@ -604,16 +624,323 @@ fn termination_with_staking() {
         .function_call(&mut r, &staking_pool_account_id, "ping", &[])
         .unwrap();
 
-    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", "");
+    let res: WrappedBalance =
+        call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, 0);
 
     // Updating the timestamp to simulate some vesting
     r.current_block().block_timestamp = start_timestamp + 1500;
 
-    let res: WrappedBalance = call_lockup(&r, "get_locked_vested_amount", "");
+    let res: WrappedBalance =
+        call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, (lockup_amount + ntoy(35)) * 3 / 8);
 
-    let res: WrappedBalance = call_lockup(&r, "get_unvested_amount", "");
+    let res: WrappedBalance = call_lockup(&r, "get_unvested_amount", vesting_schedule_str.clone());
+    assert_eq!(res.0, (lockup_amount + ntoy(35)) * 5 / 8);
+
+    // Terminating the vesting schedule
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert!(res.is_none());
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance", "");
+    assert_eq!(res.0, 0);
+
+    // Decrease timestamp by (-1) to make balances round
+    r.current_block().block_timestamp = start_timestamp + 1499;
+
+    foundation
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "terminate_vesting",
+            &serde_json::to_vec(&json!({
+                "vesting_schedule_with_salt": VestingScheduleWithSalt {
+                    vesting_schedule,
+                    salt: salt.into()
+                },
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert_eq!(res, Some(TerminationStatus::VestingTerminatedWithDeficit));
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance", "");
+    let unvested_balance = (lockup_amount + ntoy(35)) * 5 / 8;
+    assert_eq!(res.0, unvested_balance);
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance_deficit", "");
+    // The rest of the tokens are on the staking pool.
+    assert_eq!(res.0, unvested_balance - ntoy(100));
+
+    let res: U128 = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account_staked_balance",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+    assert!(res.0 > 0);
+
+    foundation
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "termination_prepare_to_withdraw",
+            b"{}",
+        )
+        .unwrap();
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert_eq!(res, Some(TerminationStatus::EverythingUnstaked));
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance_deficit", "");
+    assert_eq!(res.0, unvested_balance - ntoy(100));
+
+    let res: U128 = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account_staked_balance",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+    assert_eq!(res.0, 0);
+
+    let res: U128 = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account_unstaked_balance",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+    assert!(res.0 > 0);
+
+    let res = foundation
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "termination_prepare_to_withdraw",
+            b"{}",
+        )
+        .unwrap();
+    // Need to wait 4 epochs
+    assert_eq!(res.status, ExecutionStatus::SuccessValue(b"false".to_vec()));
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert_eq!(res, Some(TerminationStatus::EverythingUnstaked));
+
+    for _ in 0..4 {
+        wait_epoch(&mut r);
+    }
+
+    // The standalone runtime doesn't unlock locked balance. Need to manually intervene.
+    let mut pool = r.view_account(&staking_pool_account_id).unwrap();
+    pool.amount += pool.locked;
+    pool.locked = 0;
+    r.force_account_update(staking_pool_account_id.clone(), &pool);
+
+    let res: U128 = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account_unstaked_balance",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+    let received_reward = res.0 - staking_amount;
+
+    let res = foundation
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "termination_prepare_to_withdraw",
+            b"{}",
+        )
+        .unwrap();
+    assert_eq!(res.status, ExecutionStatus::SuccessValue(b"true".to_vec()));
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance_deficit", "");
+    assert_eq!(res.0, 0);
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert_eq!(res, Some(TerminationStatus::ReadyToWithdraw));
+
+    let res: U128 = call_view(
+        &r,
+        &staking_pool_account_id.clone(),
+        "get_account_unstaked_balance",
+        &serde_json::to_string(&json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })).unwrap(),
+    );
+    assert_eq!(res.0, 0);
+
+    let res: U128 = call_lockup(&r, "get_known_deposited_balance", "");
+    assert_eq!(res.0, 0);
+
+    let foundation_balance = foundation.account(&r).amount;
+
+    let res = foundation
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "termination_withdraw",
+            &serde_json::to_vec(&json!({ "receiver_id": foundation.account_id.clone() })).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(res.status, ExecutionStatus::SuccessValue(b"true".to_vec()));
+
+    let res: Option<TerminationStatus> = call_lockup(&r, "get_termination_status", "");
+    assert_eq!(res, None);
+
+    let res: WrappedBalance = call_lockup(&r, "get_terminated_unvested_balance", "");
+    assert_eq!(res.0, 0);
+
+    let new_foundation_balance = foundation.account(&r).amount;
+    assert_eq!(
+        new_foundation_balance,
+        foundation_balance + unvested_balance
+    );
+
+    let res: WrappedBalance = call_lockup(&r, "get_locked_amount", "");
+    assert_eq!(res.0, (lockup_amount + ntoy(35)) - unvested_balance);
+
+    let res: WrappedBalance = call_lockup(&r, "get_liquid_owners_balance", "");
+    assert_eq!(res.0, received_reward);
+
+    let res: WrappedBalance = call_lockup(&r, "get_balance", "");
+    assert_eq!(
+        res.0,
+        (lockup_amount + ntoy(35)) - unvested_balance + received_reward
+    );
+}
+
+#[test]
+fn termination_with_staking() {
+    let lockup_amount = ntoy(1000);
+    let (mut r, foundation, owner) = basic_setup();
+
+    let staking_pool_whitelist_account_id = "staking-pool-whitelist".to_string();
+    let staking_pool_account_id = "staking-pool".to_string();
+
+    // Creating whitelist account
+    foundation
+        .init_whitelist(&mut r, staking_pool_whitelist_account_id.clone())
+        .unwrap();
+
+    // Whitelisting staking pool
+    foundation
+        .function_call(
+            &mut r,
+            &staking_pool_whitelist_account_id,
+            "add_staking_pool",
+            &serde_json::to_vec(
+                &json!({"staking_pool_account_id": staking_pool_account_id.clone()}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    // Creating staking pool
+    foundation
+        .init_staking_pool(&mut r, staking_pool_account_id.clone())
+        .unwrap();
+
+    // Whitelisting staking pool
+    foundation
+        .function_call(
+            &mut r,
+            &staking_pool_whitelist_account_id,
+            "add_staking_pool",
+            &serde_json::to_vec(
+                &json!({"staking_pool_account_id": staking_pool_account_id.clone()}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    let start_timestamp = r.current_block().block_timestamp;
+
+    let vesting_schedule = VestingSchedule {
+        start_timestamp: start_timestamp.into(),
+        cliff_timestamp: (start_timestamp + 1000).into(),
+        end_timestamp: (start_timestamp + 4000).into(),
+    };
+    let vesting_schedule_str =
+        serde_json::to_string(&json!({ "vesting_schedule": vesting_schedule })).unwrap();
+    let args = InitLockupArgs {
+        owner_account_id: owner.account_id.clone(),
+        lockup_duration: 1000000000.into(),
+        lockup_timestamp: None,
+        transfers_information: TransfersInformation::TransfersDisabled {
+            transfer_poll_account_id: "transfer-poll".to_string(),
+        },
+        vesting_schedule: Some(VestingScheduleOrHash::VestingSchedule(
+            vesting_schedule.clone(),
+        )),
+        release_duration: None,
+        foundation_account_id: Some(foundation.account_id.clone()),
+        staking_pool_whitelist_account_id: staking_pool_whitelist_account_id.clone(),
+    };
+
+    foundation
+        .init_lockup(&mut r, &args, lockup_amount)
+        .unwrap();
+
+    let owner_staking_account = owner.clone();
+
+    let res: Option<AccountId> = call_lockup(&r, "get_staking_pool_account_id", "");
+    assert_eq!(res, None);
+
+    // Selecting staking pool
+    owner_staking_account
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "select_staking_pool",
+            &serde_json::to_vec(
+                &json!({"staking_pool_account_id": staking_pool_account_id.clone()}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    let res: Option<AccountId> = call_lockup(&r, "get_staking_pool_account_id", "");
+    assert_eq!(res, Some(staking_pool_account_id.clone()));
+    let res: U128 = call_lockup(&r, "get_known_deposited_balance", "");
+    assert_eq!(res.0, 0);
+
+    // Depositing and staking on the staking pool
+    let staking_amount = lockup_amount - ntoy(100);
+    owner_staking_account
+        .function_call(
+            &mut r,
+            LOCKUP_ACCOUNT_ID,
+            "deposit_and_stake",
+            &serde_json::to_vec(&json!({ "amount": U128(staking_amount) })).unwrap(),
+        )
+        .unwrap();
+
+    let res: U128 = call_lockup(&r, "get_known_deposited_balance", "");
+    assert_eq!(res.0, staking_amount);
+
+    // Simulating rewards
+    foundation
+        .transfer(&mut r, &staking_pool_account_id, ntoy(10))
+        .unwrap();
+
+    // Pinging the staking pool
+    foundation
+        .function_call(&mut r, &staking_pool_account_id, "ping", &[])
+        .unwrap();
+
+    let res: WrappedBalance =
+        call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
+    assert_eq!(res.0, 0);
+
+    // Updating the timestamp to simulate some vesting
+    r.current_block().block_timestamp = start_timestamp + 1500;
+
+    let res: WrappedBalance =
+        call_lockup(&r, "get_locked_vested_amount", vesting_schedule_str.clone());
+    assert_eq!(res.0, (lockup_amount + ntoy(35)) * 3 / 8);
+
+    let res: WrappedBalance = call_lockup(&r, "get_unvested_amount", vesting_schedule_str.clone());
     assert_eq!(res.0, (lockup_amount + ntoy(35)) * 5 / 8);
 
     // Terminating the vesting schedule
