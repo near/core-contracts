@@ -300,13 +300,6 @@ pub fn deposit_to_staking_pool(&mut self, amount: WrappedBalance) -> bool;
 ///
 /// Requires 125 TGas (5 * BASE_GAS)
 ///
-/// Deposits and stakes the given extra amount to the selected staking pool
-pub fn deposit_and_stake(&mut self, amount: WrappedBalance) -> bool;
-
-/// OWNER'S METHOD
-///
-/// Requires 125 TGas (5 * BASE_GAS)
-///
 /// Withdraws the given amount from the staking pool
 pub fn withdraw_from_staking_pool(&mut self, amount: WrappedBalance) -> bool;
 
