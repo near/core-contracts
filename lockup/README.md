@@ -442,9 +442,6 @@ pub fn get_vesting_information(&self) -> VestingInformation;
 /// This method also doesn't account for tokens locked for the contract storage.
 pub fn get_owners_balance(&self) -> WrappedBalance;
 
-/// Returns total balance of the account including tokens deposited on the staking pool.
-pub fn get_balance(&self) -> WrappedBalance;
-
 /// The amount of tokens the owner can transfer now from the account.
 /// Transfers have to be enabled.
 pub fn get_liquid_owners_balance(&self) -> WrappedBalance;
