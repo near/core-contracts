@@ -424,6 +424,8 @@ mod tests {
         let transfer_amount = total_supply / 3;
         contract.transfer_with_safe(bob(), transfer_amount.into(), "PAYLOAD".to_string());
 
+        assert_eq!(contract.next_safe_id.0, 1);
+
         let receipts = env::created_receipts();
 
         assert_eq!(receipts.len(), 2);
