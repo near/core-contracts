@@ -7,6 +7,9 @@ use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Gas, Promise
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
+/// Price per 1 byte of storage from mainnet genesis config.
+const STORAGE_PRICE_PER_BYTE: Balance = 100_000_000_000_000_000_000;
+
 /// Don't need deposits for function calls.
 const NO_DEPOSIT: Balance = 0;
 
@@ -127,20 +130,25 @@ impl SafeBasedFungibleToken {
             next_safe_id: SafeId(0),
             total_supply,
         };
-        ft.deposit_to_account(owner_id.as_ref(), total_supply);
+        ft.accounts.insert(
+            &owner_id.as_ref().into(),
+            &Account {
+                balance: total_supply,
+            },
+        );
         ft
     }
 
     /// Simple transfers
     /// Gas requirement: 5 TGas or 5000000000000 Gas
     /// Should be called by the balance owner.
+    /// Requires that the sender and the receiver accounts be registered.
     ///
     /// Actions:
     /// - Transfers `amount` of tokens from `predecessor_id` to `receiver_id`.
     pub fn transfer_unsafe(&mut self, receiver_id: ValidAccountId, amount: U128) {
         let amount = amount.into();
-        let _sender_id = self.withdraw_from_sender(receiver_id.as_ref(), amount);
-
+        self.withdraw_from_sender(receiver_id.as_ref(), amount);
         self.deposit_to_account(receiver_id.as_ref(), amount);
     }
 
@@ -228,7 +236,7 @@ impl SafeBasedFungibleToken {
         safe.balance -= amount;
         self.safes.insert(&safe_id, &safe);
 
-        self.deposit_to_account(receiver_id.as_ref(), amount)
+        self.deposit_to_account(receiver_id.as_ref(), amount);
     }
 
     /// Resolves a given safe
@@ -240,7 +248,7 @@ impl SafeBasedFungibleToken {
     /// - Reads safe with `safe_id`
     /// - Deposits remaining `safe.amount` to `sender_id`
     /// - Deletes the safe
-    /// - Returns the total withdrawn amount from the safe `original_amount - safe.amount`.
+    /// - Returns the remaining balance in the `safe.amount`.
     /// #[private]
     pub fn resolve_safe(&mut self, safe_id: SafeId, sender_id: AccountId) -> U128 {
         if env::current_account_id() != env::predecessor_account_id() {
@@ -248,9 +256,91 @@ impl SafeBasedFungibleToken {
         }
 
         let safe = self.safes.remove(&safe_id).expect("Safe doesn't exist");
-        self.deposit_to_account(&sender_id, safe.balance);
+
+        if safe.balance > 0 {
+            let sender_id_hash = (&sender_id).into();
+            if let Some(mut account) = self.accounts.get(&sender_id_hash) {
+                account.balance += safe.balance;
+                self.set_account(&sender_id_hash, &account);
+            } else {
+                self.total_supply -= safe.balance
+            }
+        }
 
         safe.balance.into()
+    }
+
+    /// Returns true if the account exists
+    /// Gas requirement: 5 TGas or 5000000000000 Gas
+    pub fn account_exists(&self, account_id: ValidAccountId) -> bool {
+        self.accounts.contains_key(&account_id.as_ref().into())
+    }
+
+    /// Registers a given account.
+    /// Gas requirement: 10 TGas or 10000000000000 Gas
+    /// Requires deposit of 0.0077 NEAR
+    ///
+    /// Actions:
+    /// - Verifies that the given account doesn't exist
+    /// - Creates a new given account with 0 balance
+    /// - Refunds the remaining deposit if more than the required deposit is attached.
+    #[payable]
+    pub fn register_account(&mut self, account_id: ValidAccountId) {
+        let account_id_hash = account_id.as_ref().into();
+        if self.accounts.contains_key(&account_id_hash) {
+            env::panic(format!("Account {} already exists", account_id.as_ref()).as_bytes());
+        }
+
+        let storage_usage = env::storage_usage();
+        self.accounts.insert(&account_id_hash, &Account::default());
+        let storage_difference = env::storage_usage() - storage_usage;
+
+        let attached_deposit = env::attached_deposit();
+        let required_deposit = Balance::from(storage_difference) * STORAGE_PRICE_PER_BYTE;
+        if attached_deposit < required_deposit {
+            env::panic(
+                format!(
+                    "The attached deposit {} is less than the required deposit {}",
+                    attached_deposit, required_deposit,
+                )
+                .as_bytes(),
+            );
+        }
+        let refund_amount = attached_deposit - required_deposit;
+        if refund_amount > 0 {
+            env::log(format!("Refunding {} tokens for storage", refund_amount).as_bytes());
+            Promise::new(env::predecessor_account_id()).transfer(refund_amount);
+        }
+    }
+
+    /// Unregisters the account of the predecessor.
+    /// Gas requirement: 10 TGas or 10000000000000 Gas
+    /// Requires that the predecessor account exists and has no positive balance.
+    ///
+    /// Actions:
+    /// - Verifies that the account exist
+    /// - Creates a new given account with 0 balance
+    /// - Refunds the amount release by storage.
+    pub fn unregister_account(&mut self) {
+        let account_id = env::predecessor_account_id();
+        let storage_usage = env::storage_usage();
+        if let Some(account) = self.accounts.remove(&(&account_id).into()) {
+            if account.balance > 0 {
+                env::panic(
+                    format!(
+                        "Can't unregister account {}, because it has a positive balance {}",
+                        account_id, account.balance,
+                    )
+                    .as_bytes(),
+                );
+            }
+        } else {
+            env::panic(format!("Account {} doesn't exist", account_id).as_bytes())
+        }
+        let storage_difference = storage_usage - env::storage_usage();
+        let refund_amount = Balance::from(storage_difference) * STORAGE_PRICE_PER_BYTE;
+        env::log(format!("Refunding {} tokens for storage", refund_amount).as_bytes());
+        Promise::new(account_id).transfer(refund_amount);
     }
 
     /// Returns total supply of tokens.
@@ -260,13 +350,17 @@ impl SafeBasedFungibleToken {
 
     /// Returns balance of the `owner_id` account.
     pub fn get_balance(&self, account_id: ValidAccountId) -> U128 {
-        self.get_account(account_id.as_ref()).0.balance.into()
+        self.accounts
+            .get(&account_id.as_ref().into())
+            .map(|account| account.balance)
+            .unwrap_or(0)
+            .into()
     }
 }
 
 impl SafeBasedFungibleToken {
     /// Withdraws `amount` from the `predecessor_id` while comparing it to the `receiver_id`.
-    /// Return `predecessor_id`
+    /// Return `predecessor_id` and hash of the predecessor
     fn withdraw_from_sender(&mut self, receiver_id: &AccountId, amount: Balance) -> AccountId {
         if amount == 0 {
             env::panic(b"Transfer amount should be positive");
@@ -281,7 +375,7 @@ impl SafeBasedFungibleToken {
         }
 
         // Retrieving the account from the state.
-        let (mut account, short_account_id) = self.get_account(&sender_id);
+        let (mut account, sender_id_hash) = self.get_account_expect(&sender_id);
 
         // Checking and updating the balance
         if account.balance < amount {
@@ -290,7 +384,7 @@ impl SafeBasedFungibleToken {
         account.balance -= amount;
 
         // Saving the account back to the state.
-        self.set_account(&short_account_id, &account);
+        self.set_account(&sender_id_hash, &account);
 
         sender_id
     }
@@ -301,29 +395,25 @@ impl SafeBasedFungibleToken {
             return;
         }
         // Retrieving the account from the state.
-        let (mut account, short_account_id) = self.get_account(&account_id);
+        let (mut account, account_id_hash) = self.get_account_expect(&account_id);
         account.balance += amount;
-
         // Saving the account back to the state.
-        self.set_account(&short_account_id, &account);
+        self.set_account(&account_id_hash, &account);
     }
 
     /// Helper method to get the account details for `owner_id`.
-    fn get_account(&self, account_id: &AccountId) -> (Account, ShortAccountHash) {
+    fn get_account_expect(&self, account_id: &AccountId) -> (Account, ShortAccountHash) {
         let account_id_hash: ShortAccountHash = account_id.into();
-        (
-            self.accounts.get(&account_id_hash).unwrap_or_default(),
-            account_id_hash,
-        )
+        if let Some(account) = self.accounts.get(&account_id_hash) {
+            (account, account_id_hash)
+        } else {
+            env::panic(format!("Account {} doesn't exist", account_id).as_bytes())
+        }
     }
 
     /// Helper method to set the account details for `owner_id` to the state.
     fn set_account(&mut self, account_id_hash: &ShortAccountHash, account: &Account) {
-        if account.balance > 0 {
-            self.accounts.insert(account_id_hash, account);
-        } else {
-            self.accounts.remove(account_id_hash);
-        }
+        self.accounts.insert(account_id_hash, account);
     }
 }
 
@@ -346,19 +436,23 @@ mod tests {
         "carol.near".try_into().unwrap()
     }
 
-    fn get_context(predecessor_account_id: ValidAccountId, is_view: bool) -> VMContext {
+    fn get_context(
+        predecessor_account_id: AccountId,
+        is_view: bool,
+        attached_deposit: Balance,
+    ) -> VMContext {
         VMContext {
             current_account_id: alice().into(),
             signer_account_id: bob().into(),
             signer_account_pk: vec![0, 1, 2],
-            predecessor_account_id: predecessor_account_id.into(),
+            predecessor_account_id,
             input: vec![],
             block_index: 0,
             block_timestamp: 0,
             account_balance: 1000 * 10u128.pow(24),
             account_locked_balance: 0,
             storage_usage: 10u64.pow(6),
-            attached_deposit: 0,
+            attached_deposit,
             prepaid_gas: 10u64.pow(18),
             random_seed: vec![0, 1, 2],
             is_view,
@@ -367,12 +461,28 @@ mod tests {
         }
     }
 
+    fn context(predecessor_account_id: ValidAccountId) {
+        testing_env!(get_context(predecessor_account_id.into(), false, 0));
+    }
+
+    fn view_context() {
+        testing_env!(get_context("view".to_string(), true, 0));
+    }
+
+    fn context_with_deposit(predecessor_account_id: ValidAccountId, attached_deposit: Balance) {
+        testing_env!(get_context(
+            predecessor_account_id.into(),
+            false,
+            attached_deposit
+        ));
+    }
+
     #[test]
     fn test_new() {
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let total_supply = 1_000_000_000_000_000u128;
         let contract = SafeBasedFungibleToken::new(bob(), total_supply.into());
-        testing_env!(get_context(carol(), true));
+        view_context();
         assert_eq!(contract.get_total_supply().0, total_supply);
         assert_eq!(contract.get_balance(bob()).0, total_supply);
     }
@@ -380,21 +490,26 @@ mod tests {
     #[test]
     #[should_panic(expected = "The contract is not initialized")]
     fn test_default() {
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let _contract = SafeBasedFungibleToken::default();
     }
 
     #[test]
     fn test_transfer_unsafe() {
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = SafeBasedFungibleToken::new(carol(), total_supply.into());
 
-        testing_env!(get_context(carol(), false));
+        context_with_deposit(carol(), 77 * STORAGE_PRICE_PER_BYTE);
+        contract.register_account(bob());
+        // No refunds
+        assert!(env::created_receipts().is_empty());
+
+        context(carol());
         let transfer_amount = total_supply / 3;
         contract.transfer_unsafe(bob(), transfer_amount.into());
 
-        testing_env!(get_context(carol(), true));
+        view_context();
         assert_eq!(
             contract.get_balance(carol()).0,
             (total_supply - transfer_amount)
@@ -405,22 +520,27 @@ mod tests {
     #[test]
     #[should_panic(expected = "The receiver should be different from the sender")]
     fn test_transfer_unsafe_fail_self() {
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = SafeBasedFungibleToken::new(carol(), total_supply.into());
 
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let transfer_amount = total_supply / 3;
         contract.transfer_unsafe(carol(), transfer_amount.into());
     }
 
     #[test]
     fn test_transfer_with_safe() {
-        testing_env!(get_context(carol(), false));
+        context(carol());
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = SafeBasedFungibleToken::new(carol(), total_supply.into());
 
-        testing_env!(get_context(carol(), false));
+        context_with_deposit(bob(), 77 * STORAGE_PRICE_PER_BYTE);
+        contract.register_account(bob());
+        // No refunds
+        assert!(env::created_receipts().is_empty());
+
+        context(carol());
         let transfer_amount = total_supply / 3;
         contract.transfer_with_safe(bob(), transfer_amount.into(), "PAYLOAD".to_string());
 
@@ -433,7 +553,7 @@ mod tests {
         println!("{}", serde_json::to_string(&receipts[1]).unwrap());
 
         // Checking balances. Carol should have less, but bob still doesn't have it
-        testing_env!(get_context(carol(), true));
+        view_context();
         assert_eq!(
             contract.get_balance(carol()).0,
             (total_supply - transfer_amount)
@@ -442,12 +562,12 @@ mod tests {
 
         // Assuming we're bob() and received
         // `on_receive_with_safe({"sender_id":"carol.near","amount":"333333333333333","safe_id":0,"payload":"PAYLOAD"})`.
-        testing_env!(get_context(bob(), false));
+        context(bob());
         let withdrawal_amount = transfer_amount / 2;
         contract.withdraw_from_safe(SafeId(0), bob(), withdrawal_amount.into());
 
         // Checking balances. Carol should have less, but Bob has withdrawal amount
-        testing_env!(get_context(carol(), true));
+        view_context();
         assert_eq!(
             contract.get_balance(carol()).0,
             (total_supply - transfer_amount)
@@ -455,12 +575,12 @@ mod tests {
         assert_eq!(contract.get_balance(bob()).0, withdrawal_amount);
 
         // Resolving the safe
-        testing_env!(get_context(alice(), false));
+        context(alice());
         let res = contract.resolve_safe(SafeId(0), carol().into());
         assert_eq!(res.0, transfer_amount - withdrawal_amount);
 
         // Final balances
-        testing_env!(get_context(carol(), true));
+        view_context();
         assert_eq!(
             contract.get_balance(carol()).0,
             (total_supply - withdrawal_amount)
