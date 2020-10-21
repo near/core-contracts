@@ -355,6 +355,8 @@ impl UniswapPool {
         self.set_account(&account_id_hash, &account);
     }
 
+    pub fn add_liqidity(&mut self, account_id: AccountId, token_amount: U128, near_amount: U128) {}
+
     /// Returns true if the account exists
     /// Gas requirement: 5 TGas or 5000000000000 Gas
     pub fn account_exists(&self, account_id: ValidAccountId) -> bool {
