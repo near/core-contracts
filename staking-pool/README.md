@@ -1,4 +1,11 @@
-# Staking / Delegation contract
+# NEAR Staking / Delegation contract fork
+
+Staking pool which stores 50% of their profit in the treasure
+
+- Updated constructor: `"treasury_account_id" : "account.near"`
+- New view method: `get_treasury_account_id` 
+
+# Original Staking / Delegation contract
 
 This contract provides a way for other users to delegate funds to a single validation node.
 

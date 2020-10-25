@@ -79,6 +79,8 @@ pub struct StakingContract {
     /// NOTE: This is different from the current account ID which is used as a validator account.
     /// The owner of the staking pool can change staking public key and adjust reward fees.
     pub owner_id: AccountId,
+    // The account ID of the treasury owner
+    pub treasury_account_id: AccountId,
     /// The public key which is used for staking action. It's the public key of the validator node
     /// that validates on behalf of the pool.
     pub stake_public_key: PublicKey,
@@ -147,6 +149,7 @@ impl StakingContract {
     #[init]
     pub fn new(
         owner_id: AccountId,
+        treasury_account_id: AccountId,
         stake_public_key: Base58PublicKey,
         reward_fee_fraction: RewardFeeFraction,
     ) -> Self {
@@ -155,6 +158,10 @@ impl StakingContract {
         assert!(
             env::is_valid_account_id(owner_id.as_bytes()),
             "The owner account ID is invalid"
+        );
+        assert!(
+            env::is_valid_account_id(treasury_account_id.as_bytes()),
+            "The treasury account ID is invalid"
         );
         let account_balance = env::account_balance();
         let total_staked_balance = account_balance - STAKE_SHARE_PRICE_GUARANTEE_FUND;
@@ -165,6 +172,7 @@ impl StakingContract {
         );
         let mut this = Self {
             owner_id,
+            treasury_account_id,
             stake_public_key: stake_public_key.into(),
             last_epoch_height: env::epoch_height(),
             last_total_balance: account_balance,
@@ -202,7 +210,7 @@ impl StakingContract {
                 "@{} deposited {}. New unstaked balance is {}",
                 account_id, amount, account.unstaked
             )
-            .as_bytes(),
+                .as_bytes(),
         );
 
         if need_to_restake {
@@ -236,7 +244,7 @@ impl StakingContract {
                 "@{} withdrawing {}. New unstaked balance is {}",
                 account_id, amount, account.unstaked
             )
-            .as_bytes(),
+                .as_bytes(),
         );
 
         Promise::new(account_id).transfer(amount);
@@ -296,14 +304,14 @@ impl StakingContract {
                 "@{} staking {}. Received {} new staking shares. Total {} unstaked balance and {} staking shares",
                 account_id, charge_amount, num_shares, account.unstaked, account.stake_shares
             )
-            .as_bytes(),
+                .as_bytes(),
         );
         env::log(
             format!(
                 "Contract total staked balance is {}. Total number of shares {}",
                 self.total_staked_balance, self.total_stake_shares
             )
-            .as_bytes(),
+                .as_bytes(),
         );
 
         self.restake();
@@ -371,7 +379,7 @@ impl StakingContract {
                 "Contract total staked balance is {}. Total number of shares {}",
                 self.total_staked_balance, self.total_stake_shares
             )
-            .as_bytes(),
+                .as_bytes(),
         );
 
         self.restake();
@@ -419,6 +427,11 @@ impl StakingContract {
     /// Returns account ID of the staking pool owner.
     pub fn get_owner_id(&self) -> AccountId {
         self.owner_id.clone()
+    }
+
+    /// Returns account ID of the staking pool owner.
+    pub fn get_treasury_account_id(&self) -> AccountId {
+        self.treasury_account_id.clone()
     }
 
     /// Returns the current reward fee as a fraction.
@@ -520,11 +533,21 @@ impl StakingContract {
             // Now buying "stake" shares for the contract owner at the new shares price.
             let num_shares = self.num_shares_from_staked_amount_rounded_down(owners_fee);
             if num_shares > 0 {
+                let num_shares_owner = num_shares / 2;
+                let num_shares_treasury = num_shares - num_shares_owner;
+
                 // Updating owner's inner account
                 let owner_id = self.owner_id.clone();
                 let mut account = self.get_account(&owner_id);
-                account.stake_shares += num_shares;
+                account.stake_shares += num_shares_owner;
                 self.save_account(&owner_id, &account);
+
+                // Updating treasury's inner account
+                let treasury_account_id = self.treasury_account_id.clone();
+                let mut treasury_account = self.get_account(&treasury_account_id);
+                treasury_account.stake_shares += num_shares_treasury;
+                self.save_account(&treasury_account_id, &treasury_account);
+
                 // Increasing the total amount of "stake" shares.
                 self.total_stake_shares += num_shares;
             }
@@ -564,7 +587,7 @@ impl StakingContract {
         );
         (U256::from(self.total_stake_shares) * U256::from(amount)
             / U256::from(self.total_staked_balance))
-        .as_u128()
+            .as_u128()
     }
 
     /// Returns the number of "stake" shares rounded up corresponding to the given staked balance
@@ -579,7 +602,7 @@ impl StakingContract {
         ((U256::from(self.total_stake_shares) * U256::from(amount)
             + U256::from(self.total_staked_balance - 1))
             / U256::from(self.total_staked_balance))
-        .as_u128()
+            .as_u128()
     }
 
     /// Returns the staked amount rounded down corresponding to the given number of "stake" shares.
@@ -590,7 +613,7 @@ impl StakingContract {
         );
         (U256::from(self.total_staked_balance) * U256::from(num_shares)
             / U256::from(self.total_stake_shares))
-        .as_u128()
+            .as_u128()
     }
 
     /// Returns the staked amount rounded up corresponding to the given number of "stake" shares.
@@ -604,7 +627,7 @@ impl StakingContract {
         ((U256::from(self.total_staked_balance) * U256::from(num_shares)
             + U256::from(self.total_stake_shares - 1))
             / U256::from(self.total_stake_shares))
-        .as_u128()
+            .as_u128()
     }
 
     /// Inner method to get the given account or a new default value account.
