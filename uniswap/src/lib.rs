@@ -64,6 +64,9 @@ pub struct Account {
 
     /// Account balance in NEAR tokens.
     pub near_balance: Balance,
+
+    /// Account balance of the liquidity token for this Pool.
+    pub liquidity_balance: Balance,
 }
 
 impl Default for Account {
@@ -71,13 +74,9 @@ impl Default for Account {
         Self {
             token_balance: 0,
             near_balance: 0,
+            liquidity_balance: 0,
         }
     }
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-pub struct TokenPool {
-    // account_id of the token
 }
 
 #[near_bindgen]
@@ -94,6 +93,9 @@ pub struct UniswapPool {
 
     /// Total NEAR token balance locked in yoctoNEAR.
     pub total_near_balance: Balance,
+
+    /// Total balance of the liquidity token for this Pool.
+    pub total_liquidity_balance: Balance,
 }
 
 #[derive(Serialize)]
@@ -146,6 +148,7 @@ impl UniswapPool {
             token_account_id: token_account_id.into(),
             total_near_balance: 0,
             total_token_balance: 0,
+            total_liquidity_balance: 0,
         }
     }
 
@@ -355,7 +358,112 @@ impl UniswapPool {
         self.set_account(&account_id_hash, &account);
     }
 
-    pub fn add_liqidity(&mut self, account_id: AccountId, token_amount: U128, near_amount: U128) {}
+    pub fn add_liqidity(
+        &mut self,
+        max_near_amount: U128,
+        max_token_amount: U128,
+        desired_liquidity_amount: U128,
+    ) -> U128 {
+        let account_id = env::predecessor_account_id();
+        let (mut account, account_id_hash) = self.get_account_expect(&account_id);
+        let max_near_amount: Balance = max_near_amount.into();
+        let max_token_amount: Balance = max_token_amount.into();
+        let desired_liquidity_amount: Balance = desired_liquidity_amount.into();
+        if max_near_amount == 0 {
+            env::panic(b"Max token amount should be positive");
+        }
+        if max_token_amount == 0 {
+            env::panic(b"Max NEAR amount should be positive");
+        }
+        if self.total_liquidity_balance == 0 && desired_liquidity_amount == 0 {
+            env::panic(b"Desired liquidity token amount should be positive");
+        }
+        if max_token_amount > account.token_balance {
+            env::panic(
+                format!(
+                    "Max token amount {} should be less or equal to the account token balance {}",
+                    max_token_amount, account.token_balance
+                )
+                .as_bytes(),
+            );
+        }
+        if max_near_amount > account.near_balance {
+            env::panic(
+                format!(
+                    "Max NEAR amount {} should be less or equal to the account NEAR balance {}",
+                    max_near_amount, account.near_balance
+                )
+                .as_bytes(),
+            );
+        }
+        let total_liquidity_balance = U256::from(self.total_liquidity_balance);
+        let total_near_balance = U256::from(self.total_near_balance);
+        let total_token_balance = U256::from(self.total_token_balance);
+
+        let (liquidity_amount, near_amount, token_amount) = if self.total_liquidity_balance == 0 {
+            // Uninitialized. Minting max amounts.
+            let token_amount = max_token_amount;
+            let near_amount = max_near_amount;
+            let liquidity_amount = std::cmp::min(max_token_amount, max_near_amount);
+            (liquidity_amount, near_amount, token_amount)
+        } else {
+            // token_price = token_balance / liquidity_balance
+            // max_token_shares = max_token_amount / token_price = max_token_amount * liquidity_balance / token_balance
+            // near_price = near_balance / liquidity_balance
+            // max_near_shares = max_near_amount / near_price = max_near_amount * liquidity_balance / near_balance
+            let max_liquidity_amount = if U256::from(max_token_amount) * total_near_balance
+                > U256::from(max_near_amount) * total_token_balance
+            {
+                // limited by max NEAR amount
+                U256::from(max_near_amount) * total_liquidity_balance / total_near_balance
+            } else {
+                // limited by max token amount
+                U256::from(max_token_amount) * total_liquidity_balance / total_token_balance
+            };
+            let liquidity_amount = U256::from(desired_liquidity_amount);
+            if max_liquidity_amount < liquidity_amount {
+                env::panic(
+                    format!(
+                        "The max liquidity amount {} is less than the desired liquidity amount {}",
+                        max_liquidity_amount.as_u128(),
+                        desired_liquidity_amount
+                    )
+                    .as_bytes(),
+                );
+            }
+
+            let near_amount = (liquidity_amount * total_near_balance + total_liquidity_balance - 1)
+                / total_liquidity_balance;
+            let token_amount = (liquidity_amount * total_near_balance + total_liquidity_balance
+                - 1)
+                / total_liquidity_balance;
+            (
+                desired_liquidity_amount,
+                liquidity_amount.as_u128(),
+                token_amount.as_u128(),
+            )
+        };
+
+        account.liquidity_balance += liquidity_amount;
+        account.near_balance -= near_amount;
+        account.token_balance -= token_balance;
+
+        env::log(
+            format!(
+                "Minted {} liquidity for token amount {} and NEAR amount {}",
+                liquidity_amount, token_amount, token_balance
+            )
+            .as_bytes(),
+        );
+
+        self.total_liquidity_balance += liquidity_amount;
+        self.total_near_balance += near_balance;
+        self.total_token_balance += token_balance;
+
+        self.set_account(&account_id_hash, &account);
+
+        liquidity_amount.into()
+    }
 
     /// Returns true if the account exists
     /// Gas requirement: 5 TGas or 5000000000000 Gas
