@@ -358,7 +358,7 @@ impl UniswapPool {
         self.set_account(&account_id_hash, &account);
     }
 
-    pub fn add_liqidity(
+    pub fn buy_liqidity(
         &mut self,
         max_near_amount: U128,
         max_token_amount: U128,
@@ -439,7 +439,7 @@ impl UniswapPool {
                 / total_liquidity_balance;
             (
                 desired_liquidity_amount,
-                liquidity_amount.as_u128(),
+                near_amount.as_u128(),
                 token_amount.as_u128(),
             )
         };
@@ -450,7 +450,7 @@ impl UniswapPool {
 
         env::log(
             format!(
-                "Minted {} liquidity for token amount {} and NEAR amount {}",
+                "Bought {} liquidity for token amount {} and NEAR amount {}",
                 liquidity_amount, token_amount, token_balance
             )
             .as_bytes(),
@@ -463,6 +463,79 @@ impl UniswapPool {
         self.set_account(&account_id_hash, &account);
 
         liquidity_amount.into()
+    }
+
+    pub fn sell_liqidity(
+        &mut self,
+        liquidity_amount: U128,
+        min_near_amount: U128,
+        min_token_amount: U128,
+    ) -> (U128, U128) {
+        let account_id = env::predecessor_account_id();
+        let (mut account, account_id_hash) = self.get_account_expect(&account_id);
+        let min_near_amount: Balance = min_near_amount.into();
+        let min_token_amount: Balance = min_token_amount.into();
+        let liquidity_amount: Balance = liquidity_amount.into();
+        if self.liquidity_amount == 0 {
+            env::panic(b"Liquidity amount should be positive");
+        }
+        if liquidity_amount > account.liquidity_balance {
+            env::panic(
+                format!(
+                    "Liquidity amount {} should be less or equal to the account liquidity balance {}",
+                    liquidity_amount, account.liquidity_balance
+                )
+                .as_bytes(),
+            );
+        }
+        let liquidity_amount_u256 = U256::from(liquidity_amount);
+        let total_liquidity_balance = U256::from(self.total_liquidity_balance);
+
+        let near_amount = ((liquidity_amount_u256 * U256::from(self.total_near_balance))
+            / total_liquidity_balance)
+            .as_u128();
+        let token_amount = ((liquidity_amount_u256 * U256::from(self.total_token_balance))
+            / total_liquidity_balance)
+            .as_u128();
+
+        if near_amount < min_near_amount {
+            env::panic(
+                format!(
+                    "Received NEAR amount {} is less than the desired minimum NEAR amount {}",
+                    near_amount, min_near_amount
+                )
+                .as_bytes(),
+            );
+        }
+        if token_amount < min_token_amount {
+            env::panic(
+                format!(
+                    "Received token amount {} is less than the desired minimum token amount {}",
+                    token_amount, min_token_amount
+                )
+                .as_bytes(),
+            );
+        }
+
+        account.liquidity_balance -= liquidity_amount;
+        account.near_balance += near_amount;
+        account.token_balance += token_balance;
+
+        env::log(
+            format!(
+                "Sold {} liquidity for token amount {} and NEAR amount {}",
+                liquidity_amount, token_amount, token_balance
+            )
+            .as_bytes(),
+        );
+
+        self.total_liquidity_balance -= liquidity_amount;
+        self.total_near_balance -= near_balance;
+        self.total_token_balance -= token_balance;
+
+        self.set_account(&account_id_hash, &account);
+
+        (near_amount.into(), token_amount.into())
     }
 
     /// Returns true if the account exists
