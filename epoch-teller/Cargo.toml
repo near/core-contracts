@@ -1,5 +1,5 @@
 [package]
-name = "fast-fun-token"
+name = "epoch-teller"
 version = "0.1.0"
 authors = ["Near Inc <hello@near.org>"]
 edition = "2018"
@@ -15,7 +15,7 @@ opt-level = "s"
 lto = true
 debug = false
 panic = "abort"
-overflow-checks = true
+overflow-checks = false
 
 [dependencies]
 # wee_alloc = { version = "0.4.5", default-features = false, features = [] }
