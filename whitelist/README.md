@@ -30,6 +30,12 @@ To be able to address mistakes, NEAR Foundation has the ability to remove stakin
 The methods are split into Getters (view methods), the method that can be called by both an approved factory and the foundation,
 and methods that can only be called by the foundation.
 
+## Changelog
+
+### `0.2.0`
+
+- Internally updated to use `LockupSet` instead of `UnorderedSet`.
+
 ```rust
 /// Initializes the contract with the given NEAR foundation account ID.
 #[init]

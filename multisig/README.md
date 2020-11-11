@@ -177,17 +177,17 @@ const result = account.signAndSendTransaction(
 
 To create request for transfer funds:
 ```bash
-near call multisig.illia add_request '{"request": [{"receiver_id": "illia", "actions": [{"type": "Transfer", "amount": "1000000000000000000000"}]}]}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "illia", "actions": [{"type": "Transfer", "amount": "1000000000000000000000"}]}}' --accountId multisig.illia
 ```
 
 Add another key to multisig:
 ```bash
-near call multisig.illia add_request '{"request": [{"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}]}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}}' --accountId multisig.illia
 ```
 
 Change number of confirmations required to approve multisig:
 ```bash
-near call multisig.illia add_request '{"request": [{"receiver_id": "multisig.illia", "actions": [{"type": "SetNumConfirmations", "num_confirmations": 2}]}]}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "SetNumConfirmations", "num_confirmations": 2}]}}' --accountId multisig.illia
 ```
 
 Returns the `request_id` of this request that can be used to confirm or see details.
@@ -195,15 +195,6 @@ Returns the `request_id` of this request that can be used to confirm or see deta
 As a side note, for this to work one of the keys from multisig should be available in your `~/.near-credentials/<network>/<multisig-name>.json` or use `--useLedgerKey` to sign with Ledger.
 
 You can also create a way more complex call that chains calling multiple different contracts:
-
-```bash
-near call multisig.illia add_request '{"request": [
-    {"receiver_id": "nep21-token", "actions": [{"type": "FunctionCall", "method": "allow", "args": "eyJhbW91bnQiOiAiMTAwIn0K", "deposit": "0", "gas": 10000000000000}]},
-    {"receiver_id": "dex", "actions": [{"type": "FunctionCall", "method": "withdraw", "args": "e30K", "deposi"t": "0", "gas": 10000000000000}]},
-]}'
-```
-
-where `eyJhbW91bnQiOiAiMTAwIn0K` is `{"amount": "100"}` encoded in base64.
 
 ### Confirm request
 
@@ -254,3 +245,12 @@ const result = account.signAndSendTransaction(
 ```
 
 After this, still will need to confirm this with `num_confirmations` you have setup for given contract.
+
+### Common commands for multisig
+
+__Create an account__
+
+```
+near call illia.near add_request '{"request": {"receiver_id": "new_account.near", "actions": [{"type", "CreateAccount"}, {"type": "Transfer", "amount": "1000000000000000000000"}, {"type": "AddKey", "public_key": "<public key for the new account>"}]}}' --accountId illia.near
+near call illia.near confirm '{"request_id": <request number from previous line>}'
+```

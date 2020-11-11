@@ -1,14 +1,12 @@
 [package]
-name = "voting-contract"
-version = "0.2.0"
-authors = ["Near Inc <hello@nearprotocol.com>"]
+name = "exchange-deposit-receiver"
+version = "0.1.0"
+authors = ["Near Inc <hello@near.org>"]
 edition = "2018"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[dependencies]
-near-sdk = "2.0.0"
 
 [profile.release]
 codegen-units = 1
@@ -17,7 +15,3 @@ opt-level = "s"
 lto = true
 debug = false
 panic = "abort"
-overflow-checks = true
-
-[workspace]
-members = []

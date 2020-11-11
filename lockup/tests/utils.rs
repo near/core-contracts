@@ -2,8 +2,8 @@
 
 extern crate lockup_contract;
 
-use borsh::BorshSerialize;
-use lockup_contract::types::LockupStartInformation;
+use self::lockup_contract::{VestingScheduleOrHash, WrappedDuration, WrappedTimestamp};
+use lockup_contract::types::TransfersInformation;
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
     account::{AccessKey, Account},
@@ -13,10 +13,11 @@ use near_primitives::{
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
-use near_sdk::json_types::{Base58PublicKey, U64};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use serde_json::json;
+use near_sdk::borsh::BorshSerialize;
+use near_sdk::json_types::Base58PublicKey;
+use near_sdk::serde::de::DeserializeOwned;
+use near_sdk::serde::Serialize;
+use near_sdk::serde_json::{self, json};
 use std::convert::TryInto;
 
 pub const MAX_GAS: u64 = 300000000000000;
@@ -54,11 +55,15 @@ fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct InitLockupArgs {
     pub owner_account_id: AccountId,
-    pub lockup_duration: U64,
-    pub lockup_start_information: LockupStartInformation,
+    pub lockup_duration: WrappedDuration,
+    pub lockup_timestamp: Option<WrappedTimestamp>,
+    pub transfers_information: TransfersInformation,
+    pub vesting_schedule: Option<VestingScheduleOrHash>,
+    pub release_duration: Option<WrappedDuration>,
     pub staking_pool_whitelist_account_id: AccountId,
     pub foundation_account_id: Option<AccountId>,
 }
@@ -84,7 +89,7 @@ impl ExternalUser {
         &self.signer
     }
 
-    pub fn account(&self, runtime: &mut RuntimeStandalone) -> Account {
+    pub fn account(&self, runtime: &RuntimeStandalone) -> Account {
         runtime
             .view_account(&self.account_id)
             .expect("Account should be there")
@@ -187,9 +192,25 @@ impl ExternalUser {
             .function_call(
                 "new".into(),
                 serde_json::to_vec(&json!({"foundation_account_id": self.account_id()})).unwrap(),
-                1000000000000000,
+                MAX_GAS,
                 0,
             )
+            .sign(&self.signer);
+        let res = runtime.resolve_tx(tx).unwrap();
+        runtime.process_all().unwrap();
+        outcome_into_result(res)
+    }
+
+    pub fn init_transfer_poll(
+        &self,
+        runtime: &mut RuntimeStandalone,
+        transfer_poll_account_id: AccountId,
+    ) -> TxResult {
+        let tx = self
+            .new_tx(runtime, transfer_poll_account_id)
+            .create_account()
+            .transfer(ntoy(30))
+            .deploy_contract(FAKE_VOTING_WASM_BYTES.to_vec())
             .sign(&self.signer);
         let res = runtime.resolve_tx(tx).unwrap();
         runtime.process_all().unwrap();
@@ -229,7 +250,7 @@ impl ExternalUser {
                     }
                 }))
                 .unwrap(),
-                1000000000000000,
+                MAX_GAS,
                 0,
             )
             .sign(&self.signer);

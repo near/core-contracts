@@ -98,7 +98,7 @@ impl LockupContract {
     ) -> PromiseOrValue<bool> {
         assert_self();
         if unstaked_balance.0 > 0 {
-            // Need to unstake
+            // Need to withdraw
             env::log(
                 format!(
                     "Termination Step: Withdrawing {} from the staking pool @{}",
@@ -202,11 +202,7 @@ impl LockupContract {
                     .as_bytes(),
             );
             // Decreasing lockup amount after withdrawal.
-            self.lockup_information.lockup_amount.0 = self
-                .lockup_information
-                .lockup_amount
-                .0
-                .saturating_sub(amount.0);
+            self.lockup_information.termination_withdrawn_tokens += amount.0;
             let unvested_amount = self.get_terminated_unvested_balance().0;
             if unvested_amount > amount.0 {
                 // There is still unvested balance remaining.
@@ -224,8 +220,8 @@ impl LockupContract {
                         .as_bytes(),
                 );
             } else {
-                self.vesting_information = VestingInformation::None;
                 self.foundation_account_id = None;
+                self.vesting_information = VestingInformation::None;
                 env::log(b"Vesting schedule termination and withdrawal are completed");
             }
         } else {

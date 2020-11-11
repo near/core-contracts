@@ -1,14 +1,24 @@
-use crate::*;
 use near_sdk::{near_bindgen, AccountId, Promise};
+
+use crate::*;
 
 #[near_bindgen]
 impl LockupContract {
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 25 TGas (1 * BASE_GAS)
+    ///
     /// Terminates vesting schedule and locks the remaining unvested amount.
-    pub fn terminate_vesting(&mut self) {
+    /// If the lockup contract was initialized with the private vesting schedule, then
+    /// this method expects to receive a `VestingScheduleWithSalt` to reveal the vesting schedule,
+    /// otherwise it expects `None`.
+    pub fn terminate_vesting(
+        &mut self,
+        vesting_schedule_with_salt: Option<VestingScheduleWithSalt>,
+    ) {
         self.assert_called_by_foundation();
-        self.assert_vesting();
-        let unvested_amount = self.get_unvested_amount();
+        let vesting_schedule = self.assert_vesting(vesting_schedule_with_salt);
+        let unvested_amount = self.get_unvested_amount(vesting_schedule);
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 
         env::log(
@@ -37,6 +47,9 @@ impl LockupContract {
     }
 
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 175 TGas (7 * BASE_GAS)
+    ///
     /// When the vesting is terminated and there are deficit of the tokens on the account, the
     /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
     pub fn termination_prepare_to_withdraw(&mut self) -> Promise {
@@ -111,6 +124,9 @@ impl LockupContract {
     }
 
     /// FOUNDATION'S METHOD
+    ///
+    /// Requires 75 TGas (3 * BASE_GAS)
+    ///
     /// Withdraws the unvested amount from the early termination of the vesting schedule.
     pub fn termination_withdraw(&mut self, receiver_id: AccountId) -> Promise {
         self.assert_called_by_foundation();

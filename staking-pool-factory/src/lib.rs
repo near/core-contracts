@@ -1,8 +1,8 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::Set;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::UnorderedSet;
 use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Promise, PromiseOrValue};
-use serde::{Deserialize, Serialize};
 
 mod utils;
 use crate::utils::*;
@@ -14,7 +14,7 @@ pub mod gas {
     use near_sdk::Gas;
 
     /// The base amount of gas for a regular execution.
-    const BASE: Gas = 20_000_000_000_000;
+    const BASE: Gas = 25_000_000_000_000;
 
     /// The amount of Gas the contract will attach to the promise to create the staking pool.
     /// The base for the execution and the base for staking action to verify the staking key.
@@ -33,7 +33,7 @@ pub mod gas {
 const NO_DEPOSIT: Balance = 0;
 
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -42,7 +42,7 @@ pub struct StakingPoolFactory {
     staking_pool_whitelist_account_id: AccountId,
 
     /// The account ID of the staking pools created.
-    staking_pool_account_ids: Set<AccountId>,
+    staking_pool_account_ids: UnorderedSet<AccountId>,
 }
 
 impl Default for StakingPoolFactory {
@@ -53,6 +53,7 @@ impl Default for StakingPoolFactory {
 
 /// Rewards fee fraction structure for the staking pool contract.
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
 pub struct RewardFeeFraction {
     pub numerator: u32,
     pub denominator: u32,
@@ -69,6 +70,7 @@ impl RewardFeeFraction {
 }
 
 #[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct StakingPoolArgs {
     /// Owner account ID of the staking pool.
     owner_id: AccountId,
@@ -108,7 +110,7 @@ impl StakingPoolFactory {
         );
         Self {
             staking_pool_whitelist_account_id,
-            staking_pool_account_ids: Set::new(b"s".to_vec()),
+            staking_pool_account_ids: UnorderedSet::new(b"s".to_vec()),
         }
     }
 
@@ -173,7 +175,7 @@ impl StakingPoolFactory {
             .deploy_contract(include_bytes!("../../staking-pool/res/staking_pool.wasm").to_vec())
             .function_call(
                 b"new".to_vec(),
-                serde_json::to_vec(&StakingPoolArgs {
+                near_sdk::serde_json::to_vec(&StakingPoolArgs {
                     owner_id,
                     stake_public_key,
                     reward_fee_fraction,
