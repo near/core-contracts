@@ -1,0 +1,18 @@
+[package]
+name = "w_near"
+version = "0.1.0"
+authors = ["Near Inc <hello@nearprotocol.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "2.0.0"
+
+[profile.release]
+codegen-units=1
+opt-level = "s"
+debug = false
+panic = "abort"
+overflow-checks = true
