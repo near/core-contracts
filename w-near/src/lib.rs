@@ -86,17 +86,17 @@ impl FungibleToken {
         }
     }
 
-    // /// Deposit NEAR and send wNear tokens to the predecessor account
-    // /// Requirements:
-    // /// * `amount` must be a positive integer
-    // /// * Caller of the method has to attach deposit enough to cover:
-    // ///   * The `amount` of wNear tokens being minted, and
-    // ///   * The storage difference at the fixed storage price defined in the contract.
-    // #[payable]
-    // pub fn deposit(&mut self, amount: U128) {
-    //     // Proxy through to deposit_to() making the receiver_id the predecessor
-    //     self.deposit_to(env::predecessor_account_id(), amount);
-    // }
+    /// Deposit NEAR and send wNear tokens to the predecessor account
+    /// Requirements:
+    /// * `amount` must be a positive integer
+    /// * Caller of the method has to attach deposit enough to cover:
+    ///   * The `amount` of wNear tokens being minted, and
+    ///   * The storage difference at the fixed storage price defined in the contract.
+    #[payable]
+    pub fn deposit(&mut self, amount: U128) {
+        // Proxy through to deposit_to() making the receiver_id the predecessor
+        self.deposit_to(env::predecessor_account_id(), amount);
+    }
 
     /// Deposit NEAR from the predecessor account and send wNear to a specific receiver_id
     /// Requirements:
@@ -107,9 +107,8 @@ impl FungibleToken {
     ///   * The `amount` of wNear tokens being minted, and
     ///   * The storage difference at the fixed storage price defined in the contract.
     #[payable]
-    pub fn deposit_to(&mut self, receiver_id: ValidAccountId, amount: U128) {
+    pub fn deposit_to(&mut self, receiver_id: AccountId, amount: U128) {
         let initial_storage = env::storage_usage();
-        let receiver_id: AccountId = receiver_id.into();
 
         // As attached deposit includes tokens for storage, deposit amount needs to be explicit
         let amount: Balance = amount.into();
@@ -162,17 +161,17 @@ impl FungibleToken {
         }
     }
 
-    // /// Unwrap wNear and send Near back to the predecessor account
-    // /// Requirements:
-    // /// * `amount` must be a positive integer
-    // /// * Caller must have a balance that is greater than or equal to `amount`
-    // /// * Caller of the method has to attach deposit enough to cover storage difference at the
-    // ///   fixed storage price defined in the contract.
-    // #[payable]
-    // pub fn withdraw(&mut self, amount: U128) {
-    //     // Proxy through to withdraw_to() sending the Near to the predecessor account
-    //     self.withdraw_to(env::predecessor_account_id(), amount);
-    // }
+    /// Unwrap wNear and send Near back to the predecessor account
+    /// Requirements:
+    /// * `amount` must be a positive integer
+    /// * Caller must have a balance that is greater than or equal to `amount`
+    /// * Caller of the method has to attach deposit enough to cover storage difference at the
+    ///   fixed storage price defined in the contract.
+    #[payable]
+    pub fn withdraw(&mut self, amount: U128) {
+        // Proxy through to withdraw_to() sending the Near to the predecessor account
+        self.withdraw_to(env::predecessor_account_id(), amount);
+    }
 
     /// Unwraps wNear from the predecessor account and sends the Near to a specific receiver_id
     /// Requirements:
@@ -183,7 +182,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn withdraw_to(&mut self, receiver_id: ValidAccountId, amount: U128) {
+    pub fn withdraw_to(&mut self, receiver_id: AccountId, amount: U128) {
         let receiver_id: AccountId = receiver_id.into();
         let initial_storage = env::storage_usage();
 
@@ -234,11 +233,6 @@ impl FungibleToken {
         if amount == 0 {
             env::panic(b"Withdrawal amount must be greater than zero");
         }
-
-        assert!(
-            env::is_valid_account_id(receiver_id.as_bytes()),
-            "New owner's account ID is invalid"
-        );
 
         assert_ne!(
             receiver_id, env::current_account_id(),
