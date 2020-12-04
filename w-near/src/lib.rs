@@ -7,6 +7,12 @@
 * The aim of the contract is to enable the wrapping of the native Ⓝ token into a NEP21 compatible token.
 * It's the equivalent of wrapping ETH into wETH via the WETH. This contract is based on the functionality
 * of the WETH9 and WETH10 Solidity smart contracts.
+*
+* lib.rs is the main entry point.
+* fungible_token.rs contains NEP21-specific functionality
+* fungible_token_internal.rs contains NEP21 internal methods
+* w_near.rs contains all public interfaces for depositing and withdrawing
+* w_near_internal.rs contains all internal, helper methods for w_near
 */
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
@@ -14,10 +20,12 @@ use near_sdk::json_types::{U128};
 use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, StorageUsage};
 
 pub use crate::fungible_token::*;
+pub use crate::fungible_token_internal::*;
 pub use crate::w_near::*;
 pub use crate::w_near_internal::*;
 
 pub mod fungible_token;
+pub mod fungible_token_internal;
 pub mod w_near;
 pub mod w_near_internal;
 

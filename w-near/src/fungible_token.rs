@@ -1,11 +1,5 @@
 use crate::*;
 
-impl Default for FungibleToken {
-    fn default() -> Self {
-        env::panic(b"Contract should be initialized before usage.")
-    }
-}
-
 #[near_bindgen]
 impl FungibleToken {
     #[init]
@@ -25,6 +19,12 @@ impl FungibleToken {
     #[payable]
     pub fn inc_allowance(&mut self, escrow_account_id: AccountId, amount: U128) {
         let initial_storage = env::storage_usage();
+
+        assert!(
+            env::is_valid_account_id(escrow_account_id.as_bytes()),
+            "New owner's account ID is invalid"
+        );
+
         let escrow_account_id: AccountId = escrow_account_id.into();
         let owner_id = env::predecessor_account_id();
         if escrow_account_id == owner_id {
