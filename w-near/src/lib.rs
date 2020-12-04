@@ -248,6 +248,11 @@ impl FungibleToken {
             "The new owner should be different from the current owner"
         );
 
+        assert!(
+            env::is_valid_account_id(receiver_id.as_bytes()),
+            "New owner's account ID is invalid"
+        );
+
         // If transferring by allowance, need to check and update allowance.
         let escrow_account_id = env::predecessor_account_id();
         if escrow_account_id != owner_id {
