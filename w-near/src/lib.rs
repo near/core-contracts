@@ -10,7 +10,7 @@
 */
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
-use near_sdk::json_types::{U128, ValidAccountId};
+use near_sdk::json_types::{U128};
 use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, StorageUsage};
 
 pub use crate::w_near::*;
@@ -229,7 +229,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn withdraw_from(&mut self, owner_id: AccountId, receiver_id: ValidAccountId, amount: U128) {
+    pub fn withdraw_from(&mut self, owner_id: AccountId, receiver_id: AccountId, amount: U128) {
         let receiver_id: AccountId = receiver_id.into();
         let initial_storage = env::storage_usage();
 
@@ -277,7 +277,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn inc_allowance(&mut self, escrow_account_id: ValidAccountId, amount: U128) {
+    pub fn inc_allowance(&mut self, escrow_account_id: AccountId, amount: U128) {
         let initial_storage = env::storage_usage();
         let escrow_account_id: AccountId = escrow_account_id.into();
         let owner_id = env::predecessor_account_id();
@@ -297,7 +297,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn dec_allowance(&mut self, escrow_account_id: ValidAccountId, amount: U128) {
+    pub fn dec_allowance(&mut self, escrow_account_id: AccountId, amount: U128) {
         let initial_storage = env::storage_usage();
         let escrow_account_id: AccountId = escrow_account_id.into();
         let owner_id = env::predecessor_account_id();
@@ -323,7 +323,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn transfer_from(&mut self, owner_id: AccountId, new_owner_id: ValidAccountId, amount: U128) {
+    pub fn transfer_from(&mut self, owner_id: AccountId, new_owner_id: AccountId, amount: U128) {
         let initial_storage = env::storage_usage();
         let new_owner_id: AccountId = new_owner_id.into();
 
@@ -380,7 +380,7 @@ impl FungibleToken {
     /// * Caller of the method has to attach deposit enough to cover storage difference at the
     ///   fixed storage price defined in the contract.
     #[payable]
-    pub fn transfer(&mut self, new_owner_id: ValidAccountId, amount: U128) {
+    pub fn transfer(&mut self, new_owner_id: AccountId, amount: U128) {
         // NOTE: New owner's Account ID checked in transfer_from.
         // Storage fees are also refunded in transfer_from.
         self.transfer_from(env::predecessor_account_id(), new_owner_id, amount);
@@ -401,7 +401,7 @@ impl FungibleToken {
     /// NOTE: Other contracts should not rely on this information, because by the moment a contract
     /// receives this information, the allowance may already be changed by the owner.
     /// So this method should only be used on the front-end to see the current allowance.
-    pub fn get_allowance(&self, owner_id: AccountId, escrow_account_id: ValidAccountId) -> U128 {
+    pub fn get_allowance(&self, owner_id: AccountId, escrow_account_id: AccountId) -> U128 {
         let escrow_account_id: AccountId = escrow_account_id.into();
         self.get_account(&owner_id).get_allowance(&escrow_account_id).into()
     }
