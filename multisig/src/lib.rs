@@ -205,8 +205,13 @@ impl MultiSigContract {
         let request_ids: Vec<u32> = self
             .requests
             .iter()
-            .filter(|(_k, r)| r.member == member_str)
-            .map(|(k, _r)| k)
+            .filter_map(|(k, r)| {
+                if r.member == member_str {
+                    Some(k)
+                } else {
+                    None
+                }
+            })
             .collect();
         for request_id in request_ids {
             // remove confirmations for this request
