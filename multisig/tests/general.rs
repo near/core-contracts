@@ -17,7 +17,7 @@ fn accounts(num: usize) -> String {
 fn setup_and_remove_multisig() {
     let mut runtime = init_test_runtime();
     let signer = InMemorySigner::from_seed(&accounts(0), KeyType::ED25519, "test");
-    let args = json!({"members": vec![signer.public_key()], "num_confirmations": 1})
+    let args = json!({"members": [{ "public_key": signer.public_key()}], "num_confirmations": 1})
         .to_string()
         .as_bytes()
         .to_vec();

@@ -1,11 +1,11 @@
 use std::collections::HashSet;
-use std::convert::TryFrom;
+use std::convert::TryInto;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
+use near_sdk::{env, near_bindgen, serde_json, AccountId, Promise, PromiseOrValue};
 
 /// Unlimited allowance for multisig keys.
 const DEFAULT_ALLOWANCE: u128 = 0;
@@ -37,9 +37,9 @@ pub enum MultiSigRequestAction {
     /// Deploys contract to receiver's account. Can upgrade given contract as well.
     DeployContract { code: Base64VecU8 },
     /// Add new member of the multisig.
-    AddMember { member: String },
+    AddMember { member: MultisigMember },
     /// Remove existing member of the multisig.
-    DeleteMember { member: String },
+    DeleteMember { member: MultisigMember },
     /// Adds full access key to another account.
     AddKey {
         public_key: Base58PublicKey,
@@ -76,37 +76,20 @@ pub struct MultiSigRequest {
 #[serde(crate = "near_sdk::serde")]
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
-    member: String,
+    member: MultisigMember,
     added_timestamp: u64,
 }
 
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Eq, PartialEq)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde", untagged)]
 pub enum MultisigMember {
-    AccessKey(PublicKey),
-    Account(AccountId),
+    AccessKey { public_key: Base58PublicKey },
+    Account { account_id: AccountId },
 }
 
-impl From<MultisigMember> for String {
-    fn from(member: MultisigMember) -> Self {
-        match member {
-            MultisigMember::Account(account_id) => account_id,
-            MultisigMember::AccessKey(key) => String::from(&Base58PublicKey(key.to_vec())),
-        }
-    }
-}
-
-impl From<String> for MultisigMember {
-    fn from(s: String) -> Self {
-        if s.contains(":") {
-            MultisigMember::AccessKey(
-                Base58PublicKey::try_from(s)
-                    .expect("Failed to parse public key")
-                    .into(),
-            )
-        } else {
-            assert_eq!(s.to_lowercase(), s, "Prefix public key with the curve");
-            MultisigMember::Account(s)
-        }
+impl ToString for MultisigMember {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).expect("Failed to serialize")
     }
 }
 
@@ -114,7 +97,7 @@ impl From<String> for MultisigMember {
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct MultiSigContract {
     /// Members of the multisig.
-    members: UnorderedSet<String>,
+    members: UnorderedSet<MultisigMember>,
     /// Number of confirmations required.
     num_confirmations: u32,
     /// Latest request nonce.
@@ -139,9 +122,10 @@ impl Default for MultiSigContract {
 #[near_bindgen]
 impl MultiSigContract {
     /// Initialize multisig contract.
+    /// @params members: list of {"account_id": "name"} or {"public_key": "key"} members.
     /// @params num_confirmations: k of n signatures required to perform operations.
     #[init]
-    pub fn new(members: Vec<String>, num_confirmations: u32) -> Self {
+    pub fn new(members: Vec<MultisigMember>, num_confirmations: u32) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         assert!(
             members.len() >= num_confirmations as usize,
@@ -158,24 +142,30 @@ impl MultiSigContract {
         };
         let mut promise = Promise::new(env::current_account_id());
         for member in members {
-            promise = multisig.add_member(promise, member.into());
+            promise = multisig.add_member(promise, member);
         }
         multisig
     }
 
     /// Returns members of the multisig.
-    pub fn get_members(&self) -> Vec<String> {
+    pub fn get_members(&self) -> Vec<MultisigMember> {
         self.members.to_vec()
     }
 
     /// Returns current member: either predecessor as account or if it's the same as current account - signer.
     fn current_member(&self) -> Option<MultisigMember> {
         let member = if env::current_account_id() == env::predecessor_account_id() {
-            MultisigMember::AccessKey(env::signer_account_pk().into())
+            MultisigMember::AccessKey {
+                public_key: env::signer_account_pk()
+                    .try_into()
+                    .expect("Failed to deserialize public key"),
+            }
         } else {
-            MultisigMember::Account(env::predecessor_account_id())
+            MultisigMember::Account {
+                account_id: env::predecessor_account_id(),
+            }
         };
-        if self.members.contains(&member.clone().into()) {
+        if self.members.contains(&member) {
             Some(member)
         } else {
             None
@@ -185,13 +175,13 @@ impl MultiSigContract {
     fn add_member(&mut self, promise: Promise, member: MultisigMember) -> Promise {
         self.members.insert(&member.clone().into());
         match member {
-            MultisigMember::AccessKey(public_key) => promise.add_access_key(
-                public_key,
+            MultisigMember::AccessKey { public_key } => promise.add_access_key(
+                public_key.into(),
                 DEFAULT_ALLOWANCE,
                 env::current_account_id(),
                 MULTISIG_METHOD_NAMES.as_bytes().to_vec(),
             ),
-            MultisigMember::Account(_) => promise,
+            MultisigMember::Account { account_id: _ } => promise,
         }
     }
 
@@ -201,17 +191,10 @@ impl MultiSigContract {
             "Removing given member will make total number of members below number of confirmations"
         );
         // delete outstanding requests by public_key
-        let member_str: String = member.clone().into();
         let request_ids: Vec<u32> = self
             .requests
             .iter()
-            .filter_map(|(k, r)| {
-                if r.member == member_str {
-                    Some(k)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(k, r)| if r.member == member { Some(k) } else { None })
             .collect();
         for request_id in request_ids {
             // remove confirmations for this request
@@ -219,11 +202,11 @@ impl MultiSigContract {
             self.requests.remove(&request_id);
         }
         // remove num_requests_pk entry for member
-        self.num_requests_pk.remove(&member_str);
-        self.members.remove(&member_str);
+        self.num_requests_pk.remove(&member.to_string());
+        self.members.remove(&member);
         match member {
-            MultisigMember::AccessKey(public_key) => promise.delete_key(public_key),
-            MultisigMember::Account(_) => promise,
+            MultisigMember::AccessKey { public_key } => promise.delete_key(public_key.into()),
+            MultisigMember::Account { account_id: _ } => promise,
         }
     }
 
@@ -232,18 +215,21 @@ impl MultiSigContract {
         let current_member = self
             .current_member()
             .expect("Predecessor must be a member or transaction signed with key of given account");
-        let current_member_str: String = current_member.into();
         // track how many requests this key has made
-        let num_requests = self.num_requests_pk.get(&current_member_str).unwrap_or(0) + 1;
+        let num_requests = self
+            .num_requests_pk
+            .get(&current_member.to_string())
+            .unwrap_or(0)
+            + 1;
         assert!(
             num_requests <= self.active_requests_limit,
             "Account has too many active requests. Confirm or delete some."
         );
         self.num_requests_pk
-            .insert(&current_member_str, &num_requests);
+            .insert(&current_member.to_string(), &num_requests);
         // add the request
         let request_added = MultiSigRequestWithSigner {
-            member: current_member_str,
+            member: current_member,
             added_timestamp: env::block_timestamp(),
             request,
         };
@@ -287,11 +273,11 @@ impl MultiSigContract {
                 }
                 MultiSigRequestAction::AddMember { member } => {
                     self.assert_self_request(receiver_id.clone());
-                    self.add_member(promise, member.into())
+                    self.add_member(promise, member)
                 }
                 MultiSigRequestAction::DeleteMember { member } => {
                     self.assert_self_request(receiver_id.clone());
-                    self.delete_member(promise, member.into())
+                    self.delete_member(promise, member)
                 }
                 MultiSigRequestAction::AddKey {
                     public_key,
@@ -347,10 +333,9 @@ impl MultiSigContract {
     pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
         self.assert_valid_request(request_id);
         let member = self.current_member().expect("Must be validated above");
-        let member_str = member.into();
         let mut confirmations = self.confirmations.get(&request_id).unwrap();
         assert!(
-            !confirmations.contains(&member_str),
+            !confirmations.contains(&member.to_string()),
             "Already confirmed this request with this key"
         );
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
@@ -360,7 +345,7 @@ impl MultiSigContract {
             ********************************/
             self.execute_request(request)
         } else {
-            confirmations.insert(member_str);
+            confirmations.insert(member.to_string());
             self.confirmations.insert(&request_id, &confirmations);
             PromiseOrValue::Value(true)
         }
@@ -369,7 +354,7 @@ impl MultiSigContract {
     /********************************
     Helper methods
     ********************************/
-    // removes request, removes confirmations and reduces num_requests_pk - used in delete, delete_key, and confirm
+    /// Removes request, removes confirmations and reduces num_requests_pk - used in delete, delete_key, and confirm
     fn remove_request(&mut self, request_id: RequestId) -> MultiSigRequest {
         // remove confirmations for this request
         self.confirmations.remove(&request_id);
@@ -380,16 +365,21 @@ impl MultiSigContract {
             .expect("Failed to remove existing element");
         // decrement num_requests for original request signer
         let original_member = request_with_signer.member;
-        let mut num_requests = self.num_requests_pk.get(&original_member).unwrap_or(0);
+        let mut num_requests = self
+            .num_requests_pk
+            .get(&original_member.to_string())
+            .unwrap_or(0);
         // safety check for underrun (unlikely since original_signer_pk must have num_requests_pk > 0)
         if num_requests > 0 {
             num_requests = num_requests - 1;
         }
-        self.num_requests_pk.insert(&original_member, &num_requests);
+        self.num_requests_pk
+            .insert(&original_member.to_string(), &num_requests);
         // return request
         request_with_signer.request
     }
-    // Prevents access to calling requests and make sure request_id is valid - used in delete and confirm
+
+    /// Prevents access to calling requests and make sure request_id is valid - used in delete and confirm
     fn assert_valid_request(&mut self, request_id: RequestId) {
         // request must come from key added to contract account
         if self.current_member().is_none() {
@@ -426,8 +416,8 @@ impl MultiSigContract {
         (self.requests.get(&request_id).expect("No such request")).request
     }
 
-    pub fn get_num_requests_per_member(&self, member: String) -> u32 {
-        self.num_requests_pk.get(&member).unwrap_or(0)
+    pub fn get_num_requests_per_member(&self, member: MultisigMember) -> u32 {
+        self.num_requests_pk.get(&member.to_string()).unwrap_or(0)
     }
 
     pub fn list_request_ids(&self) -> Vec<RequestId> {
@@ -453,9 +443,10 @@ impl MultiSigContract {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
     use std::fmt::{Debug, Error, Formatter};
 
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::{testing_env, MockedBlockchain, PublicKey};
     use near_sdk::{AccountId, VMContext};
     use near_sdk::{Balance, BlockHeight, EpochHeight};
 
@@ -569,12 +560,21 @@ mod tests {
         181, 38, 90, 244, 111, 207, 37, 216, 79, 84, 50, 83, 164,
     ];
 
-    fn members() -> Vec<String> {
+    fn members() -> Vec<MultisigMember> {
         vec![
-            alice(),
-            bob(),
-            "ed25519:Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy".to_string(),
-            String::from(&Base58PublicKey(TEST_KEY.to_vec())),
+            MultisigMember::Account {
+                account_id: alice(),
+            },
+            MultisigMember::Account { account_id: bob() },
+            MultisigMember::AccessKey {
+                public_key: "ed25519:Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"
+                    .to_string()
+                    .try_into()
+                    .unwrap(),
+            },
+            MultisigMember::AccessKey {
+                public_key: Base58PublicKey(TEST_KEY.to_vec()),
+            },
         ]
     }
 
@@ -727,20 +727,23 @@ mod tests {
         // make request but don't confirm
         c.add_request(request2.clone());
         // should have 1 request now
+        let new_member = MultisigMember::AccessKey {
+            public_key: new_key.clone(),
+        };
         assert_eq!(c.requests.len(), 1);
-        assert_eq!(c.get_num_requests_per_member(String::from(&new_key)), 1);
+        assert_eq!(c.get_num_requests_per_member(new_member.clone()), 1);
         // self delete key
         let request3 = MultiSigRequest {
             receiver_id: alice(),
             actions: vec![MultiSigRequestAction::DeleteMember {
-                member: String::from(&new_key),
+                member: new_member.clone(),
             }],
         };
         // make request and confirm
         c.add_request_and_confirm(request3.clone());
         // should be empty now
         assert_eq!(c.requests.len(), 0);
-        assert_eq!(c.get_num_requests_per_member(String::from(&new_key)), 0);
+        assert_eq!(c.get_num_requests_per_member(new_member), 0);
     }
 
     #[test]
