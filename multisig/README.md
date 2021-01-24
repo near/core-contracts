@@ -1,6 +1,6 @@
-# Basic Mutlisig contract
+# Mutlisig contract
 
-*This is an experimental contract. Please use only on TestNet.*
+*Please do your own due diligence before using this contract. There is no guarantee that this contract doesn't have issues.*
 
 This contract provides:
  - Set K out of N multi sig scheme
@@ -31,11 +31,11 @@ pub enum MultiSigRequestAction {
     DeployContract { code: Base64VecU8 },
     /// Adds new member to multisig, either public key or account.
     AddMember {
-        member: String,
+        member: MultisigMember,
     },
     /// Delete existing member from multisig, either public key or account.
     DeleteMember {
-        member: String,
+        member: MultisigMember,
     },
     /// Adds key, either new key for multisig or full access key to another account.
     AddKey {
@@ -80,8 +80,14 @@ pub struct MultiSigRequest {
 /// An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
-    member: String,
+    member: MultisigMember,
     added_timestamp: u64,
+}
+
+/// Represents member of the multsig: either account or access key to given account.
+pub enum MultisigMember {
+    AccessKey { public_key: Base58PublicKey },
+    Account { account_id: AccountId },
 }
 ```
 
@@ -105,9 +111,9 @@ pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
 ### View Methods
 ```rust
 pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest
-pub fn get_num_requests_per_member(&self, member: String) -> u32
+pub fn get_num_requests_per_member(&self, member: MultisigMember) -> u32
 pub fn list_request_ids(&self) -> Vec<RequestId>
-pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey>
+pub fn get_confirmations(&self, request_id: RequestId) -> Vec<MultisigMember>
 pub fn get_num_confirmations(&self) -> u32
 pub fn get_request_nonce(&self) -> u32
 ```
@@ -122,11 +128,6 @@ Per each request, multisig maintains next state machine:
  - each step of execution, schedules a promise of given set of actions on `receiver_id` and puts a callback.
  - when callback executes, it checks if promise executed successfully: if no - stops executing the request and return failure. If yes - execute next transaction in the request if present.
  - when all transactions are executed, remove request from `requests` and with that finish the execution of the request.   
-
-### Gotchas
- 
-User can delete access keys on the multisig such that total number of different access keys will fall below `num_confirmations`, rendering contract locked.
-This is due to not having a way to query blockchain for current number of access keys on the account. See discussion here - https://github.com/nearprotocol/NEPs/issues/79.
  
 ## Pre-requisites
 
@@ -158,9 +159,10 @@ const account = await near.account("illia");
 const contractName = "multisig.illia";
 const methodNames = ["add_request","delete_request","confirm"];
 const newArgs = {"num_confirmations": 2, "members": [
-        "ed25519:Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy",
-        "ed25519:HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R",
-        "ed25519:2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95",
+        { "public_key": "ed25519:Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy" },
+        { "public_key": "ed25519:HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R" },
+        { "public_key": "ed25519:2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95" },
+        { "account_id": "illia" },
     ]};
 const result = account.signAndSendTransaction(
     contractName,
@@ -181,7 +183,7 @@ near call multisig.illia add_request '{"request": {"receiver_id": "illia", "acti
 
 Add another key to multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddMember", "member": "ed25519:<base58 of the key>"}]}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddMember", "member": {"public_key": "ed25519:<base58 of the key>"}}]}}' --accountId multisig.illia
 ```
 
 Change number of confirmations required to approve multisig:

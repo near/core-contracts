@@ -80,6 +80,7 @@ pub struct MultiSigRequestWithSigner {
     added_timestamp: u64,
 }
 
+/// Represents member of the multsig: either account or access key to given account.
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde", untagged)]
 pub enum MultisigMember {
