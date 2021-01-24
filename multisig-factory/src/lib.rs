@@ -1,4 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::Base58PublicKey;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{env, near_bindgen, AccountId, Promise};
 
@@ -8,7 +10,14 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 const CODE: &[u8] = include_bytes!("../../multisig/res/multisig.wasm");
 
 /// This gas spent on the call & account creation, the rest goes to the `new` call.
-const CREATE_CALL_GAS: u64 = 40_000_000_000_000;
+const CREATE_CALL_GAS: u64 = 50_000_000_000_000;
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde", untagged)]
+pub enum MultisigMember {
+    AccessKey { public_key: Base58PublicKey },
+    Account { account_id: AccountId },
+}
 
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize, Default)]
@@ -20,7 +29,7 @@ impl MultisigFactory {
     pub fn create(
         &mut self,
         name: AccountId,
-        members: Vec<String>,
+        members: Vec<MultisigMember>,
         num_confirmations: u64,
     ) -> Promise {
         let account_id = format!("{}.{}", name, env::current_account_id());
