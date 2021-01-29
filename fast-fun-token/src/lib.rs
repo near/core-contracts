@@ -5,9 +5,7 @@
 #[panic_handler]
 #[no_mangle]
 pub fn on_panic(_info: &::core::panic::PanicInfo) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
-    }
+    ::core::intrinsics::abort();
 }
 
 // #[global_allocator]
@@ -85,16 +83,10 @@ unsafe fn sub(a: &U256, b: &U256, res: &mut U256) {
 /// - 32..64 - U256 of the total supply
 #[no_mangle]
 pub unsafe fn init() {
-    if storage_has_key(SUPPLY_KEY.len() as _, SUPPLY_KEY.as_ptr() as _) == 0 {
+    if storage_has_key(SUPPLY_KEY.len() as _, SUPPLY_KEY.as_ptr() as _) == 1 {
         panic();
     }
-    input(0);
-    let input_len = register_len(0);
-    if input_len != LEN * 2 {
-        panic();
-    }
-    let buf = [0u64; LEN_U64_USIZE * 2];
-    read_register(0, buf.as_ptr() as _);
+    let buf = read_input();
     // SUPPLY_KEY
     storage_write(
         SUPPLY_KEY.len() as _,
@@ -107,12 +99,7 @@ pub unsafe fn init() {
     storage_write(LEN, buf.as_ptr() as _, LEN, buf.as_ptr() as u64 + LEN, 0);
 }
 
-/// Transfer the amount from the `sha256(predecessor_account_id)` to the new receiver address.
-/// Arguments (64 bytes):
-/// - 0..32 - `sha256` of the receiver address.
-/// - 32..64 - U256 is transfer amount
-#[no_mangle]
-pub unsafe fn transfer() {
+unsafe fn read_input() -> [u64; LEN_U64_USIZE * 2] {
     input(0);
     let input_len = register_len(0);
     if input_len != LEN * 2 {
@@ -120,7 +107,16 @@ pub unsafe fn transfer() {
     }
     let buf = [0u64; LEN_U64_USIZE * 2];
     read_register(0, buf.as_ptr() as _);
+    buf
+}
 
+/// Transfer the amount from the `sha256(predecessor_account_id)` to the new receiver address.
+/// Arguments (64 bytes):
+/// - 0..32 - `sha256` of the receiver address.
+/// - 32..64 - U256 is transfer amount
+#[no_mangle]
+pub unsafe fn transfer() {
+    let buf = read_input();
     // Read hash of owner's account ID to register 0
     predecessor_account_id(0);
     sha256(u64::MAX, 0, 0);
@@ -164,12 +160,10 @@ pub unsafe fn get_balance() {
     if input_len != LEN {
         panic();
     }
-    let buf = [0u64; LEN_U64_USIZE];
-    read_register(0, buf.as_ptr() as _);
 
     // Reading receiver_balance and returning it, or returning 0.
-    if storage_read(LEN, buf.as_ptr() as u64, 0) == 1 {
-        value_return(u64::MAX, 0);
+    if storage_read(u64::MAX, 0, 1) == 1 {
+        value_return(u64::MAX, 1);
     } else {
         let receiver_balance = [0u64; LEN_U64_USIZE];
         value_return(LEN, receiver_balance.as_ptr() as u64);
