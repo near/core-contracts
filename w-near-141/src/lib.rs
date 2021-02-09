@@ -6,7 +6,7 @@
 * They are effectively mint and burn underlying wNEAR tokens.
 *
 * lib.rs is the main entry point.
-* fungible_token_core.rs implements NEP-141 standard
+* fungible_token_core.rs implements NEP-146 standard
 * storage_manager.rs implements NEP-145 standard for allocating storage per account
 * fungible_token_metadata.rs implements NEP-148 standard for providing token-specific metadata.
 * w_near.rs contains interfaces for depositing and withdrawing

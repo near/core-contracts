@@ -22,11 +22,11 @@ impl Contract {
             .accounts
             .get(&account_id)
             .expect("The account is not registered");
-        let (new_balance, overflow) = balance.overflowing_add(amount);
-        if overflow {
+        if let Some(new_balance) = balance.checked_add(amount) {
+            self.accounts.insert(&account_id, &new_balance);
+        } else {
             env::panic(b"Balance overflow");
         }
-        self.accounts.insert(&account_id, &new_balance);
     }
 
     pub(crate) fn internal_withdraw(&mut self, account_id: &AccountId, amount: Balance) {
@@ -34,11 +34,11 @@ impl Contract {
             .accounts
             .get(&account_id)
             .expect("The account is not registered");
-        let (new_balance, overflow) = balance.overflowing_sub(amount);
-        if overflow {
+        if let Some(new_balance) = balance.checked_sub(amount) {
+            self.accounts.insert(&account_id, &new_balance);
+        } else {
             env::panic(b"The account doesn't have enough balance");
         }
-        self.accounts.insert(&account_id, &new_balance);
     }
 
     pub(crate) fn internal_transfer(

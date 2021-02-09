@@ -31,11 +31,11 @@ impl StorageManager for Contract {
         assert_eq!(
             amount,
             self.storage_minimum_balance().0,
-            "Requires attached deposit of the exact minimum balance"
+            "Requires attached deposit of the exact storage minimum balance"
         );
         let account_id = account_id
             .map(|a| a.into())
-            .unwrap_or(env::predecessor_account_id());
+            .unwrap_or_else(|| env::predecessor_account_id());
         if self.accounts.insert(&account_id, &0).is_some() {
             env::panic(b"The account is already registered");
         }
@@ -52,7 +52,7 @@ impl StorageManager for Contract {
         assert_eq!(
             amount,
             self.storage_minimum_balance().0,
-            "The withdrawal amount should be the exact minimum balance"
+            "The withdrawal amount should be the exact storage minimum balance"
         );
         let account_id = env::predecessor_account_id();
         if let Some(balance) = self.accounts.remove(&account_id) {

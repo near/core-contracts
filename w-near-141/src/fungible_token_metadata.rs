@@ -4,6 +4,7 @@ use near_sdk::serde::Serialize;
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct FungibleTokenMetadata {
+    version: String,
     name: String,
     symbol: String,
     reference: String,
@@ -18,6 +19,7 @@ pub trait FungibleTokenMetadataProvider {
 impl FungibleTokenMetadataProvider for Contract {
     fn ft_metadata() -> FungibleTokenMetadata {
         FungibleTokenMetadata {
+            version: String::from("0.1.0"),
             name: String::from("Wrapped NEAR fungible token"),
             symbol: String::from("wNEAR"),
             reference: String::from(
