@@ -9,6 +9,9 @@ pub type Duration = u64;
 /// Raw type for timestamp in nanoseconds
 pub type Timestamp = u64;
 
+/// Duration in nanosecond wrapped into a struct for JSON serialization as a string.
+pub type WrappedDuration = U64;
+
 /// Timestamp in nanosecond wrapped into a struct for JSON serialization as a string.
 pub type WrappedTimestamp = U64;
 /// Duration in nanosecond wrapped into a struct for JSON serialization as a string.

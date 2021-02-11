@@ -2,12 +2,10 @@ mod types;
 mod utils;
 
 use crate::utils::*;
-
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseOrValue, Balance};
 use near_sdk::json_types::{U128};
 use near_sdk::serde::{Serialize};
-use near_lib::types::{WrappedDuration, WrappedTimestamp};
 pub use crate::types::*;
 use sha2::{Sha256, Digest};
 
@@ -238,9 +236,6 @@ impl LockupFactory {
 mod tests {
     use super::*;
     use near_sdk::{testing_env, MockedBlockchain, PromiseResult};
-
-    mod test_utils;
-
     use test_utils::*;
 
     fn new_vesting_schedule(offset_in_days: u64) -> VestingSchedule {
