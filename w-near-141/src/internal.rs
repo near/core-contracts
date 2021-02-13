@@ -28,7 +28,7 @@ impl Contract {
             env::panic(b"Balance overflow");
         }
     }
-    
+
     pub(crate) fn internal_withdraw(&mut self, account_id: &AccountId, amount: Balance) {
         let balance = self
             .accounts
