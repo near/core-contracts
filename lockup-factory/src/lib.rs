@@ -7,7 +7,6 @@ use near_sdk::{env, ext_contract, near_bindgen, AccountId, Promise, PromiseOrVal
 use near_sdk::json_types::{U128};
 use near_sdk::serde::{Serialize};
 pub use crate::types::*;
-use sha2::{Sha256, Digest};
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
@@ -150,8 +149,8 @@ impl LockupFactory {
             "The owner account ID is invalid"
         );
 
-        let byte_slice = Sha256::new().chain(owner_account_id.to_string()).finalize();
-        let string: String = format!("{:x}", byte_slice);
+        let byte_slice = env::sha256(owner_account_id.as_bytes());
+        let string = byte_slice.iter().map(|x| format!("{:02x}", x)).collect::<String>();
         let lockup_suffix = ".".to_string() + &self.lockup_master_account_id.to_string();
         let sliced_string = &string[..40];
         let lockup_account_id: AccountId = sliced_string.to_owned() + &lockup_suffix;
@@ -160,7 +159,6 @@ impl LockupFactory {
         if vesting_schedule.is_some() {
             foundation_account = Option::from(self.foundation_account_id.clone());
         };
-
 
         let transfers_enabled: WrappedTimestamp = TRANSFERS_STARTED.into();
         Promise::new(lockup_account_id.clone())
@@ -235,6 +233,7 @@ impl LockupFactory {
 #[cfg(test)]
 mod tests {
     mod test_utils;
+
     use super::*;
     use near_sdk::{testing_env, MockedBlockchain, PromiseResult};
     use test_utils::*;
@@ -246,6 +245,12 @@ mod tests {
             end_timestamp: to_ts(GENESIS_TIME_IN_DAYS + YEAR * 3 + offset_in_days).into(),
         }
     }
+
+    fn lockup_master_account_id() -> AccountId {
+        "lockup.nearnet".to_string()
+    }
+
+    fn account_tokens_owner() -> AccountId { "tokenowner.testnet".to_string() }
 
     #[test]
     fn test_get_factory_vars() {

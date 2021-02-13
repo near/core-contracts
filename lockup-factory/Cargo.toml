@@ -20,4 +20,3 @@ overflow-checks = true
 [dependencies]
 near-sdk = "2.0.0"
 serde = { version = "*", features = ["derive"] }
-sha2 = "0.9.3"

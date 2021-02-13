@@ -1,6 +1,5 @@
 use near_sdk::{AccountId, MockedBlockchain, PromiseResult, VMContext};
-use near_sdk::{Balance, BlockHeight, EpochHeight};
-use sha2::{Sha256, Digest};
+use near_sdk::{env, Balance, BlockHeight, EpochHeight};
 
 pub const GENESIS_TIME_IN_DAYS: u64 = 500;
 pub const YEAR: u64 = 365;
@@ -42,8 +41,8 @@ pub fn ntoy(near_amount: Balance) -> Balance {
 }
 
 pub fn lockup_account() -> AccountId {
-    let byte_slice = Sha256::new().chain(&account_tokens_owner().to_string()).finalize();
-    let string: String = format!("{:x}", byte_slice);
+    let byte_slice = env::sha256(account_tokens_owner().as_bytes());
+    let string = byte_slice.iter().map(|x| format!("{:02x}", x)).collect::<String>();
     let lockup_suffix = ".".to_string() + &lockup_master_account_id().to_string();
     let sliced_string = &string[..40];
     let lockup_account_id: AccountId = sliced_string.to_owned() + &lockup_suffix;
