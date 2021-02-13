@@ -19,9 +19,9 @@ pub(crate) fn assert_self() {
 impl Contract {
     pub(crate) fn internal_deposit(&mut self, account_id: &AccountId, amount: Balance) {
         let balance = self
-        .accounts
-        .get(&account_id)
-        .expect("The account is not registered");
+            .accounts
+            .get(&account_id)
+            .expect("The account is not registered");
         if let Some(new_balance) = balance.checked_add(amount) {
             self.accounts.insert(&account_id, &new_balance);
         } else {
