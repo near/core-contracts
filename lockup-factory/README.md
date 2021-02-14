@@ -1,4 +1,22 @@
-# Lockup Factory
+# Lockup Factory Contract
+
+This contract deploys lockup contracts. 
+It allows any user to create and fund the lockup contract.
+The lockup factory contract packages the binary of the 
+<a href="https://github.com/near/core-contracts/tree/master/lockup">lockup 
+contract</a> within its own binary.
+
+To create a new lockup contract a user should issue a transaction and 
+attach the required minimum deposit. The entire deposit will be transferred to 
+the newly created lockup contract including to cover the storage.
+
+The benefits: 
+1. Lockups can be funded from any account.
+2. No need to have access to the foundation keys to create lockup.
+3. Auto-generates the lockup from the owner account.
+4. Refund deposit on errors.
+
+
 
 # Deployment & Usage
 
