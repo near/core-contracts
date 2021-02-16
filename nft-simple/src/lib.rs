@@ -2,7 +2,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::json_types::ValidAccountId;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, StorageUsage};
+use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
 use crate::internal::*;
 pub use crate::mint::*;
@@ -25,7 +25,7 @@ pub struct Token {
 }
 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Contract {
     /// AccountID -> Account balance.
     pub accounts: LookupMap<AccountId, UnorderedSet<TokenId>>,
@@ -38,12 +38,6 @@ pub struct Contract {
 
     /// The storage size in bytes for one account.
     pub extra_storage_in_bytes_per_token: StorageUsage,
-}
-
-impl Default for Contract {
-    fn default() -> Self {
-        env::panic(b"Contract is not initialized");
-    }
 }
 
 #[near_bindgen]
