@@ -52,6 +52,7 @@ impl Contract {
             sender_id, receiver_id,
             "Sender and receiver should be different"
         );
+        assert!(amount > 0, "The amount should be a positive number");
         self.internal_withdraw(sender_id, amount);
         self.internal_deposit(receiver_id, amount);
         env::log(format!("Transfer {} from {} to {}", amount, sender_id, receiver_id).as_bytes());
