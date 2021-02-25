@@ -1,4 +1,6 @@
 use crate::*;
+use near_sdk::json_types::U128;
+use near_sdk::{assert_one_yocto, env, log, Promise};
 
 #[near_bindgen]
 impl Contract {
@@ -11,9 +13,8 @@ impl Contract {
         let amount = env::attached_deposit();
         assert!(amount > 0, "Requires positive attached deposit");
         let account_id = env::predecessor_account_id();
-        self.internal_deposit(&account_id, amount);
-        self.total_supply += amount;
-        env::log(format!("Deposit {} NEAR to {}", amount, account_id).as_bytes());
+        self.ft.internal_deposit(&account_id, amount);
+        log!("Deposit {} NEAR to {}", amount, account_id);
     }
 
     /// Withdraws wNEAR and send NEAR back to the predecessor account.
@@ -27,9 +28,8 @@ impl Contract {
         assert_one_yocto();
         let account_id = env::predecessor_account_id();
         let amount = amount.into();
-        self.internal_withdraw(&account_id, amount);
-        self.total_supply -= amount;
-        env::log(format!("Withdraw {} NEAR from {}", amount, account_id).as_bytes());
+        self.ft.internal_withdraw(&account_id, amount);
+        log!("Withdraw {} NEAR from {}", amount, account_id);
         // Transferring NEAR and refunding 1 yoctoNEAR.
         Promise::new(account_id).transfer(amount + 1)
     }
