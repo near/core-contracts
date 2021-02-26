@@ -1,5 +1,7 @@
-use near_sdk::{AccountId, MockedBlockchain, PromiseResult, VMContext};
+use near_sdk::json_types::ValidAccountId;
 use near_sdk::{env, Balance, BlockHeight, EpochHeight};
+use near_sdk::{AccountId, MockedBlockchain, PromiseResult, VMContext};
+use std::convert::TryInto;
 
 pub const GENESIS_TIME_IN_DAYS: u64 = 500;
 pub const YEAR: u64 = 365;
@@ -14,38 +16,45 @@ pub fn to_nanos(num_days: u64) -> u64 {
     num_days * 86400_000_000_000
 }
 
-pub fn account_near() -> AccountId { "nearnet".to_string() }
-
-pub fn account_factory() -> AccountId { "nearnet".to_string() }
-
-pub fn master_account_id() -> AccountId {
+pub fn account_near() -> AccountId {
     "nearnet".to_string()
 }
 
-pub fn lockup_master_account_id() -> AccountId {
-    "lockup.nearnet".to_string()
-}
-
-pub fn whitelist_account_id() -> AccountId {
-    "whitelist.nearnet".to_string()
-}
-
-pub fn foundation_account_id() -> AccountId {
+pub fn account_factory() -> AccountId {
     "nearnet".to_string()
 }
 
-pub fn account_tokens_owner() -> AccountId { "tokenowner.testnet".to_string() }
+pub fn master_account_id() -> ValidAccountId {
+    "nearnet".try_into().unwrap()
+}
+
+pub fn lockup_master_account_id() -> ValidAccountId {
+    "lockup.nearnet".try_into().unwrap()
+}
+
+pub fn whitelist_account_id() -> ValidAccountId {
+    "whitelist.nearnet".try_into().unwrap()
+}
+
+pub fn foundation_account_id() -> ValidAccountId {
+    "nearnet".try_into().unwrap()
+}
+
+pub fn account_tokens_owner() -> ValidAccountId {
+    "tokenowner.testnet".try_into().unwrap()
+}
 
 pub fn ntoy(near_amount: Balance) -> Balance {
     near_amount * 10u128.pow(24)
 }
 
 pub fn lockup_account() -> AccountId {
-    let byte_slice = env::sha256(account_tokens_owner().as_bytes());
-    let string = byte_slice.iter().map(|x| format!("{:02x}", x)).collect::<String>();
-    let lockup_suffix = ".".to_string() + &lockup_master_account_id().to_string();
-    let sliced_string = &string[..40];
-    let lockup_account_id: AccountId = sliced_string.to_owned() + &lockup_suffix;
+    let byte_slice = env::sha256(account_tokens_owner().as_ref().as_bytes());
+    let lockup_account_id = format!(
+        "{}.{}",
+        hex::encode(&byte_slice[..20]),
+        &lockup_master_account_id().as_ref().to_string()
+    );
     return lockup_account_id;
 }
 

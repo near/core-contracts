@@ -3,7 +3,6 @@ use near_sdk::json_types::{Base64VecU8, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, AccountId, Balance};
 
-
 /// Raw type for duration in nanoseconds
 pub type Duration = u64;
 /// Raw type for timestamp in nanoseconds
@@ -48,9 +47,7 @@ pub struct LockupInformation {
 #[serde(crate = "near_sdk::serde")]
 pub enum TransfersInformation {
     /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
-    TransfersEnabled {
-        transfers_timestamp: WrappedTimestamp,
-    },
+    TransfersEnabled { transfers_timestamp: WrappedTimestamp },
     /// The account ID of the transfers poll contract, to check if the transfers are enabled.
     /// The lockup period will start when the transfer voted to be enabled.
     /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
