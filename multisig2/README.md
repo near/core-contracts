@@ -1,17 +1,17 @@
-# Basic Mutlisig contract
+# Mutlisig contract
 
-*This is an experimental contract. Please use only on TestNet.*
+*Please do your own due diligence before using this contract. There is no guarantee that this contract doesn't have issues.*
 
 This contract provides:
  - Set K out of N multi sig scheme
  - Request to sign transfers, function calls, adding and removing keys.
- - Any of the access keys can confirm, until the required number of confirmation achieved.
+ - Any of the access keys or set of specified accounts can confirm, until the required number of confirmation achieved.
 
 ## Multisig implementation details
 
-Mutlisig uses set of `FunctionCall` `AccessKey`s as a set of allowed N keys. 
-When contract is being setup, it should be initialized with set of keys that will be initially managing this account.
-All operations going forward will require `K` signatures to be performed.
+Mutlisig uses set of `FunctionCall` `AccessKey`s and account ids as a set of allowed N members. 
+When contract is being setup, it should be initialized with set of members that will be initially managing this account.
+All operations going forward will require `K` members to call `confirm` to be executed.
 
 ### Initialization
 
@@ -29,15 +29,19 @@ pub enum MultiSigRequestAction {
     CreateAccount,
     /// Deploys contract to receiver's account. Can upgrade given contract as well.
     DeployContract { code: Base64VecU8 },
+    /// Adds new member to multisig, either public key or account.
+    AddMember {
+        member: MultisigMember,
+    },
+    /// Delete existing member from multisig, either public key or account.
+    DeleteMember {
+        member: MultisigMember,
+    },
     /// Adds key, either new key for multisig or full access key to another account.
     AddKey {
         public_key: Base58PublicKey,
         #[serde(skip_serializing_if = "Option::is_none")]
         permission: Option<FunctionCallPermission>,
-    },
-    /// Deletes key, either one of the keys from multisig or key from another account.
-    DeleteKey {
-        public_key: Base58PublicKey,
     },
     /// Call function on behalf of this contract.
     FunctionCall {
@@ -67,17 +71,23 @@ pub struct FunctionCallPermission {
     method_names: Vec<String>,
 }
 
-// The request the user makes specifying the receiving account and actions they want to execute (1 tx)
+/// The request the user makes specifying the receiving account and actions they want to execute (1 tx)
 pub struct MultiSigRequest {
     receiver_id: AccountId,
     actions: Vec<MultiSigRequestAction>,
 }
 
-// An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
+/// An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
-    signer_pk: PublicKey,
+    member: MultisigMember,
     added_timestamp: u64,
+}
+
+/// Represents member of the multsig: either account or access key to given account.
+pub enum MultisigMember {
+    AccessKey { public_key: Base58PublicKey },
+    Account { account_id: AccountId },
 }
 ```
 
@@ -101,9 +111,9 @@ pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
 ### View Methods
 ```rust
 pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest
-pub fn get_num_requests_pk(&self, public_key: Base58PublicKey) -> u32
+pub fn get_num_requests_per_member(&self, member: MultisigMember) -> u32
 pub fn list_request_ids(&self) -> Vec<RequestId>
-pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey>
+pub fn get_confirmations(&self, request_id: RequestId) -> Vec<MultisigMember>
 pub fn get_num_confirmations(&self) -> u32
 pub fn get_request_nonce(&self) -> u32
 ```
@@ -118,11 +128,6 @@ Per each request, multisig maintains next state machine:
  - each step of execution, schedules a promise of given set of actions on `receiver_id` and puts a callback.
  - when callback executes, it checks if promise executed successfully: if no - stops executing the request and return failure. If yes - execute next transaction in the request if present.
  - when all transactions are executed, remove request from `requests` and with that finish the execution of the request.   
-
-### Gotchas
- 
-User can delete access keys on the multisig such that total number of different access keys will fall below `num_confirmations`, rendering contract locked.
-This is due to not having a way to query blockchain for current number of access keys on the account. See discussion here - https://github.com/nearprotocol/NEPs/issues/79.
  
 ## Pre-requisites
 
@@ -153,21 +158,17 @@ const fs = require('fs');
 const account = await near.account("illia");
 const contractName = "multisig.illia";
 const methodNames = ["add_request","delete_request","confirm"];
-const newArgs = {"num_confirmations": 2};
+const newArgs = {"num_confirmations": 2, "members": [
+        { "public_key": "ed25519:Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy" },
+        { "public_key": "ed25519:HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R" },
+        { "public_key": "ed25519:2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95" },
+        { "account_id": "illia" },
+    ]};
 const result = account.signAndSendTransaction(
     contractName,
     [
         nearAPI.transactions.createAccount(),
-        nearAPI.transactions.transfer("100000000000000000000000000"),  
-        nearAPI.transactions.addKey(
-            nearAPI.utils.PublicKey.from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
-        nearAPI.transactions.addKey(
-            nearAPI.utils.PublicKey.from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
-        nearAPI.transactions.addKey(
-            nearAPI.utils.PublicKey.from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95"),
-            nearAPI.transactions.functionCallAccessKey(contractName, methodNames, null)),
+        nearAPI.transactions.transfer("100000000000000000000000000"),
         nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
         nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
     ]);
@@ -182,7 +183,7 @@ near call multisig.illia add_request '{"request": {"receiver_id": "illia", "acti
 
 Add another key to multisig:
 ```bash
-near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddKey", "public_key": "<base58 of the key>"}]}}' --accountId multisig.illia
+near call multisig.illia add_request '{"request": {"receiver_id": "multisig.illia", "actions": [{"type": "AddMember", "member": {"public_key": "ed25519:<base58 of the key>"}}]}}' --accountId multisig.illia
 ```
 
 Change number of confirmations required to approve multisig:

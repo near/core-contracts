@@ -7,7 +7,7 @@ use near_sdk::{env, near_bindgen, AccountId, Promise};
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
-const CODE: &[u8] = include_bytes!("../../multisig/res/multisig.wasm");
+const CODE: &[u8] = include_bytes!("../../multisig2/res/multisig.wasm");
 
 /// This gas spent on the call & account creation, the rest goes to the `new` call.
 const CREATE_CALL_GAS: u64 = 50_000_000_000_000;
