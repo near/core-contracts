@@ -21,7 +21,7 @@ pub fn account_near() -> AccountId {
 }
 
 pub fn account_factory() -> AccountId {
-    "nearnet".to_string()
+    "lockup.nearnet".to_string()
 }
 
 pub fn master_account_id() -> ValidAccountId {
@@ -32,8 +32,7 @@ pub fn lockup_master_account_id() -> ValidAccountId {
     "lockup.nearnet".try_into().unwrap()
 }
 
-pub fn whitelist_account_id() -> ValidAccountId {
-    "whitelist.nearnet".try_into().unwrap()
+pub fn whitelist_account_id() -> ValidAccountId { "whitelist.nearnet".try_into().unwrap()
 }
 
 pub fn foundation_account_id() -> ValidAccountId {

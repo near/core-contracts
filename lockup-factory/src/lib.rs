@@ -48,7 +48,6 @@ pub trait ExtSelf {
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct LockupFactory {
     master_account_id: AccountId,
-    lockup_master_account_id: AccountId,
     whitelist_account_id: AccountId,
     foundation_account_id: AccountId,
 }
@@ -81,7 +80,10 @@ impl LockupFactory {
         foundation_account_id: ValidAccountId,
     ) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
-        assert!(env::current_account_id().len() <= 23, "The account ID of this contract can't be more than 23 characters"); 
+        assert!(
+            env::current_account_id().len() <= 23,
+            "The account ID of this contract can't be more than 23 characters"
+        );
 
         Self {
             master_account_id: master_account_id.into(),
@@ -100,7 +102,7 @@ impl LockupFactory {
         self.master_account_id.clone()
     }
 
-    /// Returns the lockup account id.
+    /// Returns the lockup master account id.
     pub fn get_lockup_master_account_id(&self) -> AccountId {
         env::current_account_id()
     }
@@ -123,7 +125,7 @@ impl LockupFactory {
 
         let byte_slice = env::sha256(owner_account_id.as_ref().as_bytes());
         let lockup_account_id =
-            format!("{}.{}", hex::encode(&byte_slice[..20]), env::current_account_id);
+            format!("{}.{}", hex::encode(&byte_slice[..20]), env::current_account_id());
 
         let mut foundation_account: Option<AccountId> = None;
         if vesting_schedule.is_some() {
@@ -181,7 +183,7 @@ impl LockupFactory {
                 format!("The lockup contract {} was successfully created.", lockup_account_id)
                     .as_bytes(),
             );
-           true
+            true
         } else {
             env::log(
                 format!(
@@ -222,7 +224,6 @@ mod tests {
 
         let contract = LockupFactory::new(
             master_account_id(),
-            lockup_master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
@@ -235,6 +236,7 @@ mod tests {
             foundation_account_id().as_ref().to_string()
         );
         assert_eq!(contract.get_master_account_id(), master_account_id().as_ref().to_string());
+        println!("{}", contract.get_lockup_master_account_id());
         assert_eq!(
             contract.get_lockup_master_account_id(),
             lockup_master_account_id().as_ref().to_string()
@@ -251,7 +253,6 @@ mod tests {
 
         let mut contract = LockupFactory::new(
             master_account_id(),
-            lockup_master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
@@ -286,7 +287,6 @@ mod tests {
 
         let mut contract = LockupFactory::new(
             master_account_id(),
-            lockup_master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
@@ -339,7 +339,6 @@ mod tests {
 
         let mut contract = LockupFactory::new(
             master_account_id(),
-            lockup_master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
@@ -364,7 +363,6 @@ mod tests {
 
         let mut contract = LockupFactory::new(
             master_account_id(),
-            lockup_master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
