@@ -84,7 +84,6 @@ impl LockupFactory {
 
         Self {
             master_account_id: master_account_id.into(),
-            lockup_master_account_id: lockup_master_account_id.into(),
             whitelist_account_id: whitelist_account_id.into(),
             foundation_account_id: foundation_account_id.into(),
         }
