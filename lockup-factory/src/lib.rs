@@ -77,7 +77,6 @@ impl LockupFactory {
     #[init]
     pub fn new(
         master_account_id: ValidAccountId,
-        lockup_master_account_id: ValidAccountId,
         whitelist_account_id: ValidAccountId,
         foundation_account_id: ValidAccountId,
     ) -> Self {
