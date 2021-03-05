@@ -181,7 +181,7 @@ impl LockupFactory {
                 format!("The lockup contract {} was successfully created.", lockup_account_id)
                     .as_bytes(),
             );
-            return true;
+           true
         } else {
             env::log(
                 format!(
