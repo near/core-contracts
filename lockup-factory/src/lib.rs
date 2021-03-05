@@ -123,7 +123,7 @@ impl LockupFactory {
 
         let byte_slice = env::sha256(owner_account_id.as_ref().as_bytes());
         let lockup_account_id =
-            format!("{}.{}", hex::encode(&byte_slice[..20]), self.lockup_master_account_id);
+            format!("{}.{}", hex::encode(&byte_slice[..20]), env::current_account_id);
 
         let mut foundation_account: Option<AccountId> = None;
         if vesting_schedule.is_some() {
