@@ -102,7 +102,7 @@ impl LockupFactory {
 
     /// Returns the lockup account id.
     pub fn get_lockup_master_account_id(&self) -> AccountId {
-        self.lockup_master_account_id.clone()
+        env::current_account_id()
     }
 
     /// Returns minimum attached balance.
