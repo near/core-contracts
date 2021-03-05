@@ -81,6 +81,7 @@ impl LockupFactory {
         foundation_account_id: ValidAccountId,
     ) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
+        assert!(env::current_account_id().len() <= 23, "The account ID of this contract can't be more than 23 characters"); 
 
         Self {
             master_account_id: master_account_id.into(),
