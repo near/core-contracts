@@ -1,6 +1,6 @@
 use crate::*;
 
-/// Price per 1 byte of storage from mainnet config after `0.18` release and protocol version `42`.
+/// Price per 1 byte of storage from mainnet config after `1.18.0` release and protocol version `42`.
 /// It's 10 times lower than the genesis price.
 pub(crate) const STORAGE_PRICE_PER_BYTE: Balance = 10_000_000_000_000_000_000;
 
