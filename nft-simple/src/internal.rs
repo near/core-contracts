@@ -44,6 +44,7 @@ pub(crate) fn deposit_refund(storage_used: u64) {
 }
 
 pub(crate) fn bytes_for_approved_account_id(account_id: &AccountId) -> u64 {
+    // The extra 4 bytes are coming from Borsh serialization to store the length of the string.
     account_id.len() as u64 + 4
 }
 

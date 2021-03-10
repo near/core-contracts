@@ -134,6 +134,7 @@ impl NonFungibleTokenCore for Contract {
 
     #[payable]
     fn nft_approve_account_id(&mut self, token_id: TokenId, account_id: ValidAccountId) -> bool {
+        assert_one_yocto();
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
         assert_eq!(&env::predecessor_account_id(), &token.owner_id);
         let account_id: AccountId = account_id.into();
