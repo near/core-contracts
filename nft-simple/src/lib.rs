@@ -1,5 +1,7 @@
+use std::collections::HashSet;
+
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LookupMap, UnorderedSet};
+use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::ValidAccountId;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
@@ -21,16 +23,16 @@ pub type TokenId = String;
 #[serde(crate = "near_sdk::serde")]
 pub struct Token {
     pub owner_id: AccountId,
-    pub meta: String,
+    pub metadata: String,
+    pub approved_account_ids: HashSet<AccountId>,
 }
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Contract {
-    /// AccountID -> Account balance.
-    pub accounts: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    pub tokens_per_owner: LookupMap<AccountId, UnorderedSet<TokenId>>,
 
-    pub tokens: LookupMap<TokenId, Token>,
+    pub tokens_by_id: UnorderedMap<TokenId, Token>,
 
     pub owner_id: AccountId,
 
@@ -46,20 +48,30 @@ impl Contract {
     pub fn new(owner_id: ValidAccountId) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let mut this = Self {
-            accounts: LookupMap::new(b"a".to_vec()),
-            tokens: LookupMap::new(b"t".to_vec()),
+            tokens_per_owner: LookupMap::new(b"a".to_vec()),
+            tokens_by_id: UnorderedMap::new(b"t".to_vec()),
             owner_id: owner_id.into(),
             total_supply: 0,
             extra_storage_in_bytes_per_token: 0,
         };
 
-        let initial_storage_usage = env::storage_usage();
-        let tmp_account_id = unsafe { String::from_utf8_unchecked(vec![b'a'; 64]) };
-        let mut u = UnorderedSet::new(prefix(&tmp_account_id));
-        u.insert(&tmp_account_id);
-        this.extra_storage_in_bytes_per_token = env::storage_usage() - initial_storage_usage
-            + (tmp_account_id.len() - this.owner_id.len()) as u64;
-        this.accounts.remove(&tmp_account_id);
+        this.measure_min_token_storage_cost();
+
         this
+    }
+
+    fn measure_min_token_storage_cost(&mut self) {
+        let initial_storage_usage = env::storage_usage();
+        let tmp_account_id = "a".repeat(64);
+        let u = UnorderedSet::new(unique_prefix(&tmp_account_id));
+        self.tokens_per_owner.insert(&tmp_account_id, &u);
+
+        let tokens_per_owner_entry_in_bytes = env::storage_usage() - initial_storage_usage;
+        let owner_id_extra_cost_in_bytes = (tmp_account_id.len() - self.owner_id.len()) as u64;
+
+        self.extra_storage_in_bytes_per_token =
+            tokens_per_owner_entry_in_bytes + owner_id_extra_cost_in_bytes;
+
+        self.tokens_per_owner.remove(&tmp_account_id);
     }
 }
