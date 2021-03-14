@@ -6,13 +6,24 @@ use near_sdk::{assert_one_yocto, env, log, Promise};
 impl Contract {
     /// Deposit NEAR to mint wNEAR tokens to the predecessor account in this contract.
     /// Requirements:
-    /// * The predecessor account should be registered.
+    /// * The predecessor account doesn't need to be registered.
     /// * Requires positive attached deposit.
+    /// * If account is not registered will fail if attached deposit is below registration limit.
     #[payable]
     pub fn near_deposit(&mut self) {
-        let amount = env::attached_deposit();
+        let mut amount = env::attached_deposit();
         assert!(amount > 0, "Requires positive attached deposit");
         let account_id = env::predecessor_account_id();
+        if !self.ft.accounts.contains_key(&account_id) {
+            // Not registered, register if enough $NEAR has been attached.
+            // Subtract registration amount from the account balance.
+            assert!(
+                amount >= self.ft.storage_balance_bounds().min.0,
+                "ERR_DEPOSIT_TOO_SMALL"
+            );
+            self.ft.internal_register_account(&account_id);
+            amount -= self.ft.storage_balance_bounds().min.0;
+        }
         self.ft.internal_deposit(&account_id, amount);
         log!("Deposit {} NEAR to {}", amount, account_id);
     }

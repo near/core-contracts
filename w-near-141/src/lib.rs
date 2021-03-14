@@ -8,11 +8,13 @@
 * lib.rs is the main entry point.
 * w_near.rs contains interfaces for depositing and withdrawing
 */
+use near_contract_standards::fungible_token::metadata::{
+    FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
+};
 use near_contract_standards::fungible_token::FungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{ValidAccountId, U128};
-use near_sdk::Promise;
-use near_sdk::{env, near_bindgen, PanicOnDefault};
+use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PromiseOrValue};
 
 mod w_near;
 
@@ -30,17 +32,24 @@ impl Contract {
     pub fn new() -> Self {
         assert!(!env::state_exists(), "Already initialized");
         Self {
-            ft: FungibleToken::new(b"a"),
+            ft: FungibleToken::new(b"a".to_vec()),
         }
     }
 }
 
-near_contract_standards::impl_fungible_token!(
-    Contract,
-    ft,
-    String::from("0.1.0"),
-    String::from("Wrapped NEAR fungible token"),
-    String::from("wNEAR"),
-    String::from("https://github.com/near/core-contracts/tree/master/w-near-141"),
-    24
-);
+near_contract_standards::impl_fungible_token_core!(Contract, ft);
+near_contract_standards::impl_fungible_token_storage!(Contract, ft);
+
+impl FungibleTokenMetadataProvider for Contract {
+    fn ft_metadata(&self) -> FungibleTokenMetadata {
+        FungibleTokenMetadata {
+            spec: FT_METADATA_SPEC.to_string(),
+            name: String::from("Wrapped NEAR fungible token"),
+            symbol: String::from("wNEAR"),
+            icon: None,
+            reference: None,
+            reference_hash: None,
+            decimals: 24,
+        }
+    }
+}
