@@ -165,13 +165,16 @@ impl NonFungibleTokenCore for Contract {
         receiver_id: Option<ValidAccountId>,
         msg: Option<String>,
     ) -> PromiseOrValue<bool> {
-        assert_one_yocto();
+        let mut deposit = env::attached_deposit();
+        let account_id: AccountId = account_id.into();
+        let storage_required = bytes_for_approved_account_id(&account_id);
+        assert!(deposit >= storage_required as u128, "Deposit doesn't cover storage of account_id: {}", account_id.clone());
+
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
         assert_eq!(&env::predecessor_account_id(), &token.owner_id);
-        let account_id: AccountId = account_id.into();
-        let storage_used = bytes_for_approved_account_id(&account_id);
+
         if token.approved_account_ids.insert(account_id) {
-            deposit_refund(storage_used);
+            deposit -= storage_required as u128;
             self.tokens_by_id.insert(&token_id, &token);
             if let Some(receiver_id) = receiver_id {
                 PromiseOrValue::Promise(ext_non_fungible_approval_receiver::nft_on_approve_account_id(
@@ -180,7 +183,7 @@ impl NonFungibleTokenCore for Contract {
                     token.owner_id,
                     msg,
                     receiver_id.as_ref(),
-                    NO_DEPOSIT,
+                    deposit,
                     env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
                 ))
             } else {
@@ -215,7 +218,7 @@ impl NonFungibleTokenCore for Contract {
                     token.owner_id,
                     msg,
                     receiver_id.as_ref(),
-                    NO_DEPOSIT,
+                    1,
                     env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
                 ))
             } else {
@@ -248,7 +251,7 @@ impl NonFungibleTokenCore for Contract {
                     token.owner_id,
                     msg,
                     receiver_id.as_ref(),
-                    NO_DEPOSIT,
+                    1,
                     env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
                 ))
             } else {
