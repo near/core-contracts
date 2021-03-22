@@ -4,7 +4,6 @@ use near_sdk::{ext_contract, Gas, PromiseOrValue, PromiseResult};
 
 const GAS_FOR_RESOLVE_TRANSFER: Gas = 10_000_000_000_000;
 const GAS_FOR_NFT_TRANSFER_CALL: Gas = 25_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
-
 const NO_DEPOSIT: Balance = 0;
 
 pub trait NonFungibleTokenCore {
@@ -100,6 +99,7 @@ impl NonFungibleTokenCore for Contract {
         memo: Option<String>,
     ) {
         assert_one_yocto();
+
         let sender_id = env::predecessor_account_id();
         let (previous_owner_id, approved_account_ids) = self.internal_transfer(
             &sender_id,
