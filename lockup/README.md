@@ -31,9 +31,10 @@ Once the `cliff_timestamp` passed, the tokens are vested on a pro rata basis fro
 
 ### Release schedule
 
-The release of tokens can also be scheduled to be linear from the moment transfers are enabled.
-To achieve this it's possible to specify release duration. Once the transfers are enabled, the release schedule will
-start from the timestamp of the vote.
+The release of tokens can also be scheduled to be linear from the moment tokens are unlocked.
+The tokens are unlocked at the following timestamp `max(transfers_enabled_timestamp + lockup_duration, lockup_timestamp)`.
+NOTE: If the `lockup_timestamp` is not specified, the tokens are unlocked at `transfers_enabled_timestamp + lockup_duration`.
+
 Release schedule can not be terminated by the foundation.
 
 ### Staking
@@ -102,6 +103,12 @@ With the guarantees from the staking pool contracts, whitelist and voting contra
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
 
 ## Change Log
+
+### `3.0.0`
+
+- Release duration now starts from the moment the tokens are unlocked. 
+The tokens are unlocked at the following timestamp `max(transfers_enabled_timestamp + lockup_duration, lockup_timestamp)`.
+NOTE: If the `lockup_timestamp` is not specified, the tokens are unlocked at `transfers_enabled_timestamp + lockup_duration`.
 
 ### `2.0.0`
 

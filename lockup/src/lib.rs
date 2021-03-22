@@ -156,9 +156,11 @@ impl LockupContract {
     /// - `owner_account_id` - the account ID of the owner.  Only this account can call owner's
     ///    methods on this contract.
     /// - `lockup_duration` - the duration in nanoseconds of the lockup period from the moment
-    ///    the transfers are enabled.
+    ///    the transfers are enabled. During this period tokens are locked and the release doesn't
+    ///    start.
     /// - `lockup_timestamp` - the optional absolute lockup timestamp in nanoseconds which locks
-    ///    the tokens until this timestamp passes.
+    ///    the tokens until this timestamp passes. Until this moment the tokens are locked and the
+    ///    release doesn't start.
     /// - `transfers_information` - the information about the transfers. Either transfers are
     ///    already enabled, then it contains the timestamp when they were enabled. Or the transfers
     ///    are currently disabled and it contains the account ID of the transfer poll contract.
@@ -169,9 +171,11 @@ impl LockupContract {
     ///    the employee. If Hash provided, it's expected that vesting started before lockup and
     ///    it only needs to be revealed in case of termination.
     /// - `release_duration` - is the duration when the full lockup amount will be available.
-    ///    The tokens are linearly released from the moment transfers are enabled. If it's used
-    ///    in addition to the vesting schedule, then the amount of tokens available to transfer
-    ///    is subject to the minimum between vested tokens and released tokens.
+    ///    The tokens are linearly released from the moment tokens are unlocked.
+    ///    The unlocking happens at the timestamp defined by:
+    ///    `max(transfers_timestamp + lockup_duration, lockup_timestamp)`.
+    ///    If it's used in addition to the vesting schedule, then the amount of tokens available to
+    ///    transfer is subject to the minimum between vested tokens and released tokens.
     /// - `staking_pool_whitelist_account_id` - the Account ID of the staking pool whitelist contract.
     /// - `foundation_account_id` - the account ID of the NEAR Foundation, that has the ability to
     ///    terminate vesting schedule.
@@ -284,11 +288,12 @@ mod tests {
         }
     }
 
-    fn new_contract(
+    fn new_contract_with_lockup_duration(
         transfers_enabled: bool,
         vesting_schedule: Option<VestingSchedule>,
         release_duration: Option<WrappedDuration>,
         foundation_account: bool,
+        lockup_duration: Duration,
     ) -> LockupContract {
         let lockup_start_information = if transfers_enabled {
             TransfersInformation::TransfersEnabled {
@@ -316,13 +321,28 @@ mod tests {
         });
         LockupContract::new(
             account_owner(),
-            to_nanos(YEAR).into(),
+            lockup_duration.into(),
             None,
             lockup_start_information,
             vesting_schedule,
             release_duration,
             AccountId::from("whitelist"),
             foundation_account_id,
+        )
+    }
+
+    fn new_contract(
+        transfers_enabled: bool,
+        vesting_schedule: Option<VestingSchedule>,
+        release_duration: Option<WrappedDuration>,
+        foundation_account: bool,
+    ) -> LockupContract {
+        new_contract_with_lockup_duration(
+            transfers_enabled,
+            vesting_schedule,
+            release_duration,
+            foundation_account,
+            to_nanos(YEAR),
         )
     }
 
@@ -1178,6 +1198,16 @@ mod tests {
 
         context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
         testing_env!(context.clone());
+        assert_eq!(contract.get_owners_balance().0, to_yocto(0));
+        assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(0));
+        assert_eq!(
+            contract.get_locked_vested_amount(no_vesting_schedule()).0,
+            to_yocto(1000)
+        );
+        assert_eq!(contract.get_locked_amount().0, to_yocto(1000));
+
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
+        testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(250));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(250));
         assert_eq!(
@@ -1186,7 +1216,7 @@ mod tests {
         );
         assert_eq!(contract.get_locked_amount().0, to_yocto(750));
 
-        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 2 * YEAR);
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(500));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(500));
@@ -1196,7 +1226,7 @@ mod tests {
         );
         assert_eq!(contract.get_locked_amount().0, to_yocto(500));
 
-        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 3 * YEAR);
+        context.block_timestamp = to_ts(GENESIS_TIME_IN_DAYS + 4 * YEAR);
         testing_env!(context.clone());
         assert_eq!(contract.get_owners_balance().0, to_yocto(750));
         assert_eq!(contract.get_liquid_owners_balance().0, to_yocto(750));
@@ -1208,11 +1238,12 @@ mod tests {
         let mut context = basic_context();
         testing_env!(context.clone());
         let vesting_schedule = new_vesting_schedule(0);
-        let contract = new_contract(
+        let contract = new_contract_with_lockup_duration(
             true,
             Some(vesting_schedule.clone()),
             Some(to_nanos(4 * YEAR).into()),
             true,
+            0,
         );
 
         context.is_view = true;
@@ -1425,11 +1456,12 @@ mod tests {
         let mut context = basic_context();
         testing_env!(context.clone());
         let vesting_schedule = new_vesting_schedule(0);
-        let mut contract = new_contract(
+        let mut contract = new_contract_with_lockup_duration(
             true,
             Some(vesting_schedule.clone()),
             Some(to_nanos(4 * YEAR).into()),
             true,
+            0,
         );
 
         context.is_view = true;
