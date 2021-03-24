@@ -25,6 +25,7 @@ pub struct Token {
     pub owner_id: AccountId,
     pub metadata: String,
     pub approved_account_ids: HashSet<AccountId>,
+    pub approval_id: u64,
 }
 
 #[near_bindgen]

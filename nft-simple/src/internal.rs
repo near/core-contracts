@@ -103,22 +103,23 @@ impl Contract {
         sender_id: &AccountId,
         receiver_id: &AccountId,
         token_id: &TokenId,
-        enforce_owner_id: Option<&ValidAccountId>,
+        enforce_approval_id: Option<u64>,
         memo: Option<String>,
     ) -> (AccountId, HashSet<AccountId>) {
         let Token {
             owner_id,
             metadata,
             approved_account_ids,
+            approval_id,
         } = self.tokens_by_id.get(token_id).expect("Token not found");
         if sender_id != &owner_id && !approved_account_ids.contains(sender_id) {
             env::panic(b"Unauthorized");
         }
 
-        if let Some(enforce_owner_id) = enforce_owner_id {
+        if let Some(enforce_approval_id) = enforce_approval_id {
             assert_eq!(
-                &owner_id,
-                enforce_owner_id.as_ref(),
+                approval_id,
+                enforce_approval_id,
                 "The token owner is different from enforced"
             );
         }
@@ -143,6 +144,7 @@ impl Contract {
             owner_id: receiver_id.clone(),
             metadata,
             approved_account_ids: Default::default(),
+            approval_id: approval_id + 1,
         };
         self.tokens_by_id.insert(token_id, &token);
 
