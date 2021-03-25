@@ -153,32 +153,33 @@ impl NonFungibleTokenCore for Contract {
     ) -> bool {
         let mut deposit = env::attached_deposit();
         let account_id: AccountId = account_id.into();
+
         let storage_required = bytes_for_approved_account_id(&account_id);
         assert!(deposit >= storage_required as u128, "Deposit doesn't cover storage of account_id: {}", account_id.clone());
 
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
         assert_eq!(&env::predecessor_account_id(), &token.owner_id);
 
+        let mut result = false;
         if token.approved_account_ids.insert(account_id.clone()) {
-            deposit -= storage_required as u128;
-
-            token.approval_id += 1;
-
             self.tokens_by_id.insert(&token_id, &token);
-            ext_non_fungible_approval_receiver::nft_on_approve(
-                env::current_account_id(),
-                token_id,
-                token.owner_id,
-                token.approval_id,
-                msg,
-                &account_id,
-                deposit,
-                env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
-            );
-            true
-        } else {
-            false
+            deposit -= storage_required as u128;
+            result = true;
         }
+
+        // excess deposit amount will be passed in callback to cover any storage fees there
+        token.approval_id += 1;
+        ext_non_fungible_approval_receiver::nft_on_approve(
+            env::current_account_id(),
+            token_id,
+            token.owner_id,
+            token.approval_id,
+            msg,
+            &account_id,
+            deposit,
+            env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
+        );
+        result
     }
 
     #[payable]
