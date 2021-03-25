@@ -144,7 +144,7 @@ impl Contract {
             owner_id: receiver_id.clone(),
             metadata,
             approved_account_ids: Default::default(),
-            approval_id: approval_id + 1,
+            approval_id,
         };
         self.tokens_by_id.insert(token_id, &token);
 
