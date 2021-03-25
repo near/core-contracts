@@ -36,8 +36,6 @@ pub struct Contract {
 
     pub owner_id: AccountId,
 
-    pub total_supply: u64,
-
     /// The storage size in bytes for one account.
     pub extra_storage_in_bytes_per_token: StorageUsage,
 }
@@ -51,7 +49,6 @@ impl Contract {
             tokens_per_owner: LookupMap::new(b"a".to_vec()),
             tokens_by_id: UnorderedMap::new(b"t".to_vec()),
             owner_id: owner_id.into(),
-            total_supply: 0,
             extra_storage_in_bytes_per_token: 0,
         };
 
