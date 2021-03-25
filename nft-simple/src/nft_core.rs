@@ -56,7 +56,7 @@ trait NonFungibleTokenApprovalsReceiver {
         token_id: TokenId,
         owner_id: AccountId,
         approval_id: u64,
-        msg: Option<String>,
+        msg: String,
     ) -> Promise;
 }
 
@@ -164,7 +164,7 @@ impl NonFungibleTokenCore for Contract {
 
         token.approval_id += 1;
 
-        if msg.is_some() {
+        if let Some(msg) = msg {
             ext_non_fungible_approval_receiver::nft_on_approve(
                 token_id,
                 token.owner_id,

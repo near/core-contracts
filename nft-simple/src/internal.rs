@@ -120,7 +120,7 @@ impl Contract {
             assert_eq!(
                 approval_id,
                 enforce_approval_id,
-                "The token owner is different from enforced"
+                "The approval_id is different from enforce_approval_id"
             );
         }
 
