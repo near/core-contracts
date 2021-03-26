@@ -2,17 +2,19 @@ use std::collections::HashSet;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
-use near_sdk::json_types::ValidAccountId;
+use near_sdk::json_types::{ValidAccountId, Base64VecU8, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
 use crate::internal::*;
 pub use crate::mint::*;
 pub use crate::nft_core::*;
+use crate::nft_metadata::{TokenMetadata, NFTMetadata};
 
 mod internal;
 mod mint;
 mod nft_core;
+mod nft_metadata;
 
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
@@ -23,7 +25,7 @@ pub type TokenId = String;
 #[serde(crate = "near_sdk::serde")]
 pub struct Token {
     pub owner_id: AccountId,
-    pub metadata: String,
+    pub metadata: TokenMetadata,
     pub approved_account_ids: HashSet<AccountId>,
 }
 
@@ -38,18 +40,21 @@ pub struct Contract {
 
     /// The storage size in bytes for one account.
     pub extra_storage_in_bytes_per_token: StorageUsage,
+
+    pub metadata: NFTMetadata
 }
 
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new(owner_id: ValidAccountId) -> Self {
+    pub fn new(owner_id: ValidAccountId, metadata: NFTMetadata) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let mut this = Self {
             tokens_per_owner: LookupMap::new(b"a".to_vec()),
             tokens_by_id: UnorderedMap::new(b"t".to_vec()),
             owner_id: owner_id.into(),
             extra_storage_in_bytes_per_token: 0,
+            metadata
         };
 
         this.measure_min_token_storage_cost();
