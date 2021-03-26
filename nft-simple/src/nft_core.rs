@@ -152,10 +152,19 @@ impl NonFungibleTokenCore for Contract {
     ) {
         let account_id: AccountId = account_id.into();
         let storage_used = bytes_for_approved_account_id(&account_id);
-        assert!(env::attached_deposit() >= storage_used as u128, "attached_deposit doesn't cover storage of account_id: {}", account_id.clone());
 
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
-        assert_eq!(&env::predecessor_account_id(), &token.owner_id);
+
+        if token.approved_account_ids.contains(&account_id) {
+            // If account is already approved, refund the attached deposit
+            if env::attached_deposit() != 0 {
+                Promise::new(env::predecessor_account_id()).transfer(env::attached_deposit());
+            }
+        } else {
+            assert!(env::attached_deposit() >= storage_used as u128, "attached_deposit doesn't cover storage of account_id: {}", account_id.clone());
+        }
+
+        assert_eq!(&env::predecessor_account_id(), &token.owner_id, "Predecessor must be the token owner.");
 
         if token.approved_account_ids.insert(account_id.clone()) {
             self.tokens_by_id.insert(&token_id, &token);
