@@ -11,7 +11,7 @@ pub trait NonFungibleTokenCore {
         &mut self,
         receiver_id: ValidAccountId,
         token_id: TokenId,
-        enforce_approval_id: Option<u64>,
+        enforce_approval_id: Option<U64>,
         memo: Option<String>,
     );
 
@@ -20,7 +20,7 @@ pub trait NonFungibleTokenCore {
         &mut self,
         receiver_id: ValidAccountId,
         token_id: TokenId,
-        enforce_approval_id: Option<u64>,
+        enforce_approval_id: Option<U64>,
         memo: Option<String>,
         msg: String,
     ) -> Promise;
@@ -55,7 +55,7 @@ trait NonFungibleTokenApprovalsReceiver {
         &mut self,
         token_id: TokenId,
         owner_id: AccountId,
-        approval_id: u64,
+        approval_id: U64,
         msg: String,
     ) -> Promise;
 }
@@ -88,7 +88,7 @@ impl NonFungibleTokenCore for Contract {
         &mut self,
         receiver_id: ValidAccountId,
         token_id: TokenId,
-        enforce_approval_id: Option<u64>,
+        enforce_approval_id: Option<U64>,
         memo: Option<String>,
     ) {
         assert_one_yocto();
@@ -109,7 +109,7 @@ impl NonFungibleTokenCore for Contract {
         &mut self,
         receiver_id: ValidAccountId,
         token_id: TokenId,
-        enforce_approval_id: Option<u64>,
+        enforce_approval_id: Option<U64>,
         memo: Option<String>,
         msg: String,
     ) -> Promise {
@@ -182,7 +182,7 @@ impl NonFungibleTokenCore for Contract {
             Some(ext_non_fungible_approval_receiver::nft_on_approve(
                 token_id,
                 token.owner_id,
-                token.approval_counter,
+                U64::from(token.approval_counter),
                 msg,
                 &account_id,
                 NO_DEPOSIT,

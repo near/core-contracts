@@ -103,7 +103,7 @@ impl Contract {
         sender_id: &AccountId,
         receiver_id: &AccountId,
         token_id: &TokenId,
-        enforce_approval_id: Option<u64>,
+        enforce_approval_id: Option<U64>,
         memo: Option<String>,
     ) -> (AccountId, HashMap<AccountId, u64>) {
         let Token {
@@ -120,7 +120,7 @@ impl Contract {
         if let Some(enforce_approval_id) = enforce_approval_id {
             assert_eq!(
                 approval_id,
-                enforce_approval_id,
+                enforce_approval_id.0,
                 "The approval_id is different from enforce_approval_id"
             );
         }
