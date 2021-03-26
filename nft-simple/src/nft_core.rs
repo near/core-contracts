@@ -228,7 +228,7 @@ impl NonFungibleTokenCore for Contract {
     }
 
     fn nft_total_supply(&self) -> U64 {
-        self.total_supply.into()
+        self.tokens_by_id.len().into()
     }
 
     fn nft_token(&self, token_id: TokenId) -> Option<TokenReturnObject> {

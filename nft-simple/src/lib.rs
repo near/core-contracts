@@ -2,17 +2,19 @@ use std::collections::HashMap;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
-use near_sdk::json_types::{ValidAccountId, U64};
+use near_sdk::json_types::{ValidAccountId, Base64VecU8, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
 use crate::internal::*;
 pub use crate::mint::*;
 pub use crate::nft_core::*;
+use crate::nft_metadata::{TokenMetadata, NFTMetadata};
 
 mod internal;
 mod mint;
 mod nft_core;
+mod nft_metadata;
 
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
@@ -25,7 +27,7 @@ pub type TokenId = String;
 #[serde(crate = "near_sdk::serde")]
 pub struct TokenReturnObject {
     pub owner_id: AccountId,
-    pub metadata: String,
+    pub metadata: TokenMetadata,
     pub approved_account_ids: HashMap<AccountId, U64>,
     pub approval_counter: U64,
 }
@@ -33,7 +35,7 @@ pub struct TokenReturnObject {
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct Token {
     pub owner_id: AccountId,
-    pub metadata: String,
+    pub metadata: TokenMetadata,
     pub approved_account_ids: HashMap<AccountId, u64>,
     pub approval_counter: u64,
 }
@@ -47,23 +49,23 @@ pub struct Contract {
 
     pub owner_id: AccountId,
 
-    pub total_supply: u64,
-
     /// The storage size in bytes for one account.
     pub extra_storage_in_bytes_per_token: StorageUsage,
+
+    pub metadata: NFTMetadata
 }
 
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new(owner_id: ValidAccountId) -> Self {
+    pub fn new(owner_id: ValidAccountId, metadata: NFTMetadata) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let mut this = Self {
             tokens_per_owner: LookupMap::new(b"a".to_vec()),
             tokens_by_id: UnorderedMap::new(b"t".to_vec()),
             owner_id: owner_id.into(),
-            total_supply: 0,
             extra_storage_in_bytes_per_token: 0,
+            metadata
         };
 
         this.measure_min_token_storage_cost();
@@ -119,11 +121,40 @@ mod tests {
         }
     }
 
+    fn helper_contract_metadata() -> NFTMetadata {
+        NFTMetadata {
+            spec: "".to_string(),
+            name: "".to_string(),
+            symbol: "".to_string(),
+            icon: None,
+            base_uri: None,
+            reference: None,
+            reference_hash: None
+        }
+    }
+
+    fn helper_token_metadata() -> TokenMetadata {
+        TokenMetadata {
+            title: Some("Mochi Rising".to_string()),
+            description: Some("Limited edition canvas".to_string()),
+            media: None,
+            media_hash: None,
+            copies: None,
+            issued_at: None,
+            expires_at: None,
+            starts_at: None,
+            updated_at: None,
+            extra: None,
+            reference: None,
+            reference_hash: None
+        }
+    }
+
     fn helper_mint() -> (Contract, VMContext) {
-        let context = get_context(nft(), 7660000000000000000000);
+        let context = get_context(nft(), 7980000000000000000000);
         testing_env!(context.clone());
-        let mut contract = Contract::new(ValidAccountId::try_from(nft()).unwrap());
-        contract.nft_mint("0".to_string(), "Old style metadata".to_string());
+        let mut contract = Contract::new(ValidAccountId::try_from(nft()).unwrap(), helper_contract_metadata());
+        contract.nft_mint("0".to_string(), helper_token_metadata());
         (contract, context)
     }
 
@@ -137,8 +168,8 @@ mod tests {
     fn failed_mint_from_non_owner() {
         let context = get_context(alice(), 7660000000000000000000);
         testing_env!(context);
-        let mut contract = Contract::new(ValidAccountId::try_from(nft()).unwrap());
-        contract.nft_mint("0".to_string(), "Old style metadata".to_string());
+        let mut contract = Contract::new(ValidAccountId::try_from(nft()).unwrap(), helper_contract_metadata());
+        contract.nft_mint("0".to_string(), helper_token_metadata());
     }
 
     #[test]
@@ -156,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+    #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoⓃ (0.000000000000000000000001 Ⓝ")]
     fn failed_simple_transfer_needs_one_yocto() {
         let (mut contract, _) = helper_mint();
         contract.nft_transfer(ValidAccountId::try_from(bob()).unwrap(), "0".to_string(), Some(U64::from(0u64)), Some("my memo".to_string()));

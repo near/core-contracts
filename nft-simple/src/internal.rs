@@ -1,5 +1,7 @@
 use crate::*;
 
+const YOCTO_MULTIPLIER: f32 = 0.000000000000000000000001;
+
 /// Price per 1 byte of storage from mainnet config after `1.18.0` release and protocol version `42`.
 /// It's 10 times lower than the genesis price.
 pub(crate) const STORAGE_PRICE_PER_BYTE: Balance = 10_000_000_000_000_000_000;
@@ -15,7 +17,8 @@ pub(crate) fn assert_one_yocto() {
     assert_eq!(
         env::attached_deposit(),
         1,
-        "Requires attached deposit of exactly 1 yoctoNEAR"
+        "Requires attached deposit of exactly 1 yoctoⓃ ({} Ⓝ )",
+        YOCTO_MULTIPLIER
     )
 }
 
@@ -33,8 +36,9 @@ pub(crate) fn deposit_refund(storage_used: u64) {
 
     assert!(
         required_cost <= attached_deposit,
-        "Requires to attach {} NEAR tokens to cover storage",
-        required_cost
+        "Must attach {} yoctoⓃ to cover storage ({} Ⓝ )",
+        required_cost,
+        required_cost as f32  * YOCTO_MULTIPLIER
     );
 
     let refund = attached_deposit - required_cost;

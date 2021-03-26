@@ -3,7 +3,7 @@ use crate::*;
 #[near_bindgen]
 impl Contract {
     #[payable]
-    pub fn nft_mint(&mut self, token_id: TokenId, metadata: String) {
+    pub fn nft_mint(&mut self, token_id: TokenId, metadata: TokenMetadata) {
         let initial_storage_usage = env::storage_usage();
         self.assert_owner();
         let token = Token {
@@ -17,7 +17,6 @@ impl Contract {
             "Token already exists"
         );
         self.internal_add_token_to_owner(&token.owner_id, &token_id);
-        self.total_supply += 1;
 
         let new_token_size_in_bytes = env::storage_usage() - initial_storage_usage;
         let required_storage_in_bytes =
