@@ -43,14 +43,14 @@ pub(crate) fn deposit_refund(storage_used: u64) {
     }
 }
 
-pub(crate) fn bytes_for_approved_account_id(account_id: &AccountId) -> u64 {
+pub(crate) fn bytes_for_approved_account_id(hm: (&AccountId, &u64)) -> u64 {
     // The extra 4 bytes are coming from Borsh serialization to store the length of the string.
-    account_id.len() as u64 + 4
+    hm.0.len() as u64 + 4
 }
 
 pub(crate) fn refund_approved_account_ids(
     account_id: AccountId,
-    approved_account_ids: &HashSet<AccountId>,
+    approved_account_ids: &HashMap<AccountId, u64>,
 ) -> Promise {
     let storage_released: u64 = approved_account_ids
         .iter()
@@ -105,14 +105,15 @@ impl Contract {
         token_id: &TokenId,
         enforce_approval_id: Option<u64>,
         memo: Option<String>,
-    ) -> (AccountId, HashSet<AccountId>) {
+    ) -> (AccountId, HashMap<AccountId, u64>) {
         let Token {
             owner_id,
             metadata,
             approved_account_ids,
-            approval_id,
+            approval_counter: approval_id,
         } = self.tokens_by_id.get(token_id).expect("Token not found");
-        if sender_id != &owner_id && !approved_account_ids.contains(sender_id) {
+
+        if sender_id != &owner_id && !approved_account_ids.contains_key(sender_id) {
             env::panic(b"Unauthorized");
         }
 
@@ -144,7 +145,7 @@ impl Contract {
             owner_id: receiver_id.clone(),
             metadata,
             approved_account_ids: Default::default(),
-            approval_id,
+            approval_counter: approval_id,
         };
         self.tokens_by_id.insert(token_id, &token);
 
@@ -154,4 +155,34 @@ impl Contract {
 
         (owner_id, approved_account_ids)
     }
+}
+
+pub(crate) fn convert_token_to_ext_object(token: Token) -> TokenReturnObject {
+    let mut json_map: HashMap<AccountId, U64> = HashMap::new();
+    for hm in token.approved_account_ids.clone() {
+        json_map.insert(hm.0, U64::from(hm.1));
+    }
+
+    TokenReturnObject {
+        owner_id: token.owner_id,
+        metadata: token.metadata,
+        approved_account_ids: json_map,
+        approval_counter: U64::from(token.approval_counter)
+    }
+}
+
+pub(crate) fn convert_hashmap_to_ext_object(map: HashMap<AccountId, u64>) -> HashMap<AccountId, U64> {
+    let mut json_map: HashMap<AccountId, U64> = HashMap::new();
+    for entry in map {
+        json_map.insert(entry.0, U64::from(entry.1));
+    }
+    json_map
+}
+
+pub(crate) fn convert_ext_hashmap_to_object(map: HashMap<AccountId, U64>) -> HashMap<AccountId, u64> {
+    let mut reg_map: HashMap<AccountId, u64> = HashMap::new();
+    for entry in map {
+        reg_map.insert(entry.0, entry.1.into());
+    }
+    reg_map
 }

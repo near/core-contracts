@@ -25,7 +25,7 @@ pub trait NonFungibleTokenCore {
         msg: String,
     ) -> Promise;
 
-    fn nft_approve(&mut self, token_id: TokenId, account_id: ValidAccountId, msg: Option<String>);
+    fn nft_approve(&mut self, token_id: TokenId, account_id: ValidAccountId, msg: Option<String>) -> Option<Promise>;
 
     fn nft_revoke(&mut self, token_id: TokenId, account_id: ValidAccountId);
 
@@ -33,7 +33,7 @@ pub trait NonFungibleTokenCore {
 
     fn nft_total_supply(&self) -> U64;
 
-    fn nft_token(&self, token_id: TokenId) -> Option<Token>;
+    fn nft_token(&self, token_id: TokenId) -> Option<TokenReturnObject>;
 }
 
 #[ext_contract(ext_non_fungible_token_receiver)]
@@ -66,7 +66,7 @@ trait NonFungibleTokenResolver {
         &mut self,
         owner_id: AccountId,
         receiver_id: AccountId,
-        approved_account_ids: HashSet<AccountId>,
+        approved_account_ids: HashMap<AccountId, U64>,
         token_id: TokenId,
     ) -> bool;
 }
@@ -76,7 +76,7 @@ trait NonFungibleTokenResolver {
         &mut self,
         owner_id: AccountId,
         receiver_id: AccountId,
-        approved_account_ids: HashSet<AccountId>,
+        approved_account_ids: HashMap<AccountId, U64>,
         token_id: TokenId,
     ) -> bool;
 }
@@ -135,7 +135,7 @@ impl NonFungibleTokenCore for Contract {
         .then(ext_self::nft_resolve_transfer(
             owner_id,
             receiver_id.into(),
-            approved_account_ids,
+            convert_hashmap_to_ext_object(approved_account_ids),
             token_id,
             &env::current_account_id(),
             NO_DEPOSIT,
@@ -149,13 +149,13 @@ impl NonFungibleTokenCore for Contract {
         token_id: TokenId,
         account_id: ValidAccountId,
         msg: Option<String>,
-    ) {
+    )  -> Option<Promise> {
         let account_id: AccountId = account_id.into();
-        let storage_used = bytes_for_approved_account_id(&account_id);
+        let storage_used = bytes_for_approved_account_id((&account_id, &0_u64));
 
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
 
-        if token.approved_account_ids.contains(&account_id) {
+        if token.approved_account_ids.contains_key(&account_id) {
             // If account is already approved, refund the attached deposit
             if env::attached_deposit() != 0 {
                 Promise::new(env::predecessor_account_id()).transfer(env::attached_deposit());
@@ -166,23 +166,30 @@ impl NonFungibleTokenCore for Contract {
 
         assert_eq!(&env::predecessor_account_id(), &token.owner_id, "Predecessor must be the token owner.");
 
-        if token.approved_account_ids.insert(account_id.clone()) {
+        token.approval_counter += 1;
+
+        let mut account_approval_id = HashMap::new();
+        account_approval_id.insert(account_id.clone(), token.approval_counter);
+
+        if token.approved_account_ids.insert(account_id.clone(), token.approval_counter).is_some() {
             self.tokens_by_id.insert(&token_id, &token);
             deposit_refund(storage_used);
         }
 
-        token.approval_id += 1;
+        self.tokens_by_id.insert(&token_id, &token);
 
         if let Some(msg) = msg {
-            ext_non_fungible_approval_receiver::nft_on_approve(
+            Some(ext_non_fungible_approval_receiver::nft_on_approve(
                 token_id,
                 token.owner_id,
-                token.approval_id,
+                token.approval_counter,
                 msg,
                 &account_id,
                 NO_DEPOSIT,
                 env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
-            );
+            ))
+        } else {
+            None
         }
     }
 
@@ -196,8 +203,8 @@ impl NonFungibleTokenCore for Contract {
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
         let predecessor_account_id = env::predecessor_account_id();
         assert_eq!(&predecessor_account_id, &token.owner_id);
-        if token.approved_account_ids.remove(account_id.as_ref()) {
-            let storage_released = bytes_for_approved_account_id(account_id.as_ref());
+        if token.approved_account_ids.remove(account_id.as_ref()).is_some() {
+            let storage_released = bytes_for_approved_account_id((account_id.as_ref(), &0u64));
             Promise::new(env::predecessor_account_id())
                 .transfer(Balance::from(storage_released) * STORAGE_PRICE_PER_BYTE);
             self.tokens_by_id.insert(&token_id, &token);
@@ -224,8 +231,12 @@ impl NonFungibleTokenCore for Contract {
         self.total_supply.into()
     }
 
-    fn nft_token(&self, token_id: TokenId) -> Option<Token> {
-        self.tokens_by_id.get(&token_id)
+    fn nft_token(&self, token_id: TokenId) -> Option<TokenReturnObject> {
+        if let Some(token) = self.tokens_by_id.get(&token_id) {
+            Some(convert_token_to_ext_object(token))
+        } else {
+            None
+        }
     }
 }
 
@@ -235,18 +246,19 @@ impl NonFungibleTokenResolver for Contract {
         &mut self,
         owner_id: AccountId,
         receiver_id: AccountId,
-        approved_account_ids: HashSet<AccountId>,
+        approved_account_ids: HashMap<AccountId, U64>,
         token_id: TokenId,
     ) -> bool {
         assert_self();
 
+        let storage_map = convert_ext_hashmap_to_object(approved_account_ids);
         // Whether receiver wants to return token back to the sender, based on `nft_on_transfer`
         // call result.
         if let PromiseResult::Successful(value) = env::promise_result(0) {
             if let Ok(return_token) = near_sdk::serde_json::from_slice::<bool>(&value) {
                 if !return_token {
                     // Token was successfully received.
-                    refund_approved_account_ids(owner_id, &approved_account_ids);
+                    refund_approved_account_ids(owner_id, &storage_map);
                     return true;
                 }
             }
@@ -255,13 +267,13 @@ impl NonFungibleTokenResolver for Contract {
         let mut token = if let Some(token) = self.tokens_by_id.get(&token_id) {
             if &token.owner_id != &receiver_id {
                 // The token is not owner by the receiver anymore. Can't return it.
-                refund_approved_account_ids(owner_id, &approved_account_ids);
+                refund_approved_account_ids(owner_id, &storage_map);
                 return true;
             }
             token
         } else {
             // The token was burned and doesn't exist anymore.
-            refund_approved_account_ids(owner_id, &approved_account_ids);
+            refund_approved_account_ids(owner_id, &storage_map);
             return true;
         };
 
@@ -271,7 +283,7 @@ impl NonFungibleTokenResolver for Contract {
         self.internal_add_token_to_owner(&owner_id, &token_id);
         token.owner_id = owner_id;
         refund_approved_account_ids(receiver_id, &token.approved_account_ids);
-        token.approved_account_ids = approved_account_ids;
+        token.approved_account_ids = storage_map;
         self.tokens_by_id.insert(&token_id, &token);
 
         false

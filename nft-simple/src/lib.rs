@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
-use near_sdk::json_types::ValidAccountId;
+use near_sdk::json_types::{ValidAccountId, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
@@ -19,13 +19,23 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 
 pub type TokenId = String;
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+/// TokenReturnObject is used to help JSON
+/// use U64 instead of u64
+#[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
+pub struct TokenReturnObject {
+    pub owner_id: AccountId,
+    pub metadata: String,
+    pub approved_account_ids: HashMap<AccountId, U64>,
+    pub approval_counter: U64,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
 pub struct Token {
     pub owner_id: AccountId,
     pub metadata: String,
-    pub approved_account_ids: HashSet<AccountId>,
-    pub approval_id: u64,
+    pub approved_account_ids: HashMap<AccountId, u64>,
+    pub approval_counter: u64,
 }
 
 #[near_bindgen]
