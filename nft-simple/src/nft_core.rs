@@ -187,7 +187,7 @@ impl NonFungibleTokenCore for Contract {
                 &account_id,
                 NO_DEPOSIT,
                 env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
-            ).as_return();
+            );
         }
     }
 
