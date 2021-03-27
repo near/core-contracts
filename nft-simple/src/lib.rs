@@ -21,23 +21,13 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 
 pub type TokenId = String;
 
-/// TokenReturnObject is used to help JSON
-/// use U64 instead of u64
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 #[serde(crate = "near_sdk::serde")]
-pub struct TokenReturnObject {
+pub struct Token {
     pub owner_id: AccountId,
     pub metadata: TokenMetadata,
     pub approved_account_ids: HashMap<AccountId, U64>,
     pub approval_counter: U64,
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-pub struct Token {
-    pub owner_id: AccountId,
-    pub metadata: TokenMetadata,
-    pub approved_account_ids: HashMap<AccountId, u64>,
-    pub approval_counter: u64,
 }
 
 #[near_bindgen]

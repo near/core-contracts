@@ -10,7 +10,7 @@ impl Contract {
             owner_id: self.owner_id.clone(),
             metadata,
             approved_account_ids: Default::default(),
-            approval_counter: 0,
+            approval_counter: 0.into(),
         };
         assert!(
             self.tokens_by_id.insert(&token_id, &token).is_none(),
