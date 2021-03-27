@@ -25,7 +25,7 @@ pub trait NonFungibleTokenCore {
         msg: String,
     ) -> Promise;
 
-    fn nft_approve(&mut self, token_id: TokenId, account_id: ValidAccountId, msg: Option<String>) -> Option<Promise>;
+    fn nft_approve(&mut self, token_id: TokenId, account_id: ValidAccountId, msg: Option<String>);
 
     fn nft_revoke(&mut self, token_id: TokenId, account_id: ValidAccountId);
 
@@ -149,11 +149,13 @@ impl NonFungibleTokenCore for Contract {
         token_id: TokenId,
         account_id: ValidAccountId,
         msg: Option<String>,
-    )  -> Option<Promise> {
+    ) {
         let account_id: AccountId = account_id.into();
         let storage_used = bytes_for_approved_account_id((&account_id, &0_u64.into()));
 
         let mut token = self.tokens_by_id.get(&token_id).expect("Token not found");
+
+        assert_eq!(&env::predecessor_account_id(), &token.owner_id, "Predecessor must be the token owner.");
 
         if token.approved_account_ids.contains_key(&account_id) {
             // If account is already approved, refund the attached deposit
@@ -165,13 +167,7 @@ impl NonFungibleTokenCore for Contract {
             assert!(env::attached_deposit() >= storage_cost, "attached_deposit doesn't cover storage of account_id: {}. Need {} yoctoⓃ ({} Ⓝ )", account_id.clone(), storage_cost, storage_cost as f32 * YOCTO_MULTIPLIER);
         }
 
-        assert_eq!(&env::predecessor_account_id(), &token.owner_id, "Predecessor must be the token owner.");
-
         token.approval_counter = U64::from(token.approval_counter.0 + 1);
-
-        // aloha todo remove these two possibly
-        // let mut account_approval_id = HashMap::new();
-        // account_approval_id.insert(account_id.clone(), token.approval_counter);
 
         if token.approved_account_ids.insert(account_id.clone(), token.approval_counter).is_some() {
             self.tokens_by_id.insert(&token_id, &token);
@@ -181,7 +177,7 @@ impl NonFungibleTokenCore for Contract {
         self.tokens_by_id.insert(&token_id, &token);
 
         if let Some(msg) = msg {
-            Some(ext_non_fungible_approval_receiver::nft_on_approve(
+            ext_non_fungible_approval_receiver::nft_on_approve(
                 token_id,
                 token.owner_id,
                 token.approval_counter,
@@ -189,9 +185,7 @@ impl NonFungibleTokenCore for Contract {
                 &account_id,
                 NO_DEPOSIT,
                 env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
-            ))
-        } else {
-            None
+            );
         }
     }
 
