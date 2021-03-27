@@ -1,5 +1,7 @@
 use crate::*;
 
+use std::mem::size_of;
+
 const YOCTO_MULTIPLIER: f32 = 0.000000000000000000000001;
 
 /// Price per 1 byte of storage from mainnet config after `1.18.0` release and protocol version `42`.
@@ -49,7 +51,7 @@ pub(crate) fn deposit_refund(storage_used: u64) {
 
 pub(crate) fn bytes_for_approved_account_id(hm: (&AccountId, &u64)) -> u64 {
     // The extra 4 bytes are coming from Borsh serialization to store the length of the string.
-    hm.0.len() as u64 + 4
+    hm.0.len() as u64 + 4 + size_of::<u64>() as u64
 }
 
 pub(crate) fn refund_approved_account_ids(
