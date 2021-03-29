@@ -8,7 +8,11 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "3.0.0-pre.release"
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev="249dacdcd3fd34bc00f0895a275f33f05cd910c1" }
+
+[dev-dependencies]
+near-sdk-sim = { git = "https://github.com/near/near-sdk-rs.git", rev="249dacdcd3fd34bc00f0895a275f33f05cd910c1" }
+test-exquisite-corpse = { path = "./test-contracts/exquisite-corpse" }
 
 [profile.release]
 codegen-units=1

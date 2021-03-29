@@ -39,7 +39,6 @@ pub trait NonFungibleTokenCore {
 #[ext_contract(ext_non_fungible_token_receiver)]
 trait NonFungibleTokenReceiver {
     /// Returns `true` if the token should be returned back to the sender.
-    /// TODO: Maybe make it inverse. E.g. true to keep it.
     fn nft_on_transfer(
         &mut self,
         sender_id: AccountId,
@@ -57,8 +56,10 @@ trait NonFungibleTokenApprovalsReceiver {
         owner_id: AccountId,
         approval_id: U64,
         msg: String,
-    ) -> Promise;
+    );
 }
+
+// TODO: create nft_on_revoke
 
 #[ext_contract(ext_self)]
 trait NonFungibleTokenResolver {

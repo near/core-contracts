@@ -1,0 +1,12 @@
+[package]
+name = "test-exquisite-corpse"
+version = "0.0.1"
+authors = ["Near Inc <hello@nearprotocol.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev="249dacdcd3fd34bc00f0895a275f33f05cd910c1" }
+
