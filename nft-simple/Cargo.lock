@@ -1690,7 +1690,24 @@ dependencies = [
  "borsh",
  "bs58",
  "near-primitives-core 0.1.0",
- "near-sdk-macros",
+ "near-sdk-macros 3.0.0-pre.3",
+ "near-vm-logic 3.0.0",
+ "serde",
+ "serde_json",
+ "wee_alloc",
+]
+
+[[package]]
+name = "near-sdk"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "671094120c7c54d5378e54d5e9d3d51b0248646e9028ffc11d7c9bd8f69d3534"
+dependencies = [
+ "base64 0.13.0",
+ "borsh",
+ "bs58",
+ "near-primitives-core 0.1.0",
+ "near-sdk-macros 3.0.1",
  "near-vm-logic 3.0.0",
  "serde",
  "serde_json",
@@ -1709,11 +1726,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "near-sdk-core"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d61e12885c4917ef8bee7edcc94198ad19c12c126dc5d8c3a48e6b0bf6fe9108"
+dependencies = [
+ "Inflector",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "near-sdk-macros"
 version = "3.0.0-pre.3"
 source = "git+https://github.com/near/near-sdk-rs.git?rev=249dacdcd3fd34bc00f0895a275f33f05cd910c1#249dacdcd3fd34bc00f0895a275f33f05cd910c1"
 dependencies = [
- "near-sdk-core",
+ "near-sdk-core 3.0.0-pre.3",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "near-sdk-macros"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5614c69448e846bebb2223a0742ebb92df87d2e67a0fdff2cff5778e9a463585"
+dependencies = [
+ "near-sdk-core 3.0.1",
  "proc-macro2",
  "quote",
  "syn",
@@ -1721,8 +1762,9 @@ dependencies = [
 
 [[package]]
 name = "near-sdk-sim"
-version = "3.0.0-pre.3"
-source = "git+https://github.com/near/near-sdk-rs.git?rev=249dacdcd3fd34bc00f0895a275f33f05cd910c1#249dacdcd3fd34bc00f0895a275f33f05cd910c1"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d90331a92600868bd66485c20bbdb17b103252f35648689db6ee6b7c311d92"
 dependencies = [
  "funty",
  "lazy-static-include",
@@ -1730,7 +1772,7 @@ dependencies = [
  "near-pool",
  "near-primitives",
  "near-runtime",
- "near-sdk",
+ "near-sdk 3.0.1",
  "near-store",
  "near-vm-logic 4.0.0-pre.1",
 ]
@@ -1845,7 +1887,7 @@ dependencies = [
 name = "nft_simple"
 version = "0.1.0"
 dependencies = [
- "near-sdk",
+ "near-sdk 3.0.1",
  "near-sdk-sim",
  "test-exquisite-corpse",
 ]
@@ -2725,7 +2767,7 @@ dependencies = [
 name = "test-exquisite-corpse"
 version = "0.0.1"
 dependencies = [
- "near-sdk",
+ "near-sdk 3.0.0-pre.3",
 ]
 
 [[package]]
