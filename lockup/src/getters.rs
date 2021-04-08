@@ -78,7 +78,7 @@ impl LockupContract {
             if lockup_timestamp <= block_timestamp {
                 let unreleased_amount =
                     if let &Some(release_duration) = &self.lockup_information.release_duration {
-                        let end_timestamp = transfers_timestamp.0.saturating_add(release_duration);
+                        let end_timestamp = lockup_timestamp.saturating_add(release_duration);
                         if block_timestamp >= end_timestamp {
                             // Everything is released
                             0

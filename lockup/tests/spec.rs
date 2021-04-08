@@ -1160,7 +1160,7 @@ fn test_release_schedule_unlock_transfers() {
 
     let args = InitLockupArgs {
         owner_account_id: owner.account_id.clone(),
-        lockup_duration: 1000000000.into(),
+        lockup_duration: 0.into(),
         lockup_timestamp: None,
         transfers_information: TransfersInformation::TransfersDisabled {
             transfer_poll_account_id,
@@ -1241,6 +1241,9 @@ fn test_release_schedule_unlock_transfers() {
 
     let full_lockup_amount = lockup_amount + ntoy(35);
 
+    // Reset timestamp to 0, to avoid any release
+    r.current_block().block_timestamp = unlock_timestamp;
+
     let res: U128 = call_lockup(&r, "get_locked_amount", "");
     assert_eq!(res.0, full_lockup_amount);
 
@@ -1280,6 +1283,9 @@ fn test_release_schedule_unlock_transfers() {
         .unwrap();
     assert_eq!(res.status, ExecutionStatus::SuccessValue(b"true".to_vec()));
 
+    // Reset timestamp to 0, to avoid any release
+    r.current_block().block_timestamp = unlock_timestamp;
+
     let res: U128 = call_lockup(&r, "get_locked_amount", "");
     assert_eq!(res.0, lockup_amount + ntoy(35));
 
@@ -1308,6 +1314,9 @@ fn test_release_schedule_unlock_transfers() {
     assert_eq!(new_owner_balance, owner_balance + transfer_amount);
 
     let liquid_balance = received_reward - transfer_amount;
+
+    // Reset timestamp to 0, to avoid any release
+    r.current_block().block_timestamp = unlock_timestamp;
 
     let res: U128 = call_lockup(&r, "get_locked_amount", "");
     assert_eq!(res.0, full_lockup_amount);
@@ -1338,7 +1347,6 @@ fn test_release_schedule_unlock_transfers() {
     let new_owner_balance = owner.account(&r).amount;
     assert_eq!(new_owner_balance, owner_balance);
 
-    // Adjusting block timestamp to be after lockup duration.
     // At this timestamp only 1/1000 of the lockup_amount is released.
     r.current_block().block_timestamp = unlock_timestamp + 1000000000;
 
