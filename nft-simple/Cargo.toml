@@ -8,11 +8,11 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "=3.0.1"
+near-sdk = "=3.1.0"
 
 [dev-dependencies]
-near-sdk-sim = "=3.0.1"
-test-exquisite-corpse = { path = "./test-contracts/exquisite-corpse" }
+near-sdk-sim = "=3.1.0"
+test-nft = { path = "./test-contracts/test-nft" }
 
 [profile.release]
 codegen-units=1

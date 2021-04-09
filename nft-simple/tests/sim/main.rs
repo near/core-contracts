@@ -1,25 +1,20 @@
-use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::Balance;
 use near_sdk_sim::transaction::ExecutionStatus;
 use near_sdk_sim::{init_simulator, to_yocto, UserAccount, DEFAULT_GAS, STORAGE_AMOUNT};
 use nft_simple::JsonToken;
-use test_exquisite_corpse::ExquisiteCorpse;
 
 // Load in contract bytes at runtime
 near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
     NFT_WASM_BYTES => "res/nft_simple.wasm",
-    FT_WASM_BYTES => "res/fungible_token.wasm",
-    EC_WASM_BYTES => "res/test_exquisite_corpse.wasm",
+    TEST_WASM_BYTES => "res/test_nft.wasm"
 }
 
 type TokenId = String;
 
 const NFT_ID: &str = "nft.sim";
-const FT_ID: &str = "ndai";
-const EXQUISITE_CORPSE_ID: &str = "ec.sim";
+const TEST_ID: &str = "test.sim";
 const APPROVAL_COST: Balance = 210_000_000_000_000_000_000;
-const FT_STORAGE_COST: Balance = 1_250_000_000_000_000_000_000;
 
 fn helper_mint(nft: &UserAccount, token_id: TokenId) {
     nft.call(
@@ -35,22 +30,6 @@ fn helper_mint(nft: &UserAccount, token_id: TokenId) {
         .into_bytes(),
         DEFAULT_GAS,
         to_yocto("0.01"),
-    )
-    .assert_success();
-}
-
-fn helper_nft_transfer(nft: &UserAccount, token_id: TokenId, recipient: &UserAccount) {
-    nft.call(
-        nft.account_id(),
-        "nft_transfer",
-        &json!({
-            "receiver_id": recipient.account_id(),
-            "token_id": token_id
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS,
-        1, // deposit
     )
     .assert_success();
 }
@@ -218,331 +197,106 @@ fn simulate_approval_workflow() {
 }
 
 #[test]
-fn simulate_exquisite_corpse_interactions() {
+fn simulate_on_functions() {
     let (root_account, nft) = sim_helper_init();
-    let (alice, _) = sim_helper_create_alice_bob(&root_account);
 
-    // Mint a number of tokens to be sent or approved to EC
-    helper_mint(&nft, "0".to_string()); // transfer head
-    helper_mint(&nft, "1".to_string()); // transfer midsection
-    helper_mint(&nft, "2".to_string()); // transfer midsection
-    helper_mint(&nft, "3".to_string()); // transfer feet
-    helper_mint(&nft, "4".to_string()); // approve head
-    helper_mint(&nft, "5".to_string()); // approve head
-    helper_mint(&nft, "6".to_string()); // approve midsection
-    helper_mint(&nft, "7".to_string()); // approve feet
+    helper_mint(&nft, "0".to_string());
+    helper_mint(&nft, "1".to_string());
 
-    let hundred_near = to_yocto("100");
-    let artist_head = root_account.create_user("artist-head.sim".to_string(), hundred_near);
-    let artist_mid = root_account.create_user("artist-midsection.sim".to_string(), hundred_near);
-    let artist_feet = root_account.create_user("artist-feet.sim".to_string(), hundred_near);
+    // Set up test contract
+    let test_contract = root_account.deploy(&TEST_WASM_BYTES, TEST_ID.into(), STORAGE_AMOUNT);
 
-    helper_nft_transfer(&nft, "0".to_string(), &artist_head);
-    helper_nft_transfer(&nft, "1".to_string(), &artist_mid);
-    helper_nft_transfer(&nft, "2".to_string(), &artist_mid);
-    helper_nft_transfer(&nft, "3".to_string(), &artist_feet);
-    helper_nft_transfer(&nft, "4".to_string(), &artist_head);
-    helper_nft_transfer(&nft, "5".to_string(), &artist_head);
-    helper_nft_transfer(&nft, "6".to_string(), &artist_mid);
-    helper_nft_transfer(&nft, "7".to_string(), &artist_feet);
+    let approve_result = nft.call(
+            nft.account_id(),
+            "nft_approve",
+            &json!({
+                "token_id": "0",
+                "account_id": test_contract.account_id(),
+                "msg": ""
+            })
+            .to_string()
+            .into_bytes(),
+            DEFAULT_GAS,
+            APPROVAL_COST, // attached deposit
+        );
+    let log = approve_result.logs();
+    assert_eq!(log[0], "Approved correctly".to_string());
 
-    // Set up exquisite corpse
-    let ec = sim_helper_init_ec(&root_account);
-
-    // Artists transfer and call NFTs to EC
-    // Transfer index 0 (only head)
-    artist_head
+    // Test nft_transfer_call with message indicating it succeeds.
+    let mut transfer_call_result = nft
         .call(
             nft.account_id(),
             "nft_transfer_call",
             &json!({
-                "receiver_id": ec.account_id(),
+                "receiver_id": test_contract.account_id(),
                 "token_id": "0",
-                "msg": r#"{"section": "head"}"#
+                "msg": r#"{"should_succeed": true}"#
             })
             .to_string()
             .into_bytes(),
             DEFAULT_GAS,
             1, // attached deposit
-        )
-        .assert_success();
+        );
+    let mut promise_results = transfer_call_result.promise_results();
+    let mut ex_result = promise_results.get(2).unwrap().as_ref();
+    assert_eq!(ex_result.unwrap().logs()[0], "Transferred correctly.".to_string());
 
-    let token_info: JsonToken = nft
+    // Confirm the new owner
+    let mut token_info: JsonToken = root_account
         .view(
             nft.account_id(),
             "nft_token",
             &json!({
-                "receiver_id": ec.account_id(),
-                "token_id": "0",
-                "msg": r#"{"section": "head"}"#
+                "token_id": "0"
             })
-            .to_string()
-            .into_bytes(),
+                .to_string()
+                .into_bytes(),
         )
         .unwrap_json();
 
-    // Ensure that new owner is the exquisite corpse contract.
     assert_eq!(
         token_info.owner_id,
-        ec.account_id(),
-        "Expected ec account to be the new owner."
+        test_contract.account_id(),
+        "NFT didn't transfer ownership as expected."
     );
 
-    // Transfer index 1 (first head)
-    artist_mid
+    // Test nft_transfer_call with message indicating it fails.
+    transfer_call_result = nft
         .call(
             nft.account_id(),
             "nft_transfer_call",
             &json!({
-                "receiver_id": ec.account_id(),
+                "receiver_id": test_contract.account_id(),
                 "token_id": "1",
-                "msg": r#"{"section": "mid"}"#
+                "msg": r#"{"should_succeed": false}"#
             })
             .to_string()
             .into_bytes(),
-            DEFAULT_GAS,
-            1, // attached deposit
-        )
-        .assert_success();
-    // Transfer index 2 (second head)
-    artist_mid
-        .call(
-            nft.account_id(),
-            "nft_transfer_call",
-            &json!({
-                "receiver_id": ec.account_id(),
-                "token_id": "2",
-                "msg": r#"{"section": "mid"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            1, // attached deposit
-        )
-        .assert_success();
+        DEFAULT_GAS,
+        1, // attached deposit
+        );
+    promise_results = transfer_call_result.promise_results();
+    ex_result = promise_results.get(2).unwrap().as_ref();
+    assert_eq!(ex_result.unwrap().logs()[0], "Did not transfer correctly, returning NFT.".to_string());
 
-    // Ensure there are no auto-generated exquisite corpses yet.
-    let mut exquisite_corpses: Vec<ExquisiteCorpse> = nft
-        .view(ec.account_id(), "show_all_corpses", &[])
-        .unwrap_json();
-
-    assert_eq!(exquisite_corpses.len(), 0);
-
-    // Once we add this, it'll automatically generate an exquisite corpse.
-    // Transfer index 3 (only feet)
-    artist_feet
-        .call(
-            nft.account_id(),
-            "nft_transfer_call",
-            &json!({
-                "receiver_id": ec.account_id(),
-                "token_id": "3",
-                "msg": r#"{"section": "feet"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            1, // attached deposit
-        )
-        .assert_success();
-
-    exquisite_corpses = nft
-        .view(ec.account_id(), "show_all_corpses", &[])
-        .unwrap_json();
-
-    // This shows that an action has been taken using nft_transfer_call
-    assert_eq!(exquisite_corpses.len(), 1);
-
-    // Artists approve NFTs to EC
-    // Transfer index 4 (first head)
-    artist_head
-        .call(
-            nft.account_id(),
-            "nft_approve",
-            &json!({
-                "token_id": "4",
-                "account_id": ec.account_id(),
-                "msg": r#"{"section": "head"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            APPROVAL_COST, // attached deposit
-        )
-        .assert_success();
-    // Transfer index 5 (second head)
-    artist_head
-        .call(
-            nft.account_id(),
-            "nft_approve",
-            &json!({
-                "token_id": "5",
-                "account_id": ec.account_id(),
-                "msg": r#"{"section": "head"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            APPROVAL_COST, // attached deposit
-        )
-        .assert_success();
-
-    // Transfer index 6 (only midsection)
-    artist_mid
-        .call(
-            nft.account_id(),
-            "nft_approve",
-            &json!({
-                "token_id": "6",
-                "account_id": ec.account_id(),
-                "msg": r#"{"section": "mid"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            APPROVAL_COST, // attached deposit
-        )
-        .assert_success();
-
-    // Should not be able to manually create an exquisite corpse until there are feet.
-    let mut can_manually_create_ec: bool = root_account
-        .view(ec.account_id(), "can_create_corpse_from_approvals", &[])
-        .unwrap_json();
-    assert!(!can_manually_create_ec, "Shouldn't be able to manually create an exquisite corpse until all pieces have been approved.");
-
-    // Transfer index 7 (only feet)
-    artist_feet
-        .call(
-            nft.account_id(),
-            "nft_approve",
-            &json!({
-                "token_id": "7",
-                "account_id": ec.account_id(),
-                "msg": r#"{"section": "feet"}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            APPROVAL_COST, // attached deposit
-        )
-        .assert_success();
-
-    // Now a user can create a manual exquisite corpse
-    can_manually_create_ec = root_account
-        .view(ec.account_id(), "can_create_corpse_from_approvals", &[])
-        .unwrap_json();
-    assert!(
-        can_manually_create_ec,
-        "Should be able to manually create an exquisite corpse once all pieces have been approved."
-    );
-
-    // Set up fungible token to purchase an exquisite corpse selection, since it costs 10 tokens from "ndai"
-    let ft = sim_helper_init_ft(&root_account);
-
-    let alice_balance: U128 = alice
+    // Ensure that token 1's ownership hasn't changed.
+    token_info = root_account
         .view(
-            ft.account_id(),
-            "ft_balance_of",
+            nft.account_id(),
+            "nft_token",
             &json!({
-                "account_id": alice.account_id()
+                "token_id": "1"
             })
             .to_string()
             .into_bytes(),
         )
         .unwrap_json();
-    assert_eq!(alice_balance.0, 0u128);
 
-    // Set storage for Alice and the Exquisite Corpse contract
-    alice
-        .call(
-            ft.account_id(),
-            "storage_deposit",
-            &json!({
-                "account_id": alice.account_id()
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            FT_STORAGE_COST, // attached deposit
-        )
-        .assert_success();
-    ec.call(
-        ft.account_id(),
-        "storage_deposit",
-        &json!({
-            "account_id": ec.account_id()
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS,
-        FT_STORAGE_COST, // attached deposit
-    )
-    .assert_success();
-
-    // Transfer from tokens to Alice.
-    ft.call(
-        ft.account_id(),
-        "ft_transfer",
-        &json!({
-            "receiver_id": alice.account_id(),
-            "amount": U128::from(200)
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS,
-        1, // deposit
-    )
-    .assert_success();
-
-    /*
-       receiver_id: ValidAccountId,
-       amount: U128,
-       memo: Option<String>,
-       msg: String,
-    */
-    let num_tokens_used: U128 = alice
-        .call(
-            ft.account_id(),
-            "ft_transfer_call",
-            &json!({
-                "receiver_id": ec.account_id(),
-                "amount": U128::from(10),
-                "msg": r#"{
-            "head": {
-                "index": "1",
-                "token_contract": "nft.sim",
-                "token_id": "5",
-                "previous_owner": "artist-head.sim"
-            },
-            "mid": {
-                "index": "0",
-                "token_contract": "nft.sim",
-                "token_id": "6",
-                "previous_owner": "artist-midsection.sim"
-            },
-            "feet": {
-                "index": "0",
-                "token_contract": "nft.sim",
-                "token_id": "7",
-                "previous_owner": "artist-feet.sim"
-            }}"#
-            })
-            .to_string()
-            .into_bytes(),
-            DEFAULT_GAS,
-            1, // deposit
-        )
-        .unwrap_json();
-
-    exquisite_corpses = nft
-        .view(ec.account_id(), "show_all_corpses", &[])
-        .unwrap_json();
-
-    // This shows that an action has been taken using nft_transfer_call
-    assert_eq!(exquisite_corpses.len(), 2);
-
-    // Ensure that all 10 tokens were used.
-    assert_eq!(num_tokens_used.0, 10);
+    assert_eq!(
+        token_info.owner_id,
+        nft.account_id(),
+        "NFT should not have transferred ownership."
+    );
 }
 
 /// Basic initialization returning the "root account" for the simulator
@@ -587,37 +341,4 @@ fn sim_helper_create_alice_bob(root_account: &UserAccount) -> (UserAccount, User
     let alice = root_account.create_user("alice.sim".to_string(), hundred_near);
     let bob = root_account.create_user("bob.sim".to_string(), hundred_near);
     (alice, bob)
-}
-
-fn sim_helper_init_ft(root_account: &UserAccount) -> UserAccount {
-    // Deploy fungible token and call "new" method
-    let ft = root_account.deploy(&FT_WASM_BYTES, FT_ID.into(), STORAGE_AMOUNT);
-    ft.call(
-        ft.account_id(),
-        "new_default_meta",
-        &json!({
-            "owner_id": ft.account_id(),
-            "total_supply": "1000000"
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS,
-        0, // attached deposit
-    )
-    .assert_success();
-    ft
-}
-
-fn sim_helper_init_ec(root_account: &UserAccount) -> UserAccount {
-    // Deploy fungible token and call "new" method
-    let ec = root_account.deploy(&EC_WASM_BYTES, EXQUISITE_CORPSE_ID.into(), STORAGE_AMOUNT);
-    ec.call(
-        ec.account_id(),
-        "new",
-        &[],
-        DEFAULT_GAS,
-        0, // attached deposit
-    )
-    .assert_success();
-    ec
 }
