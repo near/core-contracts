@@ -1,66 +1,68 @@
 use crate::*;
+use near_sdk::{log, CryptoHash};
+use std::mem::size_of;
 
-const YOCTO_MULTIPLIER: f32 = 0.000000000000000000000001;
-
-/// Price per 1 byte of storage from mainnet config after `1.18.0` release and protocol version `42`.
-/// It's 10 times lower than the genesis price.
-pub(crate) const STORAGE_PRICE_PER_BYTE: Balance = 10_000_000_000_000_000_000;
-
-pub(crate) fn unique_prefix(account_id: &AccountId) -> Vec<u8> {
-    let mut prefix = Vec::with_capacity(33);
-    prefix.push(b'o');
-    prefix.extend(env::sha256(account_id.as_bytes()));
-    prefix
+pub(crate) fn hash_account_id(account_id: &AccountId) -> CryptoHash {
+    let mut hash = CryptoHash::default();
+    hash.copy_from_slice(&env::sha256(account_id.as_bytes()));
+    hash
 }
 
 pub(crate) fn assert_one_yocto() {
     assert_eq!(
         env::attached_deposit(),
         1,
-        "Requires attached deposit of exactly 1 yoctoⓃ ({} Ⓝ )",
-        YOCTO_MULTIPLIER
+        "Requires attached deposit of exactly 1 yoctoNEAR",
     )
 }
 
-pub(crate) fn assert_self() {
-    assert_eq!(
-        env::predecessor_account_id(),
-        env::current_account_id(),
-        "Method is private"
-    );
+pub(crate) fn assert_at_least_one_yocto() {
+    assert!(
+        env::attached_deposit() >= 1,
+        "Requires attached deposit of at least 1 yoctoNEAR",
+    )
 }
 
-pub(crate) fn deposit_refund(storage_used: u64) {
-    let required_cost = STORAGE_PRICE_PER_BYTE * Balance::from(storage_used);
+pub(crate) fn refund_deposit(storage_used: u64) {
+    let required_cost = env::storage_byte_cost() * Balance::from(storage_used);
     let attached_deposit = env::attached_deposit();
 
     assert!(
         required_cost <= attached_deposit,
-        "Must attach {} yoctoⓃ to cover storage ({} Ⓝ )",
+        "Must attach {} yoctoNEAR to cover storage",
         required_cost,
-        required_cost as f32  * YOCTO_MULTIPLIER
     );
 
     let refund = attached_deposit - required_cost;
-    if refund > 0 {
+    if refund > 1 {
         Promise::new(env::predecessor_account_id()).transfer(refund);
     }
 }
 
+// TODO: need a way for end users to determine how much an approval will cost.
 pub(crate) fn bytes_for_approved_account_id(account_id: &AccountId) -> u64 {
     // The extra 4 bytes are coming from Borsh serialization to store the length of the string.
-    account_id.len() as u64 + 4
+    account_id.len() as u64 + 4 + size_of::<u64>() as u64
+}
+
+pub(crate) fn refund_approved_account_ids_iter<'a, I>(
+    account_id: AccountId,
+    approved_account_ids: I,
+) -> Promise
+where
+    I: Iterator<Item = &'a AccountId>,
+{
+    let storage_released: u64 = approved_account_ids
+        .map(bytes_for_approved_account_id)
+        .sum();
+    Promise::new(account_id).transfer(Balance::from(storage_released) * env::storage_byte_cost())
 }
 
 pub(crate) fn refund_approved_account_ids(
     account_id: AccountId,
-    approved_account_ids: &HashSet<AccountId>,
+    approved_account_ids: &HashMap<AccountId, U64>,
 ) -> Promise {
-    let storage_released: u64 = approved_account_ids
-        .iter()
-        .map(bytes_for_approved_account_id)
-        .sum();
-    Promise::new(account_id).transfer(Balance::from(storage_released) * STORAGE_PRICE_PER_BYTE)
+    refund_approved_account_ids_iter(account_id, approved_account_ids.keys())
 }
 
 impl Contract {
@@ -77,10 +79,15 @@ impl Contract {
         account_id: &AccountId,
         token_id: &TokenId,
     ) {
-        let mut tokens_set = self
-            .tokens_per_owner
-            .get(account_id)
-            .unwrap_or_else(|| UnorderedSet::new(unique_prefix(account_id)));
+        let mut tokens_set = self.tokens_per_owner.get(account_id).unwrap_or_else(|| {
+            UnorderedSet::new(
+                StorageKey::TokenPerOwnerInner {
+                    account_id_hash: hash_account_id(&account_id),
+                }
+                .try_to_vec()
+                .unwrap(),
+            )
+        });
         tokens_set.insert(token_id);
         self.tokens_per_owner.insert(account_id, &tokens_set);
     }
@@ -107,53 +114,54 @@ impl Contract {
         sender_id: &AccountId,
         receiver_id: &AccountId,
         token_id: &TokenId,
-        enforce_owner_id: Option<&ValidAccountId>,
+        approval_id: Option<U64>,
         memo: Option<String>,
-    ) -> (AccountId, HashSet<AccountId>) {
-        let Token {
-            owner_id,
-            metadata,
-            approved_account_ids,
-        } = self.tokens_by_id.get(token_id).expect("Token not found");
-        if sender_id != &owner_id && !approved_account_ids.contains(sender_id) {
+    ) -> Token {
+        let token = self.tokens_by_id.get(token_id).expect("Token not found");
+
+        if sender_id != &token.owner_id && !token.approved_account_ids.contains_key(sender_id) {
             env::panic(b"Unauthorized");
         }
 
-        if let Some(enforce_owner_id) = enforce_owner_id {
+        // If they included an enforce_approval_id, check the receiver approval id
+        if let Some(enforced_approval_id) = approval_id {
+            let actual_approval_id = token
+                .approved_account_ids
+                .get(sender_id)
+                .expect("Sender is not approved account");
             assert_eq!(
-                &owner_id,
-                enforce_owner_id.as_ref(),
-                "The token owner is different from enforced"
+                actual_approval_id, &enforced_approval_id,
+                "The actual approval_id {} is different from the given approval_id {}",
+                actual_approval_id.0, enforced_approval_id.0,
             );
         }
 
         assert_ne!(
-            &owner_id, receiver_id,
+            &token.owner_id, receiver_id,
             "The token owner and the receiver should be different"
         );
 
-        env::log(
-            format!(
-                "Transfer {} from @{} to @{}",
-                token_id, &owner_id, receiver_id
-            )
-            .as_bytes(),
+        log!(
+            "Transfer {} from @{} to @{}",
+            token_id,
+            &token.owner_id,
+            receiver_id
         );
 
-        self.internal_remove_token_from_owner(&owner_id, token_id);
+        self.internal_remove_token_from_owner(&token.owner_id, token_id);
         self.internal_add_token_to_owner(receiver_id, token_id);
 
-        let token = Token {
+        let new_token = Token {
             owner_id: receiver_id.clone(),
-            metadata,
             approved_account_ids: Default::default(),
+            next_approval_id: token.next_approval_id,
         };
-        self.tokens_by_id.insert(token_id, &token);
+        self.tokens_by_id.insert(token_id, &new_token);
 
         if let Some(memo) = memo {
             env::log(format!("Memo: {}", memo).as_bytes());
         }
 
-        (owner_id, approved_account_ids)
+        token
     }
 }

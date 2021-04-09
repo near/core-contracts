@@ -1,0 +1,2 @@
+This directory contains contracts used in [simulation tests](https://docs.near.org/docs/develop/contracts/rust/testing-rust-contracts#simulation-tests).
+The simulation tests can be found in `./tests/sim` and will use the compiled contracts' bytecode.
