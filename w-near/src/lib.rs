@@ -16,6 +16,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{ValidAccountId, U128};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PromiseOrValue};
 
+mod legacy_storage;
 mod w_near;
 
 near_sdk::setup_alloc!();
@@ -30,7 +31,6 @@ pub struct Contract {
 impl Contract {
     #[init]
     pub fn new() -> Self {
-        assert!(!env::state_exists(), "Already initialized");
         Self {
             ft: FungibleToken::new(b"a".to_vec()),
         }
