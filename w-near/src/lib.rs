@@ -43,6 +43,7 @@ impl Contract {
 near_contract_standards::impl_fungible_token_core!(Contract, ft);
 near_contract_standards::impl_fungible_token_storage!(Contract, ft);
 
+#[near_bindgen]
 impl FungibleTokenMetadataProvider for Contract {
     fn ft_metadata(&self) -> FungibleTokenMetadata {
         FungibleTokenMetadata {
