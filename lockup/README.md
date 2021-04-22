@@ -1,5 +1,7 @@
 # Lockup / Vesting contract
 
+# PLEASE WAIT UNTIL [ISSUE 141](https://github.com/near/core-contracts/issues/141) IS RESOLVED BEFORE DEPLOYING THE CONTRACT
+
 ## Overview
 
 This contract acts as an escrow that locks and holds an owner's tokens for a lockup period. A lockup period starts
