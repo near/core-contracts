@@ -6,7 +6,7 @@ This contract acts as an escrow that locks and holds an owner's tokens for a loc
 The contract consists of lockup and vesting processes that go simultaneously.
 A high-level overview could be found [in NEAR documentation](https://docs.near.org/docs/tokens/lockup).
 
-A lockup period starts from the specified timestamp (or, if not specified, from the moment when [transfers were enabled by voting](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/) on 2020-10-13, 18:38:58 UTC or `1602614338293769340` nanoseconds unix time) and lasts for the specified duration.
+A lockup period starts from the specified timestamp and lasts for the specified duration.
 Tokens will be unlocked linearly.
 
 Vesting is an additional mechanism. It also locks the tokens, and it allows to configure 2 more options:
@@ -14,9 +14,9 @@ Vesting is an additional mechanism. It also locks the tokens, and it allows to c
 2. Cliff vesting period.
 
 The owner can add a full access key to the account if all conditions are met:
-- [Transfers are enabled](https://near.org/blog/near-mainnet-is-now-community-operated/) ([Phase II launch on MainNet enabled transfers](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/));
 - Vesting and lockup processes finished;
-- The termination process is ended (if applicable).
+- The termination process is ended (if applicable);
+- [Transfers are enabled](https://near.org/blog/near-mainnet-is-now-community-operated/) ([Phase II launch on MainNet enabled transfers](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/)).
 
 This will allow the owner to turn this contract account into a regular account, claim the remaining tokens, and remove the contract or delete the account.
 
@@ -25,18 +25,19 @@ This will allow the owner to turn this contract account into a regular account, 
 Lockup is a mechanism of linear unlocking of tokens that could not be terminated.
 It is described by the following fields:
 - `lockup_timestamp` - The moment when tokens start linearly unlocking;
-- `lockup_duration` - Alternative way to set the moment when the tokens become unlock.
-  The duration from the moment transfers were enabled to the moment when linear unlocking begins;
+- `lockup_duration` - [deprecated] Alternative way to set the moment when the tokens become unlock.
+  The duration from [the moment transfers were enabled](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/) to the moment when linear unlocking begins;
 - `release_duration` - The length of the unlocking schedule during which tokens are linearly unlocked.
   By the end of this duration all tokens are unlocked.
   `finish_timestamp = lockup_timestamp + release_duration`.
 
+If `lockup_timestamp` and `lockup_duration` are not specified, the lockup starts from the timestamp from [`transfers_information`](https://github.com/near/core-contracts/blob/master/lockup/src/lib.rs#L187) field.
+It's usually the moment when [transfers were enabled by voting](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/) in the system: 2020-10-13, 18:38:58 UTC or `1602614338293769340` nanoseconds unix time.
+
 ### Vesting schedule
 
 The contract can contain a vesting schedule and serve as a vesting agreement between the foundation and an employee (owner of the contract).
-
-Foundation is either the NEAR Foundation, or it could be a third-party account.
-It is set at the moment of initializing the contract by the `foundation_account_id` field.
+The foundation is set at the moment of initializing the contract by the `foundation_account_id` field.
 
 A vesting schedule is described by three timestamps in nanoseconds:
 - `start_timestamp` - When the vesting starts. E.g. the start date of employment;
@@ -44,7 +45,10 @@ A vesting schedule is described by three timestamps in nanoseconds:
   The remaining tokens will vest continuously until they are fully vested.
   Assume we have a 4-year contract with a 1-year cliff.
   In the first year, nothing is vested, then 25% is vested, then we have linear vesting till the end of the contract.
-  25% is calculated by the formula `(cliff_timestamp - start_timestamp) / (end_timestamp - start_timestamp)`;
+  25% is the number calculated by the formula:
+  ```
+  cliff_tokens_percentage = (cliff_timestamp - start_timestamp) / (end_timestamp - start_timestamp)
+  ```
 - `end_timestamp` -  When the vesting ends.
 
 Once the `cliff_timestamp` passed, the tokens are vested on a pro-rata basis from the `start_timestamp` to the `end_timestamp`.
@@ -53,15 +57,18 @@ Once the `cliff_timestamp` passed, the tokens are vested on a pro-rata basis fro
 
 The contract could have both lockup and vesting schedules.
 
-The tokens are started to become liquid at the following timestamp `max(max(transfers_enabled_timestamp + lockup_duration, lockup_timestamp), cliff_timestamp)`.
+The tokens start to become liquid at the timestamp:
+```
+liquidity_timestamp = max(max(transfers_enabled_timestamp + lockup_duration, lockup_timestamp), cliff_timestamp)
+```
 
 The current amount of non-liquid tokens are calculated as the maximum between lockup and vesting logic.
 If at least one mechanism said the tokens are locked, then they are still locked.
 
 The contract could also have only one of these mechanisms.
 When initializing, it's possible to pass empty vesting information, then we use a lockup schedule.
-It's also possible not to provide `release_duration`, it means that we are using a vesting schedule.
-If neither of the mechanisms is initialized, the tokens will be locked till the transfers enabled moment that set up in the account.
+It's also possible not to provide `release_duration`, it means that we use a vesting schedule.
+If neither of the mechanisms is initialized, the tokens will become liquid after transfers enabled moment ([`transfers_information`](https://github.com/near/core-contracts/blob/master/lockup/src/lib.rs#L187) field).
 
 ### Staking
 
@@ -71,7 +78,6 @@ This contract doesn't allow to directly stake from this account, so the owner ca
 
 The owner can choose the staking pool for delegating tokens.
 The staking pool contract and the account have to be approved and whitelisted by the NEAR Foundation, to prevent lockup tokens from being lost, locked, or stolen.
-This staking pool must be an approved account, which is validated by a whitelisting contract.
 Once the staking pool holds tokens, the owner of the staking pool can use them to vote on the network governance issues, such as enabling transfers.
 So the owner needs to pick the staking pool that fits the best.
 
@@ -88,22 +94,6 @@ Once the unvested balance is withdrawn completely, the contract returns to the r
 
 The amount withdrawn in the event of termination by the foundation may be lower than the initial contract amount.
 It's because the contract has to maintain the minimum required balance to cover storage of the contract code and contract state.
-The amount of NEAR tokens locked to maintain the minimum storage balance is `35` NEAR.
-`35` NEAR is enough to cover storage for `350000` bytes on Mainnet at the price of `1` NEAR per `10000` bytes.
-
-If there is still a termination balance deficit due to the minimum required balance, the owner may decide to fund the deficit on this account to finish the termination process.
-This can be done through a regular transfer action from an account with a liquid balance.
-
-### Private vesting schedule
-
-Since the vesting schedule usually starts at the date of employment it allows to de-anonymize the owner of the lockup contract.
-To keep the identity private, the contract allows to hash the vesting schedule with some random salt and keep store the hash instead of the raw vesting schedule information.
-In case the foundation has to terminate the vesting schedule, it will provide the raw vesting schedule and the salt, effectively revealing the vesting schedule.
-The contract then will compare the hash with the internal hash and if they match proceed with the termination.
-
-NOTE: The private vesting schedule can only be used if the lockup release period and the lockup duration are effectively shadowing the vesting duration.
-Meaning that the lockup release ends later than the vesting release and the lockup duration ends after the vesting cliff.
-Once the lockup schedule starts before the vesting schedule (e.g. employment starts after the transfers are enabled), the vesting schedule can't be kept private anymore.
 
 ### Guarantees
 
@@ -113,6 +103,17 @@ With the guarantees from the staking pool contracts, whitelist, and voting contr
 - The owner can not withdraw tokens locked due to lockup period, disabled transfers, or vesting schedule.
 - The owner can withdraw rewards from the staking pool before tokens are unlocked unless the vesting termination prevents it.
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
+
+### [Deprecated] Private vesting schedule
+
+Since the vesting schedule usually starts at the date of employment it allows to de-anonymize the owner of the lockup contract.
+To keep the identity private, the contract allows to hash the vesting schedule with some random salt and keep store the hash instead of the raw vesting schedule information.
+In case the foundation has to terminate the vesting schedule, it will provide the raw vesting schedule and the salt, effectively revealing the vesting schedule.
+The contract then will compare the hash with the internal hash and if they match proceed with the termination.
+
+**NOTE**: The private vesting schedule can only be used if the lockup release period and the lockup duration are effectively shadowing the vesting duration.
+Meaning that the lockup release ends later than the vesting release and the lockup duration ends after the vesting cliff.
+Once the lockup schedule starts before the vesting schedule (e.g. employment starts after the transfers are enabled), the vesting schedule can't be kept private anymore.
 
 ## Change Log
 
