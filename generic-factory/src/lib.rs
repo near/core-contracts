@@ -1,4 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+#[cfg(not(target_arch = "wasm32"))]
 use near_sdk::env::BLOCKCHAIN_INTERFACE;
 use near_sdk::json_types::{Base58CryptoHash, Base58PublicKey, Base64VecU8, U128};
 use near_sdk::serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 /// This gas spent on the account creation and contract deployment, the rest goes to the `new` call.
 const GAS_FOR_DEPLOY: u64 = 10_000_000_000_000;
 
+#[cfg(not(target_arch = "wasm32"))]
 const BLOCKCHAIN_INTERFACE_NOT_SET_ERR: &str = "Blockchain interface not set.";
 
 #[near_bindgen]
@@ -103,68 +105,130 @@ pub(crate) fn internal_create(
     args: Option<Vec<u8>>,
 ) {
     let attached_deposit = env::attached_deposit();
+
+    #[cfg(target_arch = "wasm32")]
     unsafe {
-        BLOCKCHAIN_INTERFACE.with(|b| {
-            let borrowed = b.borrow();
-            let interface = borrowed.as_ref().expect(BLOCKCHAIN_INTERFACE_NOT_SET_ERR);
-            // Load input (wasm code) into register 0.
-            interface.storage_read(hash.len() as _, hash.as_ptr() as _, 0);
-            // todo: handle missing hash to return attached deposit.
-            // schedule a Promise tx to account_id
-            let promise_id =
-                interface.promise_batch_create(account_id.len() as _, account_id.as_ptr() as _);
-            // create account first.
-            interface.promise_batch_action_create_account(promise_id);
-            // transfer attached deposit.
-            interface
-                .promise_batch_action_transfer(promise_id, &attached_deposit as *const u128 as _);
-            // deploy contract (code is taken from register 0).
-            interface.promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
-            // add access keys.
-            for access_key in access_keys.iter() {
-                match access_key {
-                    AccessKey::FullAccessKey(public_key) => interface
-                        .promise_batch_action_add_key_with_full_access(
-                            promise_id,
-                            public_key.0.len() as _,
-                            public_key.0.as_ptr() as _,
-                            0,
-                        ),
-                    AccessKey::FunctionCall {
-                        public_key,
-                        allowance,
-                        receiver_id,
-                        method_names,
-                    } => interface.promise_batch_action_add_key_with_function_call(
+        // Load input (wasm code) into register 0.
+        sys::storage_read(hash.len() as _, hash.as_ptr() as _, 0);
+        // todo: handle missing hash to return attached deposit.
+        // schedule a Promise tx to account_id
+        let promise_id = sys::promise_batch_create(account_id.len() as _, account_id.as_ptr() as _);
+        // create account first.
+        sys::promise_batch_action_create_account(promise_id);
+        // transfer attached deposit.
+        sys::promise_batch_action_transfer(promise_id, &attached_deposit as *const u128 as _);
+        // deploy contract (code is taken from register 0).
+        sys::promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
+        // add access keys.
+        for access_key in access_keys.iter() {
+            match access_key {
+                AccessKey::FullAccessKey(public_key) => {
+                    sys::promise_batch_action_add_key_with_full_access(
                         promise_id,
                         public_key.0.len() as _,
                         public_key.0.as_ptr() as _,
                         0,
-                        &allowance.0 as *const Balance as _,
-                        receiver_id.len() as _,
-                        receiver_id.as_ptr() as _,
-                        method_names.len() as _,
-                        method_names.as_ptr() as _,
-                    ),
+                    )
                 }
-                interface.promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
-            }
-            if method_name.is_some() && args.is_some() {
-                // call this_contract.<method_name>(<args>) with remaining gas.
-                let attached_gas = env::prepaid_gas() - env::used_gas() - GAS_FOR_DEPLOY;
-                let method_name = method_name.unwrap();
-                let args = args.unwrap();
-                interface.promise_batch_action_function_call(
+                AccessKey::FunctionCall {
+                    public_key,
+                    allowance,
+                    receiver_id,
+                    method_names,
+                } => sys::promise_batch_action_add_key_with_function_call(
                     promise_id,
-                    method_name.len() as _,
-                    method_name.as_ptr() as _,
-                    args.len() as _,
-                    args.as_ptr() as _,
+                    public_key.0.len() as _,
+                    public_key.0.as_ptr() as _,
                     0,
-                    attached_gas,
-                );
-                // todo: add callback to handle.
+                    &allowance.0 as *const Balance as _,
+                    receiver_id.len() as _,
+                    receiver_id.as_ptr() as _,
+                    method_names.len() as _,
+                    method_names.as_ptr() as _,
+                ),
             }
-        });
+            sys::promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
+        }
+        if method_name.is_some() && args.is_some() {
+            // call this_contract.<method_name>(<args>) with remaining gas.
+            let attached_gas = env::prepaid_gas() - env::used_gas() - GAS_FOR_DEPLOY;
+            let method_name = method_name.unwrap();
+            let args = args.unwrap();
+            sys::promise_batch_action_function_call(
+                promise_id,
+                method_name.len() as _,
+                method_name.as_ptr() as _,
+                args.len() as _,
+                args.as_ptr() as _,
+                0,
+                attached_gas,
+            );
+            // todo: add callback to handle.
+        }
     }
+
+    //* This is duplicated code to support going through BLOCKCHAIN_INTERFACE for non-wasm target
+    // TODO this should not be needed in the future and only has a small impact on contract size
+    #[cfg(not(target_arch = "wasm32"))]
+    BLOCKCHAIN_INTERFACE.with(|b| unsafe {
+        let borrowed = b.borrow();
+        let interface = borrowed.as_ref().expect(BLOCKCHAIN_INTERFACE_NOT_SET_ERR);
+        // Load input (wasm code) into register 0.
+        interface.storage_read(hash.len() as _, hash.as_ptr() as _, 0);
+        // todo: handle missing hash to return attached deposit.
+        // schedule a Promise tx to account_id
+        let promise_id =
+            interface.promise_batch_create(account_id.len() as _, account_id.as_ptr() as _);
+        // create account first.
+        interface.promise_batch_action_create_account(promise_id);
+        // transfer attached deposit.
+        interface.promise_batch_action_transfer(promise_id, &attached_deposit as *const u128 as _);
+        // deploy contract (code is taken from register 0).
+        interface.promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
+        // add access keys.
+        for access_key in access_keys.iter() {
+            match access_key {
+                AccessKey::FullAccessKey(public_key) => interface
+                    .promise_batch_action_add_key_with_full_access(
+                        promise_id,
+                        public_key.0.len() as _,
+                        public_key.0.as_ptr() as _,
+                        0,
+                    ),
+                AccessKey::FunctionCall {
+                    public_key,
+                    allowance,
+                    receiver_id,
+                    method_names,
+                } => interface.promise_batch_action_add_key_with_function_call(
+                    promise_id,
+                    public_key.0.len() as _,
+                    public_key.0.as_ptr() as _,
+                    0,
+                    &allowance.0 as *const Balance as _,
+                    receiver_id.len() as _,
+                    receiver_id.as_ptr() as _,
+                    method_names.len() as _,
+                    method_names.as_ptr() as _,
+                ),
+            }
+            interface.promise_batch_action_deploy_contract(promise_id, u64::MAX as _, 0);
+        }
+        if method_name.is_some() && args.is_some() {
+            // call this_contract.<method_name>(<args>) with remaining gas.
+            let attached_gas = env::prepaid_gas() - env::used_gas() - GAS_FOR_DEPLOY;
+            let method_name = method_name.unwrap();
+            let args = args.unwrap();
+            interface.promise_batch_action_function_call(
+                promise_id,
+                method_name.len() as _,
+                method_name.as_ptr() as _,
+                args.len() as _,
+                args.as_ptr() as _,
+                0,
+                attached_gas,
+            );
+            // todo: add callback to handle.
+        }
+    });
 }
