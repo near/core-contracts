@@ -35,5 +35,5 @@ account.signAndSendTransaction(
 
 ```
 > export ARGS = "" | base64
-> near call <contract id> create "{\"name\": \"test\", \"hash\": \"<hash from prev call>\", \"args\": \"$ARGS\"}"
+> near call <contract id> create "{\"name\": \"test\", \"hash\": \"<hash from prev call>\", \"args\": \"ARGS\",\"access_keys\": [\"<public keys>\"]}" --amount 1
 ```
