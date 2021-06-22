@@ -190,7 +190,6 @@ impl LockupContract {
         staking_pool_whitelist_account_id: AccountId,
         foundation_account_id: Option<AccountId>,
     ) -> Self {
-        assert!(!env::state_exists(), "The contract is already initialized");
         assert!(
             env::is_valid_account_id(owner_account_id.as_bytes()),
             "The account ID of the owner is invalid"
