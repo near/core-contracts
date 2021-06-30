@@ -34,8 +34,8 @@ pub struct LockupInformation {
     /// This amount has to be accounted separately from the lockup_amount to make sure
     /// linear release is not being affected.
     pub termination_withdrawn_tokens: Balance,
-    /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
-    /// lockup amount of tokens.
+    /// [deprecated] The lockup duration in nanoseconds from the moment when transfers are enabled
+    /// to unlock the lockup amount of tokens.
     pub lockup_duration: Duration,
     /// If present, the duration when the full lockup amount will be available. The tokens are
     /// linearly released from the moment transfers are enabled.
