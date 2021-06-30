@@ -104,6 +104,12 @@ With the guarantees from the staking pool contracts, whitelist, and voting contr
 - The owner can withdraw rewards from the staking pool before tokens are unlocked unless the vesting termination prevents it.
 - The owner should be able to add a full access key to the account, once all tokens are vested, unlocked and transfers are enabled.
 
+### Contributing
+
+We use Docker to build the contract.
+Configuration could be found [here](https://github.com/near/near-sdk-rs/tree/master/contract-builder).
+Please make sure that Docker is given at least 4Gb of RAM.
+
 ### [Deprecated] Private vesting schedule
 
 Since the vesting schedule usually starts at the date of employment it allows to de-anonymize the owner of the lockup contract.
