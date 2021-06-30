@@ -496,7 +496,7 @@ impl LockupContract {
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
         self.assert_no_termination();
-        assert_eq!(self.get_locked_amount().0, 0);
+        assert_eq!(self.get_locked_amount().0, 0, "Tokens are still locked/unvested");
 
         env::log(b"Adding a full access key");
 
