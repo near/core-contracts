@@ -1,6 +1,6 @@
 use lockup_contract::{
     LockupContractContract, TerminationStatus, TransfersInformation, VestingSchedule,
-    VestingScheduleOrHash, VestingScheduleWithSalt, WrappedBalance,
+    VestingScheduleOrHash, VestingScheduleWithSalt, WrappedBalance, MIN_BALANCE_FOR_STORAGE
 };
 use near_sdk::borsh::BorshSerialize;
 use near_sdk::json_types::{Base58PublicKey, U128};
@@ -60,7 +60,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -83,7 +83,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
     let locked_amount: U128 = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(locked_amount.0, to_yocto("35") + lockup_amount);
+    assert_eq!(locked_amount.0, MIN_BALANCE_FOR_STORAGE + lockup_amount);
 
     let block_timestamp = root.borrow_runtime().cur_block.block_timestamp;
     root.borrow_runtime_mut().cur_block.block_timestamp = block_timestamp.saturating_add(2);
@@ -104,7 +104,7 @@ fn staking() {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -311,7 +311,7 @@ fn staking_with_helpers() {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -515,7 +515,7 @@ fn termination_with_staking_hashed() {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -614,7 +614,7 @@ fn termination_with_staking_hashed() {
                 .get_locked_vested_amount(vesting_schedule.clone()),
         )
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) * 3 / 8);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 3 / 8);
 
     let res: U128 = owner
         .view_method_call(
@@ -623,7 +623,7 @@ fn termination_with_staking_hashed() {
                 .get_unvested_amount(vesting_schedule.clone()),
         )
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) * 5 / 8);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 5 / 8);
 
     // Terminating the vesting schedule
 
@@ -658,7 +658,7 @@ fn termination_with_staking_hashed() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_terminated_unvested_balance())
         .unwrap_json();
-    let unvested_balance = (lockup_amount + to_yocto("35")) * 5 / 8;
+    let unvested_balance = (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 5 / 8;
     assert_eq!(res.0, unvested_balance);
 
     let res: WrappedBalance = owner
@@ -822,7 +822,7 @@ fn termination_with_staking_hashed() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) - unvested_balance);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance);
 
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_liquid_owners_balance())
@@ -834,7 +834,7 @@ fn termination_with_staking_hashed() {
         .unwrap_json();
     assert_eq_with_gas(
         res.0,
-        (lockup_amount + to_yocto("35")) - unvested_balance + received_reward,
+        (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance + received_reward,
     );
 }
 
@@ -856,7 +856,7 @@ fn termination_with_staking() {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -945,7 +945,7 @@ fn termination_with_staking() {
                 .get_locked_vested_amount(vesting_schedule.clone()),
         )
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) * 3 / 8);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 3 / 8);
 
     let res: U128 = owner
         .view_method_call(
@@ -954,7 +954,7 @@ fn termination_with_staking() {
                 .get_unvested_amount(vesting_schedule.clone()),
         )
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) * 5 / 8);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 5 / 8);
 
     // Terminating the vesting schedule
 
@@ -980,7 +980,7 @@ fn termination_with_staking() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_terminated_unvested_balance())
         .unwrap_json();
-    let unvested_balance = (lockup_amount + to_yocto("35")) * 5 / 8;
+    let unvested_balance = (lockup_amount + MIN_BALANCE_FOR_STORAGE) * 5 / 8;
     assert_eq!(res.0, unvested_balance);
 
     let res: WrappedBalance = owner
@@ -1144,7 +1144,7 @@ fn termination_with_staking() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + to_yocto("35")) - unvested_balance);
+    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance);
 
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_liquid_owners_balance())
@@ -1156,7 +1156,7 @@ fn termination_with_staking() {
         .unwrap_json();
     assert_eq_with_gas(
         res.0,
-        (lockup_amount + to_yocto("35")) - unvested_balance + received_reward,
+        (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance + received_reward,
     );
 }
 
@@ -1181,7 +1181,7 @@ fn test_release_schedule_unlock_transfers() {
         contract_id: LOCKUP_ACCOUNT_ID.to_string(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
-        deposit: to_yocto("35") + lockup_amount,
+        deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
         gas: MAX_GAS,
         init_method: new(
             owner.account_id.clone(),
@@ -1264,7 +1264,7 @@ fn test_release_schedule_unlock_transfers() {
         .function_call(lockup.contract.refresh_staking_pool_balance(), MAX_GAS, 0)
         .assert_success();
 
-    let full_lockup_amount = lockup_amount + to_yocto("35");
+    let full_lockup_amount = lockup_amount + MIN_BALANCE_FOR_STORAGE;
 
     // Reset timestamp to 0, to avoid any release
     root.borrow_runtime_mut().cur_block.block_timestamp = unlock_timestamp;
@@ -1324,7 +1324,7 @@ fn test_release_schedule_unlock_transfers() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(res.0, lockup_amount + to_yocto("35"));
+    assert_eq!(res.0, lockup_amount + MIN_BALANCE_FOR_STORAGE);
 
     let res: bool = owner
         .view_method_call(lockup.contract.are_transfers_enabled())
@@ -1497,7 +1497,7 @@ fn test_release_schedule_unlock_transfers() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_liquid_owners_balance())
         .unwrap_json();
-    // The account balance is `100`. `+35` for storage and `-20` for transfers.
+    // The account balance is `100`. `+3.5` for storage and `-20` for transfers.
     assert_eq_with_gas(res.0, to_yocto("80"));
 
     let res: WrappedBalance = owner

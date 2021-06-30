@@ -30,9 +30,9 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INI
 /// Indicates there are no deposit for a cross contract call for better readability.
 const NO_DEPOSIT: u128 = 0;
 
-/// The contract keeps at least 35 NEAR in the account to avoid being transferred out to cover
+/// The contract keeps at least 3.5 NEAR in the account to avoid being transferred out to cover
 /// contract code storage and some internal state.
-const MIN_BALANCE_FOR_STORAGE: u128 = 35_000_000_000_000_000_000_000_000;
+pub const MIN_BALANCE_FOR_STORAGE: u128 = 3_500_000_000_000_000_000_000_000;
 
 #[ext_contract(ext_staking_pool)]
 pub trait ExtStakingPool {
