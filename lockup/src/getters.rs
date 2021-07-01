@@ -61,7 +61,7 @@ impl LockupContract {
             .into()
     }
 
-    /// Get the amount of tokens that are locked in this account due to lockup or vesting.
+    /// Get the amount of tokens that are locked in the account due to lockup or vesting.
     pub fn get_locked_amount(&self) -> WrappedBalance {
         let lockup_amount = self.lockup_information.lockup_amount;
         if let TransfersInformation::TransfersEnabled {
@@ -112,13 +112,13 @@ impl LockupContract {
         (lockup_amount - self.lockup_information.termination_withdrawn_tokens).into()
     }
 
-    /// Get the amount of tokens that are already vested or released, but still locked due to lockup.
+    /// Get the amount of tokens that are already vested, but still locked due to lockup.
     /// Takes raw vesting schedule, in case the internal vesting schedule is private.
     pub fn get_locked_vested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
         (self.get_locked_amount().0 - self.get_unvested_amount(vesting_schedule).0).into()
     }
 
-    /// Get the amount of tokens that are locked in this account due to vesting or release schedule.
+    /// Get the amount of tokens that are locked in this account due to vesting schedule.
     /// Takes raw vesting schedule, in case the internal vesting schedule is private.
     pub fn get_unvested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance {
         let block_timestamp = env::block_timestamp();

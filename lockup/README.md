@@ -451,14 +451,14 @@ pub fn get_terminated_unvested_balance(&self) -> WrappedBalance;
 /// the unvested balance from the early-terminated vesting schedule.
 pub fn get_terminated_unvested_balance_deficit(&self) -> WrappedBalance;
 
-/// Get the amount of tokens that are already vested or released, but still locked due to lockup.
+/// Get the amount of tokens that are locked in the account due to lockup or vesting.
 pub fn get_locked_amount(&self) -> WrappedBalance;
 
 /// Get the amount of tokens that are already vested, but still locked due to lockup.
 /// Takes raw vesting schedule, in case the internal vesting schedule is private.
 pub fn get_locked_vested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance;
 
-/// Get the amount of tokens that are locked in this account due to vesting or release schedule.
+/// Get the amount of tokens that are locked in this account due to vesting schedule.
 /// Takes raw vesting schedule, in case the internal vesting schedule is private.
 pub fn get_unvested_amount(&self, vesting_schedule: VestingSchedule) -> WrappedBalance;
 
