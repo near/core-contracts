@@ -400,6 +400,9 @@ pub fn terminate_vesting(
 ///
 /// When the vesting is terminated and there are deficit of the tokens on the account, the
 /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
+/// Should be invoked twice:
+/// 1. First, to unstake everything from the staking pool;
+/// 2. Second, after 4 epochs (48 hours) to prepare to withdraw.
 pub fn termination_prepare_to_withdraw(&mut self) -> bool;
 
 /// FOUNDATION'S METHOD
@@ -705,13 +708,15 @@ it creates the deficit (otherwise the foundation can proceed with withdrawal).
 The current termination status should be `VestingTerminatedWithDeficit`.
 
 The NEAR Foundation needs to first unstake tokens in the staking pool and then once tokens
-become liquid, withdraw them from the staking pool to the contract. This is done by calling `termination_prepare_to_withdraw`.
+become liquid, withdraw them from the staking pool to the contract.
+This is done by calling `termination_prepare_to_withdraw`.
 
 ```bash
 near call lockup1 termination_prepare_to_withdraw '{}' --accountId=near --gas=175000000000000
 ```
 
-The first will unstake everything from the staking pool. This should advance the termination status to `EverythingUnstaked`.
+The first will unstake everything from the staking pool.
+This should advance the termination status to `EverythingUnstaked`.
 In 4 epochs, or about 48 hours, the Foundation can call the same command again:
 
 ```bash
