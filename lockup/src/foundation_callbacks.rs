@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, PromiseOrValue};
+use near_sdk::{near_bindgen, PromiseOrValue, assert_self, is_promise_success};
 use std::convert::Into;
 
 #[near_bindgen]
