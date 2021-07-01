@@ -54,7 +54,8 @@ impl LockupContract {
                 );
                 vesting_schedule.clone()
             }
-            _ => env::panic(b"Vesting was terminated"),
+            VestingInformation::Terminating(_) => env::panic(b"Vesting was terminated"),
+            VestingInformation::None => env::panic(b"Vesting is None"),
         }
     }
 
