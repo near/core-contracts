@@ -15,6 +15,7 @@ impl LockupContract {
             "The given staking pool account ID is not whitelisted"
         );
         self.assert_staking_pool_is_not_selected();
+        self.assert_no_termination();
         self.staking_information = Some(StakingInformation {
             staking_pool_account_id,
             status: TransactionStatus::Idle,

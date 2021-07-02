@@ -488,9 +488,14 @@ impl LockupContract {
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
     ///
-    /// Adds full access key with the given public key to the account once the contract is fully
-    /// vested, lockup duration has expired and transfers are enabled.
-    /// This will allow owner to use this account as a regular account and remove the contract.
+    /// Adds full access key with the given public key to the account.
+    /// The following requirements should be met:
+    /// - The contract is fully vested;
+    /// - Lockup duration has expired;
+    /// - Transfers are enabled;
+    /// - If there’s a termination made by foundation, it has to be finished.
+    /// Full access key will allow owner to use this account as a regular account and remove
+    /// the contract.
     pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
         self.assert_owner();
         self.assert_transfers_enabled();
