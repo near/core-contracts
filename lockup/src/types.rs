@@ -34,16 +34,22 @@ pub struct LockupInformation {
     /// This amount has to be accounted separately from the lockup_amount to make sure
     /// linear release is not being affected.
     pub termination_withdrawn_tokens: Balance,
-    /// [deprecated] The lockup duration in nanoseconds from the moment when transfers are enabled
-    /// to unlock the lockup amount of tokens.
+    /// [deprecated] - the duration in nanoseconds of the lockup period from
+    /// the moment the transfers are enabled. During this period tokens are locked and
+    /// the release doesn't start. Instead of this, use `lockup_timestamp` and `release_duration`
     pub lockup_duration: Duration,
-    /// If present, the duration when the full lockup amount will be available. The tokens are
-    /// linearly released from the moment transfers are enabled.
+    /// If present, it is the duration when the full lockup amount will be available. The tokens
+    /// are linearly released from the moment tokens are unlocked, defined by:
+    /// `max(transfers_timestamp + lockup_duration, lockup_timestamp)`.
+    /// If not present, the tokens are not locked (though, vesting logic could be used).
     pub release_duration: Option<Duration>,
     /// The optional absolute lockup timestamp in nanoseconds which locks the tokens until this
-    /// timestamp passes.
+    /// timestamp passes. Until this moment the tokens are locked and the release doesn't start.
+    /// If not present, `transfers_timestamp` will be used.
     pub lockup_timestamp: Option<Timestamp>,
-    /// The information to indicate when the lockup period starts.
+    /// The information about the transfers. Either transfers are already enabled, then it contains
+    /// the timestamp when they were enabled. Or the transfers are currently disabled and
+    /// it contains the account ID of the transfer poll contract.
     pub transfers_information: TransfersInformation,
 }
 
