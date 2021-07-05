@@ -1,0 +1,10 @@
+steps:
+  - label: "check artifacts"
+    command: |
+      source ~/.cargo/env
+      ./scripts/build_all.sh
+
+  - label: "cargo test"
+    command: |
+      source ~/.cargo/env
+      ./scripts/test_all.sh
