@@ -77,7 +77,8 @@ The owner may want to stake these tokens (including locked/unvested tokens) to h
 This contract doesn't allow to directly stake from this account, so the owner can delegate tokens to a [staking pool contract](https://github.com/near/initial-contracts/tree/master/staking-pool).
 
 The owner can choose the staking pool for delegating tokens.
-The staking pool contract and the account have to be approved and whitelisted by the NEAR Foundation, to prevent lockup tokens from being lost, locked, or stolen.
+The staking pool contract and the account have to be approved by the whitelisting contract to prevent tokens from being lost, locked, or stolen.
+Whitelisting contract is set at the moment of initializing the Lockup contract by [`staking_pool_whitelist_account_id`](https://github.com/near/core-contracts/blob/master/lockup/src/lib.rs#L190) field.
 Once the staking pool holds tokens, the owner of the staking pool can use them to vote on the network governance issues, such as enabling transfers.
 So the owner needs to pick the staking pool that fits the best.
 
