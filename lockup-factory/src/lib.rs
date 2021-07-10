@@ -31,7 +31,7 @@ pub mod gas {
     pub const CALLBACK: Gas = BASE;
 }
 
-const MIN_ATTACHED_BALANCE: Balance = 35_000_000_000_000_000_000_000_000;
+const MIN_ATTACHED_BALANCE: Balance = 3_500_000_000_000_000_000_000_000;
 
 /// External interface for the callbacks to self.
 #[ext_contract(ext_self)]
