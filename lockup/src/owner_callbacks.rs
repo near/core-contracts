@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, PromiseOrValue};
+use near_sdk::{near_bindgen, PromiseOrValue, assert_self, is_promise_success};
 
 #[near_bindgen]
 impl LockupContract {
@@ -15,6 +15,7 @@ impl LockupContract {
             "The given staking pool account ID is not whitelisted"
         );
         self.assert_staking_pool_is_not_selected();
+        self.assert_no_termination();
         self.staking_information = Some(StakingInformation {
             staking_pool_account_id,
             status: TransactionStatus::Idle,
