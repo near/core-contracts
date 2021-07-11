@@ -335,7 +335,7 @@ mod tests {
 
         context.is_view = false;
         context.predecessor_account_id = String::from(account_tokens_owner());
-        context.attached_deposit = ntoy(30);
+        context.attached_deposit = ntoy(1); /* Storage reduced to 3.5 NEAR */
         testing_env!(context.clone());
         contract.create(account_tokens_owner(), lockup_duration, None, None, None);
     }
