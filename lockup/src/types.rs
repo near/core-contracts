@@ -34,16 +34,22 @@ pub struct LockupInformation {
     /// This amount has to be accounted separately from the lockup_amount to make sure
     /// linear release is not being affected.
     pub termination_withdrawn_tokens: Balance,
-    /// The lockup duration in nanoseconds from the moment when transfers are enabled to unlock the
-    /// lockup amount of tokens.
+    /// [deprecated] - the duration in nanoseconds of the lockup period from
+    /// the moment the transfers are enabled. During this period tokens are locked and
+    /// the release doesn't start. Instead of this, use `lockup_timestamp` and `release_duration`
     pub lockup_duration: Duration,
-    /// If present, the duration when the full lockup amount will be available. The tokens are
-    /// linearly released from the moment transfers are enabled.
+    /// If present, it is the duration when the full lockup amount will be available. The tokens
+    /// are linearly released from the moment tokens are unlocked, defined by:
+    /// `max(transfers_timestamp + lockup_duration, lockup_timestamp)`.
+    /// If not present, the tokens are not locked (though, vesting logic could be used).
     pub release_duration: Option<Duration>,
     /// The optional absolute lockup timestamp in nanoseconds which locks the tokens until this
-    /// timestamp passes.
+    /// timestamp passes. Until this moment the tokens are locked and the release doesn't start.
+    /// If not present, `transfers_timestamp` will be used.
     pub lockup_timestamp: Option<Timestamp>,
-    /// The information to indicate when the lockup period starts.
+    /// The information about the transfers. Either transfers are already enabled, then it contains
+    /// the timestamp when they were enabled. Or the transfers are currently disabled and
+    /// it contains the account ID of the transfer poll contract.
     pub transfers_information: TransfersInformation,
 }
 
@@ -51,12 +57,12 @@ pub struct LockupInformation {
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum TransfersInformation {
-    /// The timestamp when the transfers were enabled. The lockup period starts at this timestamp.
+    /// The timestamp when the transfers were enabled.
     TransfersEnabled {
         transfers_timestamp: WrappedTimestamp,
     },
     /// The account ID of the transfers poll contract, to check if the transfers are enabled.
-    /// The lockup period will start when the transfer voted to be enabled.
+    /// The lockup period can start only after the transfer voted to be enabled.
     /// At the launch of the network transfers are disabled for all lockup contracts, once transfers
     /// are enabled, they can't be disabled and don't need to be checked again.
     TransfersDisabled { transfer_poll_account_id: AccountId },
@@ -122,6 +128,7 @@ impl VestingSchedule {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum VestingScheduleOrHash {
+    /// [deprecated] After transfers are enabled, only public schedule is used.
     /// The vesting schedule is private and this is a hash of (vesting_schedule, salt).
     /// In JSON, the hash has to be encoded with base64 to a string.
     VestingHash(Base64VecU8),
@@ -134,6 +141,7 @@ pub enum VestingScheduleOrHash {
 #[serde(crate = "near_sdk::serde")]
 pub enum VestingInformation {
     None,
+    /// [deprecated] After transfers are enabled, only public schedule is used.
     /// Vesting schedule is hashed for privacy and only will be revealed if the NEAR foundation
     /// has to terminate vesting.
     /// The contract assume the vesting schedule doesn't affect lockup release and duration, because
