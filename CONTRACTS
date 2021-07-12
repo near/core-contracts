@@ -1,9 +1,5 @@
-exchange-deposit-receiver
 lockup
 lockup-factory
-multisig
-staking-pool
-staking-pool-factory
 voting
 whitelist
 w-near
