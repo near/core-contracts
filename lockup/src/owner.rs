@@ -383,7 +383,7 @@ impl LockupContract {
     ///
     /// Requires 125 TGas (5 * BASE_GAS)
     ///
-    /// Unstakes all tokens at the staking pool
+    /// Unstakes all tokens from the staking pool
     pub fn unstake_all(&mut self) -> Promise {
         self.assert_owner();
         self.assert_staking_pool_is_idle();
@@ -421,6 +421,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 75 TGas (3 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
     /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
     /// are enabled, they can't be disabled anymore.
@@ -459,6 +460,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
     /// Transfers the given amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
@@ -487,6 +489,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
     /// Adds full access key with the given public key to the account.
     /// The following requirements should be met:
