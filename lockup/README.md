@@ -332,6 +332,11 @@ In case of successful withdrawal, the unvested balance will become `0` and the o
 
 ## Change Log
 
+### `3.1.0`
+
+- Reduced minimum required balance for the lockups from 35 NEAR to 3.5 NEAR;
+- Improved the documentation.
+
 ### `3.0.0`
 
 - Release duration now starts from the moment the tokens are unlocked.
