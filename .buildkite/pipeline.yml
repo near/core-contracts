@@ -1,0 +1,14 @@
+steps:
+  - label: "check artifacts"
+    command: |
+      source ~/.cargo/env
+      rustup default 1.51.0
+      rustup target add wasm32-unknown-unknown
+      ./scripts/build_all.sh
+
+  - label: "cargo test"
+    command: |
+      source ~/.cargo/env
+      rustup default 1.51.0
+      rustup target add wasm32-unknown-unknown
+      ./scripts/test_all.sh
