@@ -4,7 +4,7 @@ steps:
       source ~/.cargo/env
       rustup default 1.51.0
       rustup target add wasm32-unknown-unknown
-      ./scripts/build_all.sh
+      ./scripts/build_all_docker.sh --check
 
   - label: "cargo test"
     command: |
