@@ -5,4 +5,4 @@ set -ex
 while read -r contract
 do
  	(cd ${contract} && RUSTFLAGS='-D warnings' cargo test)
-done < CONTRACTS
+done < scripts/CONTRACTS
