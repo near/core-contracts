@@ -2,10 +2,8 @@
 
 ## Rebuild all contracts
 
-TODO: Update to use reproducible builds using `near-sdk` Docker image.
-
 ```bash
-./build_all.sh
+./build_all_docker.sh
 ```
 
 ## Deploy core contracts using master account
