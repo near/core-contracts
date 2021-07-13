@@ -4,14 +4,8 @@
 set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-
-# Pass contract name as an argument
-NAME="$@"
-CONTRACT_WASM_NAME="$NAME"
-# For lockup, this name is not the same
-if [[ "$NAME" == "lockup" ]]; then
-  CONTRACT_WASM_NAME="lockup_contract"
-fi
+NAME="$1"
+CONTRACT_WASM_NAME="$2"
 
 if docker ps -a --format '{{.Names}}' | grep -Eq "^build_${NAME}\$"; then
     echo "Container exists"
