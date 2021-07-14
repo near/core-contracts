@@ -10,7 +10,7 @@ use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Promise};
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
-const TRANSFERS_STARTED: u64 = 1602614338293769340;
+const TRANSFERS_STARTED: u64 = 1602614338293769340; /* 13 October 2020 18:38:58.293 */
 
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
@@ -31,7 +31,7 @@ pub mod gas {
     pub const CALLBACK: Gas = BASE;
 }
 
-const MIN_ATTACHED_BALANCE: Balance = 35_000_000_000_000_000_000_000_000;
+const MIN_ATTACHED_BALANCE: Balance = 3_500_000_000_000_000_000_000_000;
 
 /// External interface for the callbacks to self.
 #[ext_contract(ext_self)]
@@ -47,7 +47,6 @@ pub trait ExtSelf {
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct LockupFactory {
-    master_account_id: AccountId,
     whitelist_account_id: AccountId,
     foundation_account_id: AccountId,
 }
@@ -75,7 +74,6 @@ impl Default for LockupFactory {
 impl LockupFactory {
     #[init]
     pub fn new(
-        master_account_id: ValidAccountId,
         whitelist_account_id: ValidAccountId,
         foundation_account_id: ValidAccountId,
     ) -> Self {
@@ -86,7 +84,6 @@ impl LockupFactory {
         );
 
         Self {
-            master_account_id: master_account_id.into(),
             whitelist_account_id: whitelist_account_id.into(),
             foundation_account_id: foundation_account_id.into(),
         }
@@ -95,11 +92,6 @@ impl LockupFactory {
     /// Returns the foundation account id.
     pub fn get_foundation_account_id(&self) -> AccountId {
         self.foundation_account_id.clone()
-    }
-
-    /// Returns the master account id.
-    pub fn get_master_account_id(&self) -> AccountId {
-        self.master_account_id.clone()
     }
 
     /// Returns the lockup master account id.
@@ -151,7 +143,7 @@ impl LockupFactory {
                     staking_pool_whitelist_account_id: self.whitelist_account_id.clone(),
                     foundation_account_id: foundation_account,
                 })
-                .unwrap(),
+                    .unwrap(),
                 NO_DEPOSIT,
                 gas::LOCKUP_NEW,
             )
@@ -190,7 +182,7 @@ impl LockupFactory {
                     "The lockup {} creation has failed. Returning attached deposit of {} to {}",
                     lockup_account_id, attached_deposit.0, predecessor_account_id
                 )
-                .as_bytes(),
+                    .as_bytes(),
             );
             Promise::new(predecessor_account_id).transfer(attached_deposit.0);
             false
@@ -223,7 +215,6 @@ mod tests {
         testing_env!(context.clone());
 
         let contract = LockupFactory::new(
-            master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
@@ -235,7 +226,6 @@ mod tests {
             contract.get_foundation_account_id(),
             foundation_account_id().as_ref().to_string()
         );
-        assert_eq!(contract.get_master_account_id(), master_account_id().as_ref().to_string());
         println!("{}", contract.get_lockup_master_account_id());
         assert_eq!(
             contract.get_lockup_master_account_id(),
@@ -252,12 +242,11 @@ mod tests {
         testing_env!(context.clone());
 
         let mut contract = LockupFactory::new(
-            master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
 
-        const LOCKUP_DURATION: u64 = 63036000000000000;
+        const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
 
         context.is_view = false;
@@ -286,13 +275,12 @@ mod tests {
         testing_env!(context.clone());
 
         let mut contract = LockupFactory::new(
-            master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
 
-        const LOCKUP_DURATION: u64 = 63036000000000000;
-        const LOCKUP_TIMESTAMP: u64 = 1661990400000000000;
+        const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
+        const LOCKUP_TIMESTAMP: u64 = 1661990400000000000; /* 1 September 2022 00:00:00 */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
         let lockup_timestamp: WrappedTimestamp = LOCKUP_TIMESTAMP.into();
 
@@ -338,17 +326,16 @@ mod tests {
         testing_env!(context.clone());
 
         let mut contract = LockupFactory::new(
-            master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
 
-        const LOCKUP_DURATION: u64 = 63036000000000000;
+        const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
 
         context.is_view = false;
         context.predecessor_account_id = String::from(account_tokens_owner());
-        context.attached_deposit = ntoy(30);
+        context.attached_deposit = ntoy(1); /* Storage reduced to 3.5 NEAR */
         testing_env!(context.clone());
         contract.create(account_tokens_owner(), lockup_duration, None, None, None);
     }
@@ -362,12 +349,11 @@ mod tests {
         testing_env!(context.clone());
 
         let mut contract = LockupFactory::new(
-            master_account_id(),
             whitelist_account_id(),
             foundation_account_id(),
         );
 
-        const LOCKUP_DURATION: u64 = 63036000000000000;
+        const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
 
         context.is_view = false;
