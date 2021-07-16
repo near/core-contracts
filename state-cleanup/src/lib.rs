@@ -1,3 +1,4 @@
+use near_sdk::base64;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json;
 use near_sdk::{env, near_bindgen};
@@ -20,6 +21,6 @@ pub extern "C" fn clean() {
     let input = env::input().unwrap();
     let args: Args = serde_json::from_slice(&input).unwrap();
     for key in args.keys.iter() {
-        env::storage_remove(key.as_bytes());
+        env::storage_remove(&base64::decode(key).unwrap());
     }
 }
