@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
-use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
+use near_sdk::json_types::{Base64VecU8, U128};
 use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::{env, near_bindgen, AccountId, Gas, Promise, PromiseOrValue, PublicKey};
 
 /// Unlimited allowance for multisig keys.
 const DEFAULT_ALLOWANCE: u128 = 0;
@@ -36,18 +36,18 @@ pub enum MultiSigRequestAction {
     DeployContract { code: Base64VecU8 },
     /// Adds key, either new key for multisig or full access key to another account.
     AddKey {
-        public_key: Base58PublicKey,
+        public_key: PublicKey,
         #[serde(skip_serializing_if = "Option::is_none")]
         permission: Option<FunctionCallPermission>,
     },
     /// Deletes key, either one of the keys from multisig or key from another account.
-    DeleteKey { public_key: Base58PublicKey },
+    DeleteKey { public_key: PublicKey },
     /// Call function on behalf of this contract.
     FunctionCall {
         method_name: String,
         args: Base64VecU8,
         deposit: U128,
-        gas: U64,
+        gas: Gas,
     },
     /// Sets number of confirmations required to authorize requests.
     /// Can not be bundled with any other actions or transactions.
@@ -82,7 +82,7 @@ pub struct MultiSigContract {
     num_confirmations: u32,
     request_nonce: RequestId,
     requests: UnorderedMap<RequestId, MultiSigRequestWithSigner>,
-    confirmations: UnorderedMap<RequestId, HashSet<PublicKey>>,
+    confirmations: UnorderedMap<RequestId, BTreeSet<PublicKey>>,
     num_requests_pk: UnorderedMap<PublicKey, u32>,
     // per key
     active_requests_limit: u32,
@@ -138,7 +138,7 @@ impl MultiSigContract {
             request: request,
         };
         self.requests.insert(&self.request_nonce, &request_added);
-        let confirmations = HashSet::new();
+        let confirmations = BTreeSet::new();
         self.confirmations
             .insert(&self.request_nonce, &confirmations);
         self.request_nonce += 1;
@@ -223,7 +223,7 @@ impl MultiSigContract {
                     method_name.into_bytes(),
                     args.into(),
                     deposit.into(),
-                    gas.into(),
+                    gas,
                 ),
                 // the following methods must be a single action
                 MultiSigRequestAction::SetNumConfirmations { num_confirmations } => {
@@ -328,7 +328,7 @@ impl MultiSigContract {
         (self.requests.get(&request_id).expect("No such request")).request
     }
 
-    pub fn get_num_requests_pk(&self, public_key: Base58PublicKey) -> u32 {
+    pub fn get_num_requests_pk(&self, public_key: PublicKey) -> u32 {
         self.num_requests_pk.get(&public_key.into()).unwrap_or(0)
     }
 
@@ -336,12 +336,12 @@ impl MultiSigContract {
         self.requests.keys().collect()
     }
 
-    pub fn get_confirmations(&self, request_id: RequestId) -> Vec<Base58PublicKey> {
+    pub fn get_confirmations(&self, request_id: RequestId) -> Vec<PublicKey> {
         self.confirmations
             .get(&request_id)
             .expect("No such request")
             .into_iter()
-            .map(|key| Base58PublicKey::try_from(key).expect("Failed to covert key to base58"))
+            .map(|key| PublicKey::try_from(key).expect("Failed to covert key to base58"))
             .collect()
     }
 
@@ -358,9 +358,10 @@ impl MultiSigContract {
 mod tests {
     use std::fmt::{Debug, Error, Formatter};
 
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
+    use near_sdk::Balance;
     use near_sdk::{AccountId, VMContext};
-    use near_sdk::{Balance, BlockHeight, EpochHeight};
 
     use super::*;
 
@@ -373,98 +374,10 @@ mod tests {
     }
 
     pub fn alice() -> AccountId {
-        "alice".to_string()
+        "alice".parse().unwrap()
     }
     pub fn bob() -> AccountId {
-        "bob".to_string()
-    }
-
-    pub struct VMContextBuilder {
-        context: VMContext,
-    }
-
-    impl VMContextBuilder {
-        pub fn new() -> Self {
-            Self {
-                context: VMContext {
-                    current_account_id: "".to_string(),
-                    signer_account_id: "".to_string(),
-                    signer_account_pk: vec![0, 1, 2],
-                    predecessor_account_id: "".to_string(),
-                    input: vec![],
-                    epoch_height: 0,
-                    block_index: 0,
-                    block_timestamp: 0,
-                    account_balance: 0,
-                    account_locked_balance: 0,
-                    storage_usage: 10u64.pow(6),
-                    attached_deposit: 0,
-                    prepaid_gas: 10u64.pow(18),
-                    random_seed: vec![0, 1, 2],
-                    is_view: false,
-                    output_data_receivers: vec![],
-                },
-            }
-        }
-
-        pub fn current_account_id(mut self, account_id: AccountId) -> Self {
-            self.context.current_account_id = account_id;
-            self
-        }
-
-        pub fn block_timestamp(mut self, time: u64) -> Self {
-            self.context.block_timestamp = time;
-            self
-        }
-
-        #[allow(dead_code)]
-        pub fn signer_account_id(mut self, account_id: AccountId) -> Self {
-            self.context.signer_account_id = account_id;
-            self
-        }
-
-        pub fn signer_account_pk(mut self, signer_account_pk: PublicKey) -> Self {
-            self.context.signer_account_pk = signer_account_pk;
-            self
-        }
-
-        pub fn predecessor_account_id(mut self, account_id: AccountId) -> Self {
-            self.context.predecessor_account_id = account_id;
-            self
-        }
-
-        #[allow(dead_code)]
-        pub fn block_index(mut self, block_index: BlockHeight) -> Self {
-            self.context.block_index = block_index;
-            self
-        }
-
-        #[allow(dead_code)]
-        pub fn epoch_height(mut self, epoch_height: EpochHeight) -> Self {
-            self.context.epoch_height = epoch_height;
-            self
-        }
-
-        #[allow(dead_code)]
-        pub fn attached_deposit(mut self, amount: Balance) -> Self {
-            self.context.attached_deposit = amount;
-            self
-        }
-
-        pub fn account_balance(mut self, amount: Balance) -> Self {
-            self.context.account_balance = amount;
-            self
-        }
-
-        #[allow(dead_code)]
-        pub fn account_locked_balance(mut self, amount: Balance) -> Self {
-            self.context.account_locked_balance = amount;
-            self
-        }
-
-        pub fn finish(self) -> VMContext {
-            self.context
-        }
+        "bob".parse().unwrap()
     }
 
     fn context_with_key(key: PublicKey, amount: Balance) -> VMContext {
@@ -474,7 +387,13 @@ mod tests {
             .signer_account_id(alice())
             .signer_account_pk(key)
             .account_balance(amount)
-            .finish()
+            .build()
+    }
+
+    fn dummy_public_key() -> PublicKey {
+        "Eg2jtsiMrprn7zgaKUk79qM1hWhANsFyE6JSX4txLEub"
+            .parse()
+            .unwrap()
     }
 
     fn context_with_key_future(key: PublicKey, amount: Balance) -> VMContext {
@@ -485,16 +404,16 @@ mod tests {
             .signer_account_id(alice())
             .signer_account_pk(key)
             .account_balance(amount)
-            .finish()
+            .build()
     }
 
     #[test]
     fn test_multi_3_of_n() {
         let amount = 1_000;
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
-                .unwrap()
-                .into(),
+            "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"
+                .parse()
+                .unwrap(),
             amount
         ));
         let mut c = MultiSigContract::new(3);
@@ -511,18 +430,18 @@ mod tests {
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-                .unwrap()
-                .into(),
+            "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
+                .parse()
+                .unwrap(),
             amount
         ));
         c.confirm(request_id);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 2);
         assert_eq!(c.get_confirmations(request_id).len(), 2);
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95")
-                .unwrap()
-                .into(),
+            "2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95"
+                .parse()
+                .unwrap(),
             amount
         ));
         c.confirm(request_id);
@@ -534,9 +453,9 @@ mod tests {
     fn test_multi_add_request_and_confirm() {
         let amount = 1_000;
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
-                .unwrap()
-                .into(),
+            "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"
+                .parse()
+                .unwrap(),
             amount
         ));
         let mut c = MultiSigContract::new(3);
@@ -553,18 +472,18 @@ mod tests {
         assert_eq!(c.requests.len(), 1);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-                .unwrap()
-                .into(),
+            "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
+                .parse()
+                .unwrap(),
             amount
         ));
         c.confirm(request_id);
         assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 2);
         assert_eq!(c.get_confirmations(request_id).len(), 2);
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95")
-                .unwrap()
-                .into(),
+            "2EfbwnQHPBWQKbNczLiVznFghh9qs716QT71zN6L1D95"
+                .parse()
+                .unwrap(),
             amount
         ));
         c.confirm(request_id);
@@ -576,16 +495,15 @@ mod tests {
     fn add_key_delete_key_storage_cleared() {
         let amount = 1_000;
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
-                .unwrap()
-                .into(),
+            "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"
+                .parse()
+                .unwrap(),
             amount
         ));
         let mut c = MultiSigContract::new(1);
-        let new_key: Base58PublicKey =
-            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-                .unwrap()
-                .into();
+        let new_key: PublicKey = "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
+            .parse()
+            .unwrap();
         // vm current_account_id is alice, receiver_id must be alice
         let request = MultiSigRequest {
             receiver_id: alice(),
@@ -600,9 +518,9 @@ mod tests {
         assert_eq!(c.requests.len(), 0);
         // switch accounts
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-                .unwrap()
-                .into(),
+            "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
+                .parse()
+                .unwrap(),
             amount
         ));
         let request2 = MultiSigRequest {
@@ -635,16 +553,15 @@ mod tests {
     fn test_panics_add_key_different_account() {
         let amount = 1_000;
         testing_env!(context_with_key(
-            Base58PublicKey::try_from("Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy")
-                .unwrap()
-                .into(),
+            "Eg2jtsiMrprn7zgKKUk79qM1hWhANsFyE6JSX4txLEuy"
+                .parse()
+                .unwrap(),
             amount
         ));
         let mut c = MultiSigContract::new(1);
-        let new_key: Base58PublicKey =
-            Base58PublicKey::try_from("HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R")
-                .unwrap()
-                .into();
+        let new_key: PublicKey = "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
+            .parse()
+            .unwrap();
         // vm current_account_id is alice, receiver_id must be alice
         let request = MultiSigRequest {
             receiver_id: bob(),
@@ -660,7 +577,7 @@ mod tests {
     #[test]
     fn test_change_num_confirmations() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![1, 2, 3], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(1);
         let request_id = c.add_request(MultiSigRequest {
             receiver_id: alice(),
@@ -676,7 +593,7 @@ mod tests {
     #[should_panic]
     fn test_panics_on_second_confirm() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(3);
         let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
@@ -695,7 +612,7 @@ mod tests {
     #[should_panic]
     fn test_panics_delete_request() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(3);
         let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
@@ -711,7 +628,7 @@ mod tests {
     #[test]
     fn test_delete_request_future() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(3);
         let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
@@ -719,7 +636,7 @@ mod tests {
                 amount: amount.into(),
             }],
         });
-        testing_env!(context_with_key_future(vec![5, 7, 9], amount));
+        testing_env!(context_with_key_future(dummy_public_key(), amount));
         c.delete_request(request_id);
         assert_eq!(c.requests.len(), 0);
         assert_eq!(c.confirmations.len(), 0);
@@ -729,7 +646,7 @@ mod tests {
     #[should_panic]
     fn test_delete_request_panic_wrong_key() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(3);
         let request_id = c.add_request(MultiSigRequest {
             receiver_id: bob(),
@@ -737,7 +654,7 @@ mod tests {
                 amount: amount.into(),
             }],
         });
-        testing_env!(context_with_key(vec![1, 2, 3], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         c.delete_request(request_id);
     }
 
@@ -745,7 +662,7 @@ mod tests {
     #[should_panic]
     fn test_too_many_requests() {
         let amount = 1_000;
-        testing_env!(context_with_key(vec![5, 7, 9], amount));
+        testing_env!(context_with_key(dummy_public_key(), amount));
         let mut c = MultiSigContract::new(3);
         for _i in 0..16 {
             c.add_request(MultiSigRequest {
