@@ -4,16 +4,13 @@ mod utils;
 pub use crate::types::*;
 use crate::utils::*;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{ValidAccountId, U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde::Serialize;
-use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Promise};
+use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise};
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
 const TRANSFERS_STARTED: u64 = 1602614338293769340; /* 13 October 2020 18:38:58.293 */
-
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 const CODE: &[u8] = include_bytes!("../../lockup/res/lockup_contract.wasm");
 
@@ -21,7 +18,7 @@ pub mod gas {
     use near_sdk::Gas;
 
     /// The base amount of gas for a regular execution.
-    const BASE: Gas = 25_000_000_000_000;
+    const BASE: Gas = Gas(25_000_000_000_000);
 
     /// The amount of Gas the contract will attach to the promise to create the lockup.
     pub const LOCKUP_NEW: Gas = BASE;
@@ -54,7 +51,7 @@ pub struct LockupFactory {
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct LockupArgs {
-    owner_account_id: ValidAccountId,
+    owner_account_id: AccountId,
     lockup_duration: WrappedDuration,
     lockup_timestamp: Option<WrappedTimestamp>,
     transfers_information: TransfersInformation,
@@ -73,13 +70,10 @@ impl Default for LockupFactory {
 #[near_bindgen]
 impl LockupFactory {
     #[init]
-    pub fn new(
-        whitelist_account_id: ValidAccountId,
-        foundation_account_id: ValidAccountId,
-    ) -> Self {
+    pub fn new(whitelist_account_id: AccountId, foundation_account_id: AccountId) -> Self {
         assert!(!env::state_exists(), "The contract is already initialized");
         assert!(
-            env::current_account_id().len() <= 23,
+            env::current_account_id().as_str().len() <= 23,
             "The account ID of this contract can't be more than 23 characters"
         );
 
@@ -107,7 +101,7 @@ impl LockupFactory {
     #[payable]
     pub fn create(
         &mut self,
-        owner_account_id: ValidAccountId,
+        owner_account_id: AccountId,
         lockup_duration: WrappedDuration,
         lockup_timestamp: Option<WrappedTimestamp>,
         vesting_schedule: Option<VestingScheduleOrHash>,
@@ -116,8 +110,11 @@ impl LockupFactory {
         assert!(env::attached_deposit() >= MIN_ATTACHED_BALANCE, "Not enough attached deposit");
 
         let byte_slice = env::sha256(owner_account_id.as_ref().as_bytes());
-        let lockup_account_id =
-            format!("{}.{}", hex::encode(&byte_slice[..20]), env::current_account_id());
+        let lockup_account_id = AccountId::new_unchecked(format!(
+            "{}.{}",
+            hex::encode(&byte_slice[..20]),
+            env::current_account_id()
+        ));
 
         let mut foundation_account: Option<AccountId> = None;
         if vesting_schedule.is_some() {
@@ -143,7 +140,7 @@ impl LockupFactory {
                     staking_pool_whitelist_account_id: self.whitelist_account_id.clone(),
                     foundation_account_id: foundation_account,
                 })
-                    .unwrap(),
+                .unwrap(),
                 NO_DEPOSIT,
                 gas::LOCKUP_NEW,
             )
@@ -171,18 +168,14 @@ impl LockupFactory {
         let lockup_account_created = is_promise_success();
 
         if lockup_account_created {
-            env::log(
-                format!("The lockup contract {} was successfully created.", lockup_account_id)
-                    .as_bytes(),
-            );
+            log!("The lockup contract {} was successfully created.", lockup_account_id);
             true
         } else {
-            env::log(
-                format!(
-                    "The lockup {} creation has failed. Returning attached deposit of {} to {}",
-                    lockup_account_id, attached_deposit.0, predecessor_account_id
-                )
-                    .as_bytes(),
+            log!(
+                "The lockup {} creation has failed. Returning attached deposit of {} to {}",
+                lockup_account_id,
+                attached_deposit.0,
+                predecessor_account_id
             );
             Promise::new(predecessor_account_id).transfer(attached_deposit.0);
             false
@@ -195,7 +188,8 @@ mod tests {
     mod test_utils;
 
     use super::*;
-    use near_sdk::{testing_env, MockedBlockchain, PromiseResult};
+    use near_sdk::test_utils::{testing_env_with_promise_results, VMContextBuilder};
+    use near_sdk::{testing_env, PromiseResult};
     use test_utils::*;
 
     fn new_vesting_schedule(offset_in_days: u64) -> VestingSchedule {
@@ -211,26 +205,17 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
-        let contract = LockupFactory::new(
-            whitelist_account_id(),
-            foundation_account_id(),
-        );
+        let contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
 
         context.is_view = true;
         testing_env!(context.clone());
         assert_eq!(contract.get_min_attached_balance().0, MIN_ATTACHED_BALANCE);
-        assert_eq!(
-            contract.get_foundation_account_id(),
-            foundation_account_id().as_ref().to_string()
-        );
+        assert_eq!(contract.get_foundation_account_id(), foundation_account_id());
         println!("{}", contract.get_lockup_master_account_id());
-        assert_eq!(
-            contract.get_lockup_master_account_id(),
-            lockup_master_account_id().as_ref().to_string()
-        );
+        assert_eq!(contract.get_lockup_master_account_id(), lockup_master_account_id());
     }
 
     #[test]
@@ -238,13 +223,10 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
-        let mut contract = LockupFactory::new(
-            whitelist_account_id(),
-            foundation_account_id(),
-        );
+        let mut contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
 
         const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
@@ -255,15 +237,11 @@ mod tests {
         testing_env!(context.clone());
         contract.create(account_tokens_owner(), lockup_duration, None, None, None);
 
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         context.attached_deposit = ntoy(0);
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
         println!("{}", lockup_account());
-        contract.on_lockup_create(
-            lockup_account(),
-            ntoy(30).into(),
-            String::from(account_tokens_owner()),
-        );
+        contract.on_lockup_create(lockup_account(), ntoy(30).into(), account_tokens_owner());
     }
 
     #[test]
@@ -271,13 +249,10 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
-        let mut contract = LockupFactory::new(
-            whitelist_account_id(),
-            foundation_account_id(),
-        );
+        let mut contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
 
         const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         const LOCKUP_TIMESTAMP: u64 = 1661990400000000000; /* 1 September 2022 00:00:00 */
@@ -306,14 +281,10 @@ mod tests {
             None,
         );
 
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         context.attached_deposit = ntoy(0);
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
-        contract.on_lockup_create(
-            lockup_account(),
-            ntoy(30).into(),
-            String::from(account_tokens_owner()),
-        );
+        contract.on_lockup_create(lockup_account(), ntoy(30).into(), account_tokens_owner());
     }
 
     #[test]
@@ -322,13 +293,10 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
-        let mut contract = LockupFactory::new(
-            whitelist_account_id(),
-            foundation_account_id(),
-        );
+        let mut contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
 
         const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
@@ -345,13 +313,10 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
-        let mut contract = LockupFactory::new(
-            whitelist_account_id(),
-            foundation_account_id(),
-        );
+        let mut contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
 
         const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
         let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
@@ -362,15 +327,12 @@ mod tests {
         testing_env!(context.clone());
         contract.create(account_tokens_owner(), lockup_duration, None, None, None);
 
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         context.attached_deposit = ntoy(0);
         context.account_balance += ntoy(35);
         testing_env_with_promise_results(context.clone(), PromiseResult::Failed);
-        let res = contract.on_lockup_create(
-            lockup_account(),
-            ntoy(35).into(),
-            String::from(account_tokens_owner()),
-        );
+        let res =
+            contract.on_lockup_create(lockup_account(), ntoy(35).into(), account_tokens_owner());
 
         match res {
             true => panic!("Unexpected result, should return false"),
