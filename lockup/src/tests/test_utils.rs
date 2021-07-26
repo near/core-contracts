@@ -1,28 +1,29 @@
-use near_sdk::json_types::Base58PublicKey;
-use near_sdk::{AccountId, MockedBlockchain, PromiseResult, VMContext};
+use std::convert::TryFrom;
+
+use near_sdk::{AccountId, PublicKey, VMContext};
 
 pub const LOCKUP_NEAR: u128 = 1000;
 pub const GENESIS_TIME_IN_DAYS: u64 = 500;
 pub const YEAR: u64 = 365;
 
 pub fn lockup_account() -> AccountId {
-    "lockup".to_string()
+    "lockup".parse().unwrap()
 }
 
 pub fn system_account() -> AccountId {
-    "system".to_string()
+    "system".parse().unwrap()
 }
 
 pub fn account_owner() -> AccountId {
-    "account_owner".to_string()
+    "account_owner".parse().unwrap()
 }
 
 pub fn non_owner() -> AccountId {
-    "non_owner".to_string()
+    "non_owner".parse().unwrap()
 }
 
 pub fn account_foundation() -> AccountId {
-    "near".to_string()
+    "near".parse().unwrap()
 }
 
 pub fn to_yocto(near_balance: u128) -> u128 {
@@ -61,10 +62,10 @@ pub fn get_context(
     is_view: bool,
 ) -> VMContext {
     VMContext {
-        current_account_id: lockup_account(),
-        signer_account_id: predecessor_account_id.clone(),
+        current_account_id: lockup_account().into(),
+        signer_account_id: predecessor_account_id.as_str().to_owned(),
         signer_account_pk: vec![0, 1, 2],
-        predecessor_account_id,
+        predecessor_account_id: predecessor_account_id.into(),
         input: vec![],
         block_index: 1,
         block_timestamp,
@@ -80,26 +81,8 @@ pub fn get_context(
     }
 }
 
-pub fn testing_env_with_promise_results(context: VMContext, promise_result: PromiseResult) {
-    let storage = near_sdk::env::take_blockchain_interface()
-        .unwrap()
-        .as_mut_mocked_blockchain()
-        .unwrap()
-        .take_storage();
-
-    near_sdk::env::set_blockchain_interface(Box::new(MockedBlockchain::new(
-        context,
-        Default::default(),
-        Default::default(),
-        vec![promise_result],
-        storage,
-        Default::default(),
-        None,
-    )));
-}
-
-pub fn public_key(byte_val: u8) -> Base58PublicKey {
+pub fn public_key(byte_val: u8) -> PublicKey {
     let mut pk = vec![byte_val; 33];
     pk[0] = 0;
-    Base58PublicKey(pk)
+    PublicKey::try_from(pk.to_vec()).unwrap()
 }

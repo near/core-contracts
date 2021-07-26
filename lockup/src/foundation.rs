@@ -1,4 +1,4 @@
-use near_sdk::{near_bindgen, AccountId, Promise};
+use near_sdk::{log, near_bindgen, AccountId, Promise};
 
 use crate::*;
 
@@ -21,12 +21,9 @@ impl LockupContract {
         let unvested_amount = self.get_unvested_amount(vesting_schedule);
         assert!(unvested_amount.0 > 0, "The account is fully vested");
 
-        env::log(
-            format!(
-                "Terminating vesting. The remaining unvested balance is {}",
-                unvested_amount.0
-            )
-            .as_bytes(),
+        log!(
+            "Terminating vesting. The remaining unvested balance is {}",
+            unvested_amount.0
         );
 
         let deficit = unvested_amount
@@ -77,7 +74,7 @@ impl LockupContract {
                 // Need to unstake
                 self.set_termination_status(TerminationStatus::UnstakingInProgress);
                 self.set_staking_pool_status(TransactionStatus::Busy);
-                env::log(b"Termination Step: Going to unstake everything from the staking pool");
+                env::log_str("Termination Step: Going to unstake everything from the staking pool");
 
                 ext_staking_pool::get_account_staked_balance(
                     env::current_account_id(),
@@ -103,7 +100,9 @@ impl LockupContract {
                     TerminationStatus::WithdrawingFromStakingPoolInProgress,
                 );
                 self.set_staking_pool_status(TransactionStatus::Busy);
-                env::log(b"Termination Step: Going to withdraw everything from the staking pool");
+                env::log_str(
+                    "Termination Step: Going to withdraw everything from the staking pool",
+                );
 
                 ext_staking_pool::get_account_unstaked_balance(
                     env::current_account_id(),
@@ -152,12 +151,10 @@ impl LockupContract {
             "The account doesn't have enough liquid balance to withdraw any amount"
         );
 
-        env::log(
-            format!(
-                "Termination Step: Withdrawing {} of terminated unvested balance to account @{}",
-                amount, receiver_id
-            )
-            .as_bytes(),
+        log!(
+            "Termination Step: Withdrawing {} of terminated unvested balance to account @{}",
+            amount,
+            receiver_id
         );
 
         self.set_termination_status(TerminationStatus::WithdrawingFromAccountInProgress);

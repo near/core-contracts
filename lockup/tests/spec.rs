@@ -1,15 +1,15 @@
 use lockup_contract::{
     LockupContractContract, TerminationStatus, TransfersInformation, VestingSchedule,
-    VestingScheduleOrHash, VestingScheduleWithSalt, WrappedBalance, MIN_BALANCE_FOR_STORAGE
+    VestingScheduleOrHash, VestingScheduleWithSalt, WrappedBalance, MIN_BALANCE_FOR_STORAGE,
 };
 use near_sdk::borsh::BorshSerialize;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
-use near_sdk::{AccountId, Balance};
+use near_sdk::{AccountId, Balance, PublicKey};
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::{deploy, init_simulator, to_yocto, UserAccount};
 use quickcheck_macros::quickcheck;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 
 pub const MAX_GAS: u64 = 300000000000000;
 pub const NO_DEPOSIT: Balance = 0;
@@ -19,10 +19,10 @@ const STAKING_POOL_WHITELIST_ACCOUNT_ID: &str = "staking-pool-whitelist";
 const STAKING_POOL_ACCOUNT_ID: &str = "staking-pool";
 const TRANSFER_POLL_ACCOUNT_ID: &str = "transfer-poll";
 
-pub fn public_key(byte_val: u8) -> Base58PublicKey {
+pub fn public_key(byte_val: u8) -> PublicKey {
     let mut pk = vec![byte_val; 33];
     pk[0] = 0;
-    Base58PublicKey(pk)
+    PublicKey::try_from(pk).unwrap()
 }
 
 pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
@@ -57,7 +57,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: AccountId::new_unchecked(LOCKUP_ACCOUNT_ID.parse().unwrap()),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -71,7 +71,7 @@ fn lockup(lockup_amount: Balance, lockup_duration: u64, lockup_timestamp: u64) {
             },
             None,
             None,
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             None
         )
     );
@@ -101,7 +101,7 @@ fn staking() {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: AccountId::new_unchecked(LOCKUP_ACCOUNT_ID.to_string()),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -111,11 +111,11 @@ fn staking() {
             1000000000.into(),
             None,
             TransfersInformation::TransfersDisabled {
-                transfer_poll_account_id: "transfer-poll".to_string(),
+                transfer_poll_account_id: "transfer-poll".parse().unwrap(),
             },
             None,
             None,
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             None
         )
     );
@@ -132,7 +132,7 @@ fn staking() {
         .function_call(
             lockup
                 .contract
-                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.to_string()),
+                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.parse().unwrap()),
             MAX_GAS,
             0,
         )
@@ -141,7 +141,7 @@ fn staking() {
     let res: Option<AccountId> = owner
         .view_method_call(lockup.contract.get_staking_pool_account_id())
         .unwrap_json();
-    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.to_string()));
+    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.parse().unwrap()));
     let res: U128 = owner
         .view_method_call(lockup.contract.get_known_deposited_balance())
         .unwrap_json();
@@ -171,9 +171,9 @@ fn staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -192,19 +192,25 @@ fn staking() {
 
     // Simulating rewards
     foundation
-        .transfer(STAKING_POOL_ACCOUNT_ID.to_string(), to_yocto("10"))
+        .transfer(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), to_yocto("10"))
         .assert_success();
 
     // Pinging the staking pool
     foundation
-        .call(STAKING_POOL_ACCOUNT_ID.to_string(), "ping", b"", MAX_GAS, 0)
+        .call(
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
+            "ping",
+            b"",
+            MAX_GAS,
+            0,
+        )
         .assert_success();
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -237,9 +243,9 @@ fn staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -248,9 +254,9 @@ fn staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -266,7 +272,7 @@ fn staking() {
     pool.locked = 0;
     staking_pool
         .borrow_runtime_mut()
-        .force_account_update(STAKING_POOL_ACCOUNT_ID.to_string(), &pool);
+        .force_account_update(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), &pool);
 
     // Withdrawing everything from the staking pool
     let res: bool = owner_staking_account
@@ -308,7 +314,7 @@ fn staking_with_helpers() {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -318,11 +324,11 @@ fn staking_with_helpers() {
             1000000000.into(),
             None,
             TransfersInformation::TransfersDisabled {
-                transfer_poll_account_id: "transfer-poll".to_string(),
+                transfer_poll_account_id: "transfer-poll".parse().unwrap(),
             },
             None,
             None,
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             None
         )
     );
@@ -339,7 +345,7 @@ fn staking_with_helpers() {
         .function_call(
             lockup
                 .contract
-                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.to_string()),
+                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.parse().unwrap()),
             MAX_GAS,
             0,
         )
@@ -348,7 +354,7 @@ fn staking_with_helpers() {
     let res: Option<AccountId> = owner
         .view_method_call(lockup.contract.get_staking_pool_account_id())
         .unwrap_json();
-    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.to_string()));
+    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.parse().unwrap()));
     let res: U128 = owner
         .view_method_call(lockup.contract.get_known_deposited_balance())
         .unwrap_json();
@@ -371,9 +377,9 @@ fn staking_with_helpers() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -392,19 +398,25 @@ fn staking_with_helpers() {
 
     // Simulating rewards
     foundation
-        .transfer(STAKING_POOL_ACCOUNT_ID.to_string(), to_yocto("10"))
+        .transfer(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), to_yocto("10"))
         .assert_success();
 
     // Pinging the staking pool
     foundation
-        .call(STAKING_POOL_ACCOUNT_ID.to_string(), "ping", b"", MAX_GAS, 0)
+        .call(
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
+            "ping",
+            b"",
+            MAX_GAS,
+            0,
+        )
         .assert_success();
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -437,9 +449,9 @@ fn staking_with_helpers() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -448,9 +460,9 @@ fn staking_with_helpers() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -467,7 +479,7 @@ fn staking_with_helpers() {
     pool.locked = 0;
     staking_pool
         .borrow_runtime_mut()
-        .force_account_update(STAKING_POOL_ACCOUNT_ID.to_string(), &pool);
+        .force_account_update(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), &pool);
 
     // Withdrawing everything from the staking pool
     let res: bool = owner_staking_account
@@ -512,7 +524,7 @@ fn termination_with_staking_hashed() {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -522,7 +534,7 @@ fn termination_with_staking_hashed() {
             1000000000.into(),
             None,
             TransfersInformation::TransfersDisabled {
-                transfer_poll_account_id: "transfer-poll".to_string(),
+                transfer_poll_account_id: "transfer-poll".parse().unwrap(),
             },
             Some(VestingScheduleOrHash::VestingHash(
                 near_sdk_sim::hash::hash(
@@ -538,7 +550,7 @@ fn termination_with_staking_hashed() {
                 .into(),
             )),
             None,
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             Some(foundation.account_id.clone())
         )
     );
@@ -555,7 +567,7 @@ fn termination_with_staking_hashed() {
         .function_call(
             lockup
                 .contract
-                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.to_string()),
+                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.parse().unwrap()),
             MAX_GAS,
             0,
         )
@@ -564,7 +576,7 @@ fn termination_with_staking_hashed() {
     let res: Option<AccountId> = owner
         .view_method_call(lockup.contract.get_staking_pool_account_id())
         .unwrap_json();
-    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.to_string()));
+    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.parse().unwrap()));
     let res: U128 = owner
         .view_method_call(lockup.contract.get_known_deposited_balance())
         .unwrap_json();
@@ -587,12 +599,18 @@ fn termination_with_staking_hashed() {
 
     // Simulating rewards
     foundation
-        .transfer(STAKING_POOL_ACCOUNT_ID.to_string(), to_yocto("10"))
+        .transfer(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), to_yocto("10"))
         .assert_success();
 
     // Pinging the staking pool
     foundation
-        .call(STAKING_POOL_ACCOUNT_ID.to_string(), "ping", b"", MAX_GAS, 0)
+        .call(
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
+            "ping",
+            b"",
+            MAX_GAS,
+            0,
+        )
         .assert_success();
 
     let res: U128 = owner
@@ -669,9 +687,9 @@ fn termination_with_staking_hashed() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -698,9 +716,9 @@ fn termination_with_staking_hashed() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -709,9 +727,9 @@ fn termination_with_staking_hashed() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -742,13 +760,13 @@ fn termination_with_staking_hashed() {
     pool.locked = 0;
     staking_pool
         .borrow_runtime_mut()
-        .force_account_update(STAKING_POOL_ACCOUNT_ID.to_string(), &pool);
+        .force_account_update(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), &pool);
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -776,9 +794,9 @@ fn termination_with_staking_hashed() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -822,7 +840,10 @@ fn termination_with_staking_hashed() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance);
+    assert_eq!(
+        res.0,
+        (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance
+    );
 
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_liquid_owners_balance())
@@ -853,7 +874,7 @@ fn termination_with_staking() {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -863,13 +884,13 @@ fn termination_with_staking() {
             1000000000.into(),
             None,
             TransfersInformation::TransfersDisabled {
-                transfer_poll_account_id: "transfer-poll".to_string(),
+                transfer_poll_account_id: "transfer-poll".parse().unwrap(),
             },
             Some(VestingScheduleOrHash::VestingSchedule(
                 vesting_schedule.clone(),
             )),
             None,
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             Some(foundation.account_id.clone())
         )
     );
@@ -886,7 +907,7 @@ fn termination_with_staking() {
         .function_call(
             lockup
                 .contract
-                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.to_string()),
+                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.parse().unwrap()),
             MAX_GAS,
             0,
         )
@@ -895,7 +916,7 @@ fn termination_with_staking() {
     let res: Option<AccountId> = owner
         .view_method_call(lockup.contract.get_staking_pool_account_id())
         .unwrap_json();
-    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.to_string()));
+    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.parse().unwrap()));
     let res: U128 = owner
         .view_method_call(lockup.contract.get_known_deposited_balance())
         .unwrap_json();
@@ -918,12 +939,18 @@ fn termination_with_staking() {
 
     // Simulating rewards
     foundation
-        .transfer(STAKING_POOL_ACCOUNT_ID.to_string(), to_yocto("10"))
+        .transfer(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), to_yocto("10"))
         .assert_success();
 
     // Pinging the staking pool
     foundation
-        .call(STAKING_POOL_ACCOUNT_ID.to_string(), "ping", b"", MAX_GAS, 0)
+        .call(
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
+            "ping",
+            b"",
+            MAX_GAS,
+            0,
+        )
         .assert_success();
 
     let res: U128 = owner
@@ -991,9 +1018,9 @@ fn termination_with_staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1020,9 +1047,9 @@ fn termination_with_staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1031,9 +1058,9 @@ fn termination_with_staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1064,13 +1091,13 @@ fn termination_with_staking() {
     pool.locked = 0;
     staking_pool
         .borrow_runtime_mut()
-        .force_account_update(STAKING_POOL_ACCOUNT_ID.to_string(), &pool);
+        .force_account_update(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), &pool);
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1098,9 +1125,9 @@ fn termination_with_staking() {
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_unstaked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1144,7 +1171,10 @@ fn termination_with_staking() {
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_locked_amount())
         .unwrap_json();
-    assert_eq!(res.0, (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance);
+    assert_eq!(
+        res.0,
+        (lockup_amount + MIN_BALANCE_FOR_STORAGE) - unvested_balance
+    );
 
     let res: WrappedBalance = owner
         .view_method_call(lockup.contract.get_liquid_owners_balance())
@@ -1168,7 +1198,7 @@ fn test_release_schedule_unlock_transfers() {
     // Initializing fake voting contract
     let _voting = root.deploy(
         &FAKE_VOTING_WASM_BYTES,
-        TRANSFER_POLL_ACCOUNT_ID.to_string(),
+        TRANSFER_POLL_ACCOUNT_ID.parse().unwrap(),
         to_yocto("30"),
     );
 
@@ -1178,7 +1208,7 @@ fn test_release_schedule_unlock_transfers() {
 
     let lockup = deploy!(
         contract: LockupContractContract,
-        contract_id: LOCKUP_ACCOUNT_ID.to_string(),
+        contract_id: LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap(),
         bytes: &LOCKUP_WASM_BYTES,
         signer_account: root,
         deposit: MIN_BALANCE_FOR_STORAGE + lockup_amount,
@@ -1188,11 +1218,11 @@ fn test_release_schedule_unlock_transfers() {
             0.into(),
             None,
             TransfersInformation::TransfersDisabled {
-                transfer_poll_account_id: TRANSFER_POLL_ACCOUNT_ID.to_string(),
+                transfer_poll_account_id: TRANSFER_POLL_ACCOUNT_ID.parse().unwrap(),
             },
             None,
             Some(1000000000000.into()),
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             None
         )
     );
@@ -1209,7 +1239,7 @@ fn test_release_schedule_unlock_transfers() {
         .function_call(
             lockup
                 .contract
-                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.to_string()),
+                .select_staking_pool(STAKING_POOL_ACCOUNT_ID.parse().unwrap()),
             MAX_GAS,
             0,
         )
@@ -1218,7 +1248,7 @@ fn test_release_schedule_unlock_transfers() {
     let res: Option<AccountId> = owner
         .view_method_call(lockup.contract.get_staking_pool_account_id())
         .unwrap_json();
-    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.to_string()));
+    assert_eq!(res, Some(STAKING_POOL_ACCOUNT_ID.parse().unwrap()));
     let res: U128 = owner
         .view_method_call(lockup.contract.get_known_deposited_balance())
         .unwrap_json();
@@ -1241,19 +1271,25 @@ fn test_release_schedule_unlock_transfers() {
 
     // Simulating rewards
     foundation
-        .transfer(STAKING_POOL_ACCOUNT_ID.to_string(), to_yocto("10"))
+        .transfer(STAKING_POOL_ACCOUNT_ID.parse().unwrap(), to_yocto("10"))
         .assert_success();
 
     // Pinging the staking pool
     foundation
-        .call(STAKING_POOL_ACCOUNT_ID.to_string(), "ping", b"", MAX_GAS, 0)
+        .call(
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
+            "ping",
+            b"",
+            MAX_GAS,
+            0,
+        )
         .assert_success();
 
     let res: U128 = owner
         .view(
-            STAKING_POOL_ACCOUNT_ID.to_string(),
+            STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
             "get_account_staked_balance",
-            &json!({ "account_id": LOCKUP_ACCOUNT_ID.to_string() })
+            &json!({ "account_id": LOCKUP_ACCOUNT_ID.parse::<AccountId>().unwrap() })
                 .to_string()
                 .into_bytes(),
         )
@@ -1510,7 +1546,7 @@ fn test_release_schedule_unlock_transfers() {
         .unwrap_json();
     assert_eq_with_gas(res.0, full_balance);
 
-    let public_key: Base58PublicKey = owner_staking_account
+    let public_key: PublicKey = owner_staking_account
         .signer
         .public_key
         .try_to_vec()
@@ -1559,8 +1595,8 @@ fn test_release_schedule_unlock_transfers() {
         )
         .assert_success();
 
-    let mut lockup_account = root.create_user("tmp".to_string(), to_yocto("100"));
-    lockup_account.account_id = LOCKUP_ACCOUNT_ID.to_string();
+    let mut lockup_account = root.create_user("tmp".parse().unwrap(), to_yocto("100"));
+    lockup_account.account_id = LOCKUP_ACCOUNT_ID.parse().unwrap();
     lockup_account.signer = owner.signer.clone();
 
     // Testing direct transfer
@@ -1578,17 +1614,17 @@ fn basic_setup() -> (UserAccount, UserAccount, UserAccount, UserAccount) {
     genesis_config.block_prod_time = 0;
     let root = init_simulator(Some(genesis_config));
 
-    let foundation = root.create_user("foundation".to_string(), to_yocto("10000"));
+    let foundation = root.create_user("foundation".parse().unwrap(), to_yocto("10000"));
 
-    let owner = root.create_user("owner".to_string(), to_yocto("30"));
+    let owner = root.create_user("owner".to_string().parse().unwrap(), to_yocto("30"));
 
     // Creating whitelist account
     let _whitelist = root.deploy_and_init(
         &WHITELIST_WASM_BYTES,
-        STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+        STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
         "new",
         &json!({
-            "foundation_account_id": foundation.valid_account_id(),
+            "foundation_account_id": foundation.account_id(),
         })
         .to_string()
         .into_bytes(),
@@ -1599,10 +1635,10 @@ fn basic_setup() -> (UserAccount, UserAccount, UserAccount, UserAccount) {
     // Whitelisting staking pool
     foundation
         .call(
-            STAKING_POOL_WHITELIST_ACCOUNT_ID.to_string(),
+            STAKING_POOL_WHITELIST_ACCOUNT_ID.parse().unwrap(),
             "add_staking_pool",
             &json!({
-                "staking_pool_account_id": STAKING_POOL_ACCOUNT_ID.to_string(),
+                "staking_pool_account_id": STAKING_POOL_ACCOUNT_ID.parse::<AccountId>().unwrap(),
             })
             .to_string()
             .into_bytes(),
@@ -1614,10 +1650,10 @@ fn basic_setup() -> (UserAccount, UserAccount, UserAccount, UserAccount) {
     // Creating staking pool
     let staking_pool = root.deploy_and_init(
         &STAKING_POOL_WASM_BYTES,
-        STAKING_POOL_ACCOUNT_ID.to_string(),
+        STAKING_POOL_ACCOUNT_ID.parse().unwrap(),
         "new",
         &json!({
-            "owner_id": foundation.valid_account_id(),
+            "owner_id": foundation.account_id(),
             "stake_public_key": "ed25519:3tysLvy7KGoE8pznUgXvSHa4vYyGvrDZFcT8jgb8PEQ6",
             "reward_fee_fraction": {
                 "numerator": 10,

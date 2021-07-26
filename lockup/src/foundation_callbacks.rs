@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, PromiseOrValue, assert_self, is_promise_success};
+use near_sdk::{assert_self, is_promise_success, log, near_bindgen, PromiseOrValue};
 use std::convert::Into;
 
 #[near_bindgen]
@@ -13,16 +13,13 @@ impl LockupContract {
         assert_self();
         if staked_balance.0 > 0 {
             // Need to unstake
-            env::log(
-                format!(
-                    "Termination Step: Unstaking {} from the staking pool @{}",
-                    staked_balance.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: Unstaking {} from the staking pool @{}",
+                staked_balance.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
 
             ext_staking_pool::unstake(
@@ -45,7 +42,7 @@ impl LockupContract {
             )
             .into()
         } else {
-            env::log(b"Termination Step: Nothing to unstake. Moving to the next status.");
+            env::log_str("Termination Step: Nothing to unstake. Moving to the next status.");
             self.set_staking_pool_status(TransactionStatus::Idle);
             self.set_termination_status(TerminationStatus::EverythingUnstaked);
             PromiseOrValue::Value(true)
@@ -62,29 +59,23 @@ impl LockupContract {
 
         if unstake_succeeded {
             self.set_termination_status(TerminationStatus::EverythingUnstaked);
-            env::log(
-                format!(
-                    "Termination Step: Unstaking of {} at @{} succeeded",
-                    amount.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: Unstaking of {} at @{} succeeded",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
         } else {
             self.set_termination_status(TerminationStatus::VestingTerminatedWithDeficit);
-            env::log(
-                format!(
-                    "Termination Step: Unstaking {} at @{} has failed",
-                    amount.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: Unstaking {} at @{} has failed",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
         }
         unstake_succeeded
@@ -99,16 +90,13 @@ impl LockupContract {
         assert_self();
         if unstaked_balance.0 > 0 {
             // Need to withdraw
-            env::log(
-                format!(
-                    "Termination Step: Withdrawing {} from the staking pool @{}",
-                    unstaked_balance.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: Withdrawing {} from the staking pool @{}",
+                unstaked_balance.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
 
             ext_staking_pool::withdraw(
@@ -131,7 +119,7 @@ impl LockupContract {
             )
             .into()
         } else {
-            env::log(b"Termination Step: Nothing to withdraw from the staking pool. Ready to withdraw from the account.");
+            env::log_str("Termination Step: Nothing to withdraw from the staking pool. Ready to withdraw from the account.");
             self.set_staking_pool_status(TransactionStatus::Idle);
             self.set_termination_status(TerminationStatus::ReadyToWithdraw);
             PromiseOrValue::Value(true)
@@ -156,29 +144,23 @@ impl LockupContract {
                     .0
                     .saturating_sub(amount.0);
             }
-            env::log(
-                format!(
-                    "Termination Step: The withdrawal of {} from @{} succeeded",
-                    amount.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: The withdrawal of {} from @{} succeeded",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
         } else {
             self.set_termination_status(TerminationStatus::EverythingUnstaked);
-            env::log(
-                format!(
-                    "Termination Step: The withdrawal of {} from @{} failed",
-                    amount.0,
-                    self.staking_information
-                        .as_ref()
-                        .unwrap()
-                        .staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: The withdrawal of {} from @{} failed",
+                amount.0,
+                self.staking_information
+                    .as_ref()
+                    .unwrap()
+                    .staking_pool_account_id
             );
         }
         withdraw_succeeded
@@ -194,12 +176,11 @@ impl LockupContract {
 
         let withdraw_succeeded = is_promise_success();
         if withdraw_succeeded {
-            env::log(
-                format!(
-                    "Termination Step: The withdrawal of the terminated unvested amount of {} to @{} succeeded.",
-                    amount.0, receiver_id
-                )
-                    .as_bytes(),
+            log!(
+                "Termination Step: The withdrawal of the terminated unvested amount of {} to @{}\
+                 succeeded.",
+                amount.0,
+                receiver_id
             );
             // Decreasing lockup amount after withdrawal.
             self.lockup_information.termination_withdrawn_tokens += amount.0;
@@ -212,29 +193,29 @@ impl LockupContract {
                         unvested_amount: remaining_balance.into(),
                         status: TerminationStatus::ReadyToWithdraw,
                     });
-                env::log(
-                    format!(
-                        "Termination Step: There is still terminated unvested balance of {} remaining to be withdrawn",
-                        remaining_balance
-                    )
-                        .as_bytes(),
+                log!(
+                    "Termination Step: There is still terminated unvested balance of {} remaining \
+                    to be withdrawn",
+                    remaining_balance
                 );
                 if self.get_account_balance().0 == 0 {
-                    env::log(b"The withdrawal is completed: no more balance can be withdrawn in a future call");
+                    env::log_str(
+                        "The withdrawal is completed: no more balance can be withdrawn \
+                        in a future call",
+                    );
                 }
             } else {
                 self.foundation_account_id = None;
                 self.vesting_information = VestingInformation::None;
-                env::log(b"Vesting schedule termination and withdrawal are completed");
+                env::log_str("Vesting schedule termination and withdrawal are completed");
             }
         } else {
             self.set_termination_status(TerminationStatus::ReadyToWithdraw);
-            env::log(
-                format!(
-                    "Termination Step: The withdrawal of the terminated unvested amount of {} to @{} failed",
-                    amount.0, receiver_id,
-                )
-                .as_bytes(),
+            log!(
+                "Termination Step: The withdrawal of the terminated unvested amount of {} to @{}\
+                 failed",
+                amount.0,
+                receiver_id,
             );
         }
         withdraw_succeeded

@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, AccountId, Promise, PublicKey};
+use near_sdk::{log, near_bindgen, AccountId, Promise, PublicKey};
 
 #[near_bindgen]
 impl LockupContract {
@@ -18,12 +18,9 @@ impl LockupContract {
         self.assert_staking_pool_is_not_selected();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Selecting staking pool @{}. Going to check whitelist first.",
-                staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Selecting staking pool @{}. Going to check whitelist first.",
+            staking_pool_account_id
         );
 
         ext_whitelist::is_whitelisted(
@@ -59,15 +56,12 @@ impl LockupContract {
             "There is still a deposit on the staking pool"
         );
 
-        env::log(
-            format!(
-                "Unselected current staking pool @{}.",
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Unselected current staking pool @{}.",
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.staking_information = None;
@@ -88,16 +82,13 @@ impl LockupContract {
             "The balance that can be deposited to the staking pool is lower than the extra amount"
         );
 
-        env::log(
-            format!(
-                "Depositing {} to the staking pool @{}",
-                amount.0,
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Depositing {} to the staking pool @{}",
+            amount.0,
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -134,16 +125,13 @@ impl LockupContract {
             "The balance that can be deposited to the staking pool is lower than the extra amount"
         );
 
-        env::log(
-            format!(
-                "Depositing and staking {} to the staking pool @{}",
-                amount.0,
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Depositing and staking {} to the staking pool @{}",
+            amount.0,
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -178,15 +166,12 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Fetching total balance from the staking pool @{}",
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Fetching total balance from the staking pool @{}",
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -219,16 +204,13 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Withdrawing {} from the staking pool @{}",
-                amount.0,
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Withdrawing {} from the staking pool @{}",
+            amount.0,
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -261,15 +243,12 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Going to query the unstaked balance at the staking pool @{}",
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Going to query the unstaked balance at the staking pool @{}",
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -304,16 +283,13 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Staking {} at the staking pool @{}",
-                amount.0,
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Staking {} at the staking pool @{}",
+            amount.0,
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -347,16 +323,13 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Unstaking {} from the staking pool @{}",
-                amount.0,
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Unstaking {} from the staking pool @{}",
+            amount.0,
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -389,15 +362,12 @@ impl LockupContract {
         self.assert_staking_pool_is_idle();
         self.assert_no_termination();
 
-        env::log(
-            format!(
-                "Unstaking all tokens from the staking pool @{}",
-                self.staking_information
-                    .as_ref()
-                    .unwrap()
-                    .staking_pool_account_id
-            )
-            .as_bytes(),
+        log!(
+            "Unstaking all tokens from the staking pool @{}",
+            self.staking_information
+                .as_ref()
+                .unwrap()
+                .staking_pool_account_id
         );
 
         self.set_staking_pool_status(TransactionStatus::Busy);
@@ -437,12 +407,9 @@ impl LockupContract {
             _ => unreachable!(),
         };
 
-        env::log(
-            format!(
-                "Checking that transfers are enabled at the transfer poll contract @{}",
-                transfer_poll_account_id,
-            )
-            .as_bytes(),
+        log!(
+            "Checking that transfers are enabled at the transfer poll contract @{}",
+            transfer_poll_account_id,
         );
 
         ext_transfer_poll::get_result(
@@ -481,7 +448,7 @@ impl LockupContract {
             amount.0,
         );
 
-        env::log(format!("Transferring {} to account @{}", amount.0, receiver_id).as_bytes());
+        log!("Transferring {} to account @{}", amount.0, receiver_id);
 
         Promise::new(receiver_id).transfer(amount.0)
     }
@@ -499,14 +466,18 @@ impl LockupContract {
     /// - If there’s a termination made by foundation, it has to be finished.
     /// Full access key will allow owner to use this account as a regular account and remove
     /// the contract.
-    pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
+    pub fn add_full_access_key(&mut self, new_public_key: PublicKey) -> Promise {
         self.assert_owner();
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
         self.assert_no_termination();
-        assert_eq!(self.get_locked_amount().0, 0, "Tokens are still locked/unvested");
+        assert_eq!(
+            self.get_locked_amount().0,
+            0,
+            "Tokens are still locked/unvested"
+        );
 
-        env::log(b"Adding a full access key");
+        env::log_str("Adding a full access key");
 
         let new_public_key: PublicKey = new_public_key.into();
 
