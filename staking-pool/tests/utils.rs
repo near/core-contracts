@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-extern crate staking_pool;
 
 use near_crypto::{InMemorySigner, KeyType, Signer};
 use near_primitives::{
@@ -10,10 +9,11 @@ use near_primitives::{
     types::{AccountId, Balance},
 };
 use near_runtime_standalone::{init_runtime_and_signer, RuntimeStandalone};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::serde::de::DeserializeOwned;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::{self, json};
-use staking_pool::RewardFeeFraction;
 
 pub const POOL_ACCOUNT_ID: &str = "pool";
 pub const MAX_GAS: u64 = 300_000_000_000_000;
@@ -36,6 +36,16 @@ fn outcome_into_result(outcome: ExecutionOutcome) -> TxResult {
         ExecutionStatus::Unknown => unreachable!()
     }
 }
+
+// * Duplicated type as internal type to not require rlib for contract. This also ensures that the
+// * API is consistent.
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct RewardFeeFraction {
+    pub numerator: u32,
+    pub denominator: u32,
+}
+
 pub struct ExternalUser {
     account_id: AccountId,
     signer: InMemorySigner,
