@@ -1,6 +1,6 @@
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
-use near_sdk::Balance;
+use near_sdk::{AccountId, Balance};
 use near_sdk_sim::{
     call, deploy, init_simulator, to_yocto, view, ContractAccount, ExecutionResult, UserAccount,
     DEFAULT_GAS,
@@ -20,10 +20,10 @@ const STORAGE_BALANCE: Balance = 125 * LEGACY_BYTE_COST;
 // Register the given `user` with Legacy wNEAR contract
 fn legacy_register_user(user: &UserAccount) {
     user.call(
-        CONTRACT_ID.to_string(),
+        AccountId::new_unchecked(CONTRACT_ID.to_string()),
         "storage_deposit",
         &json!({
-            "account_id": user.valid_account_id()
+            "account_id": user.account_id()
         })
         .to_string()
         .into_bytes(),
@@ -35,10 +35,10 @@ fn legacy_register_user(user: &UserAccount) {
 
 fn wrap_near(user: &UserAccount, amount: Balance) -> ExecutionResult {
     user.call(
-        CONTRACT_ID.to_string(),
+        AccountId::new_unchecked(CONTRACT_ID.to_string()),
         "near_deposit",
         &json!({
-            "account_id": user.valid_account_id()
+            "account_id": user.account_id()
         })
         .to_string()
         .into_bytes(),
@@ -79,17 +79,17 @@ pub fn test_upgrade() {
         view!(w_near.storage_minimum_balance()).unwrap_json();
     assert_eq!(legacy_storage_minimum_balance.0, STORAGE_BALANCE);
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    let alice = root.create_user("alice".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&alice);
 
     wrap_near(&alice, to_yocto("10")).assert_success();
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
+    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.account_id())).unwrap_json();
     assert_eq!(alice_balance.0, to_yocto("10"));
 
     w_near
         .user_account
-        .create_transaction(CONTRACT_ID.to_string())
+        .create_transaction(CONTRACT_ID.parse().unwrap())
         .deploy_contract(W_NEAR_WASM_BYTES.to_vec())
         .submit()
         .assert_success();
@@ -97,25 +97,25 @@ pub fn test_upgrade() {
     let storage_minimum_balance: U128 = view!(w_near.storage_minimum_balance()).unwrap_json();
     assert_eq!(storage_minimum_balance.0, STORAGE_BALANCE);
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
+    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.account_id())).unwrap_json();
     assert_eq!(alice_balance.0, to_yocto("10"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
+    let bob = root.create_user("bob".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&bob);
 
     wrap_near(&bob, to_yocto("15")).assert_success();
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
+    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.account_id())).unwrap_json();
     assert_eq!(bob_balance.0, to_yocto("15"));
 
     call!(
         alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
+        w_near.ft_transfer(bob.account_id(), to_yocto("5").into(), None),
         deposit = 1
     )
     .assert_success();
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
+    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.account_id())).unwrap_json();
     assert_eq!(bob_balance.0, to_yocto("20"));
 }
 
@@ -123,25 +123,25 @@ pub fn test_upgrade() {
 pub fn test_legacy_ft_transfer() {
     let (root, w_near) = deploy_legacy();
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    let alice = root.create_user("alice".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&alice);
 
     wrap_near(&alice, to_yocto("10")).assert_success();
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
+    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.account_id())).unwrap_json();
     assert_eq!(alice_balance.0, to_yocto("10"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
+    let bob = root.create_user("bob".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&bob);
 
     call!(
         alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
+        w_near.ft_transfer(bob.account_id(), to_yocto("5").into(), None),
         deposit = 1
     )
     .assert_success();
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
+    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.account_id())).unwrap_json();
     assert_eq!(bob_balance.0, to_yocto("5"));
 }
 
@@ -149,25 +149,25 @@ pub fn test_legacy_ft_transfer() {
 pub fn test_ft_transfer() {
     let (root, w_near) = deploy_w_near();
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    let alice = root.create_user("alice".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&alice);
 
     wrap_near(&alice, to_yocto("10")).assert_success();
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
+    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.account_id())).unwrap_json();
     assert_eq!(alice_balance.0, to_yocto("10"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
+    let bob = root.create_user("bob".parse().unwrap(), to_yocto("100"));
     legacy_register_user(&bob);
 
     call!(
         alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
+        w_near.ft_transfer(bob.account_id(), to_yocto("5").into(), None),
         deposit = 1
     )
     .assert_success();
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
+    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.account_id())).unwrap_json();
     assert_eq!(bob_balance.0, to_yocto("5"));
 }
 
@@ -175,7 +175,7 @@ pub fn test_ft_transfer() {
 pub fn test_legacy_wrap_fail() {
     let (root, _w_near) = deploy_legacy();
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    let alice = root.create_user("alice".parse().unwrap(), to_yocto("100"));
 
     let status = wrap_near(&alice, to_yocto("10"));
     assert!(!status.is_ok())
@@ -185,10 +185,10 @@ pub fn test_legacy_wrap_fail() {
 pub fn test_wrap_without_storage_deposit() {
     let (root, w_near) = deploy_w_near();
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    let alice = root.create_user("alice".parse().unwrap(), to_yocto("100"));
 
     wrap_near(&alice, to_yocto("10")).assert_success();
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
+    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.account_id())).unwrap_json();
     assert_eq!(alice_balance.0, to_yocto("10") - STORAGE_BALANCE);
 }

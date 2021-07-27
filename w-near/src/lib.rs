@@ -13,7 +13,7 @@ use near_contract_standards::fungible_token::metadata::{
 };
 use near_contract_standards::fungible_token::FungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{ValidAccountId, U128};
+use near_sdk::json_types::{U128};
 // Needed by `impl_fungible_token_core` for old Rust.
 #[allow(unused_imports)]
 use near_sdk::env;
@@ -21,8 +21,6 @@ use near_sdk::{near_bindgen, AccountId, PanicOnDefault, PromiseOrValue};
 
 mod legacy_storage;
 mod w_near;
-
-near_sdk::setup_alloc!();
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
