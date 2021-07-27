@@ -3,9 +3,6 @@ use near_sdk::json_types::{U128, U64};
 use near_sdk::{env, near_bindgen, AccountId, Balance, EpochHeight};
 use std::collections::HashMap;
 
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
-
 type WrappedTimestamp = U64;
 
 /// Voting contract for unlocking transfers. Once the majority of the stake holders agree to
@@ -132,9 +129,9 @@ impl VotingContract {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::MockedBlockchain;
     use near_sdk::{testing_env, VMContext};
     use std::collections::HashMap;
+    use std::convert::TryInto;
     use std::iter::FromIterator;
 
     fn get_context(predecessor_account_id: AccountId) -> VMContext {
@@ -149,7 +146,7 @@ mod tests {
             current_account_id: "alice_near".to_string(),
             signer_account_id: "bob_near".to_string(),
             signer_account_pk: vec![0, 1, 2],
-            predecessor_account_id,
+            predecessor_account_id: predecessor_account_id.into(),
             input: vec![],
             block_index: 0,
             block_timestamp: 0,
@@ -168,7 +165,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "is not a validator")]
     fn test_nonvalidator_cannot_vote() {
-        let context = get_context("bob.near".to_string());
+        let context = get_context("bob.near".parse().unwrap());
         let validators = HashMap::from_iter(
             vec![
                 ("alice_near".to_string(), 100),
@@ -184,7 +181,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Voting has already ended")]
     fn test_vote_again_after_voting_ends() {
-        let context = get_context("alice.near".to_string());
+        let context = get_context("alice.near".parse().unwrap());
         let validators = HashMap::from_iter(vec![("alice.near".to_string(), 100)].into_iter());
         testing_env!(context, Default::default(), Default::default(), validators);
         let mut contract = VotingContract::new();
@@ -195,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_voting_simple() {
-        let context = get_context("test0".to_string());
+        let context = get_context("test0".parse().unwrap());
         let validators = (0..10)
             .map(|i| (format!("test{}", i), 10))
             .collect::<HashMap<_, _>>();
@@ -208,7 +205,7 @@ mod tests {
         let mut contract = VotingContract::new();
 
         for i in 0..7 {
-            let mut context = get_context(format!("test{}", i));
+            let mut context = get_context(format!("test{}", i).try_into().unwrap());
             testing_env!(
                 context.clone(),
                 Default::default(),
@@ -230,7 +227,7 @@ mod tests {
             assert_eq!(
                 contract.get_votes(),
                 (0..=i)
-                    .map(|i| (format!("test{}", i), U128::from(10)))
+                    .map(|i| (format!("test{}", i).try_into().unwrap(), U128::from(10)))
                     .collect::<HashMap<_, _>>()
             );
             assert_eq!(contract.votes.len() as u128, i + 1);
@@ -247,7 +244,7 @@ mod tests {
         let validators = (0..10)
             .map(|i| (format!("test{}", i), 10))
             .collect::<HashMap<_, _>>();
-        let context = get_context("test0".to_string());
+        let context = get_context("test0".parse().unwrap());
         testing_env!(
             context,
             Default::default(),
@@ -257,7 +254,8 @@ mod tests {
         let mut contract = VotingContract::new();
 
         for i in 0..7 {
-            let context = get_context_with_epoch_height(format!("test{}", i), i);
+            let context =
+                get_context_with_epoch_height(format!("test{}", i).try_into().unwrap(), i);
             testing_env!(
                 context,
                 Default::default(),
@@ -281,7 +279,7 @@ mod tests {
             ("test2".to_string(), 10),
             ("test3".to_string(), 10),
         ]);
-        let context = get_context_with_epoch_height("test1".to_string(), 1);
+        let context = get_context_with_epoch_height("test1".parse().unwrap(), 1);
         testing_env!(
             context,
             Default::default(),
@@ -292,7 +290,7 @@ mod tests {
         let mut contract = VotingContract::new();
         contract.vote(true);
         validators.insert("test1".to_string(), 50);
-        let context = get_context_with_epoch_height("test2".to_string(), 2);
+        let context = get_context_with_epoch_height("test2".parse().unwrap(), 2);
         testing_env!(
             context,
             Default::default(),
@@ -307,7 +305,7 @@ mod tests {
     fn test_withdraw_votes() {
         let validators =
             HashMap::from_iter(vec![("test1".to_string(), 10), ("test2".to_string(), 10)]);
-        let context = get_context_with_epoch_height("test1".to_string(), 1);
+        let context = get_context_with_epoch_height("test1".parse().unwrap(), 1);
         testing_env!(
             context,
             Default::default(),
@@ -317,7 +315,7 @@ mod tests {
         let mut contract = VotingContract::new();
         contract.vote(true);
         assert_eq!(contract.votes.len(), 1);
-        let context = get_context_with_epoch_height("test1".to_string(), 2);
+        let context = get_context_with_epoch_height("test1".parse().unwrap(), 2);
         testing_env!(
             context,
             Default::default(),
@@ -335,7 +333,7 @@ mod tests {
             ("test2".to_string(), 10),
             ("test3".to_string(), 10),
         ]);
-        let context = get_context_with_epoch_height("test1".to_string(), 1);
+        let context = get_context_with_epoch_height("test1".parse().unwrap(), 1);
         testing_env!(
             context,
             Default::default(),
@@ -347,7 +345,7 @@ mod tests {
         contract.vote(true);
         assert_eq!((contract.get_total_voted_stake().0).0, 40);
         validators.remove(&"test1".to_string());
-        let context = get_context_with_epoch_height("test2".to_string(), 2);
+        let context = get_context_with_epoch_height("test2".parse().unwrap(), 2);
         testing_env!(
             context,
             Default::default(),
