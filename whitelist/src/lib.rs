@@ -2,9 +2,6 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupSet;
 use near_sdk::{env, near_bindgen, AccountId};
 
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
-
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct WhitelistContract {
@@ -144,7 +141,8 @@ impl WhitelistContract {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
 
     mod test_utils;
     use test_utils::*;
@@ -154,7 +152,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_whitelist())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = WhitelistContract::new(account_near());
@@ -221,14 +219,14 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_whitelist())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = WhitelistContract::new(account_near());
 
         // Trying ot add to the whitelist by NOT whitelisted factory.
         context.is_view = false;
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         testing_env!(context.clone());
         assert!(contract.add_staking_pool(account_pool()));
     }
@@ -239,14 +237,14 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_whitelist())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = WhitelistContract::new(account_near());
 
         // Trying ot whitelist the factory not by the NEAR Foundation.
         context.is_view = false;
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         testing_env!(context.clone());
         assert!(contract.add_factory(account_factory()));
     }
@@ -257,7 +255,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_whitelist())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = WhitelistContract::new(account_near());
@@ -268,7 +266,7 @@ mod tests {
         assert!(contract.add_factory(account_factory()));
 
         // Trying to remove the pool by the factory.
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         testing_env!(context.clone());
         assert!(contract.remove_staking_pool(account_pool()));
     }
@@ -278,7 +276,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_whitelist())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = WhitelistContract::new(account_near());
@@ -302,7 +300,7 @@ mod tests {
 
         // Adding to whitelist by foundation
         context.is_view = false;
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         testing_env!(context.clone());
         assert!(contract.add_staking_pool(account_pool()));
 
@@ -313,7 +311,7 @@ mod tests {
 
         // Removing the pool from the whitelisted by the NEAR foundation.
         context.is_view = false;
-        context.predecessor_account_id = account_near();
+        context.predecessor_account_id = account_near().into();
         testing_env!(context.clone());
         assert!(contract.remove_staking_pool(account_pool()));
 
