@@ -1,11 +1,12 @@
 mod utils;
 
 use crate::utils::{call_view, new_root, ntoy, view_factory, ExternalUser, FACTORY_ACCOUNT_ID};
+use near_primitives::borsh::BorshSerialize;
 use near_primitives::transaction::ExecutionStatus;
 use near_runtime_standalone::RuntimeStandalone;
-use near_sdk::borsh::BorshSerialize;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde_json::{self, json};
+use near_sdk::PublicKey;
 use std::convert::TryInto;
 
 const STAKING_POOL_WHITELIST_ACCOUNT_ID: &str = "staking-pool-whitelist";
@@ -26,7 +27,7 @@ fn create_staking_pool_success() {
     let owner_staking_account = foundation
         .create_external(&mut r, OWNER_STAKING_ACCOUNT_ID.to_string(), ntoy(30))
         .unwrap();
-    let staking_key: Base58PublicKey = owner_staking_account
+    let staking_key: PublicKey = owner_staking_account
         .signer()
         .public_key
         .try_to_vec()
@@ -82,9 +83,9 @@ fn create_staking_pool_success() {
     assert_eq!(pool_account.amount + pool_account.locked, ntoy(31));
 
     // The staking key on the pool matches the one that was given.
-    let actual_staking_key: Base58PublicKey =
+    let actual_staking_key: PublicKey =
         call_view(&r, &STAKING_POOL_ACCOUNT_ID, "get_staking_key", "");
-    assert_eq!(actual_staking_key.0, staking_key.0);
+    assert_eq!(actual_staking_key, staking_key);
 }
 
 #[test]
@@ -100,7 +101,7 @@ fn create_staking_pool_bad_staking_key() {
     let _owner_staking_account = foundation
         .create_external(&mut r, OWNER_STAKING_ACCOUNT_ID.to_string(), ntoy(30))
         .unwrap();
-    let bad_staking_key: Base58PublicKey = vec![0; 33].try_into().unwrap();
+    let bad_staking_key: PublicKey = vec![0; 33].try_into().unwrap();
 
     let owner_balance = owner.account(&r).amount;
 

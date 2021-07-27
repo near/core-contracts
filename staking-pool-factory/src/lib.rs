@@ -1,8 +1,10 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedSet;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Promise, PromiseOrValue};
+use near_sdk::{
+    env, ext_contract, log, near_bindgen, AccountId, Balance, Promise, PromiseOrValue, PublicKey,
+};
 
 mod utils;
 use crate::utils::*;
@@ -14,15 +16,15 @@ pub mod gas {
     use near_sdk::Gas;
 
     /// The base amount of gas for a regular execution.
-    const BASE: Gas = 25_000_000_000_000;
+    const BASE: Gas = Gas(25_000_000_000_000);
 
     /// The amount of Gas the contract will attach to the promise to create the staking pool.
     /// The base for the execution and the base for staking action to verify the staking key.
-    pub const STAKING_POOL_NEW: Gas = BASE * 2;
+    pub const STAKING_POOL_NEW: Gas = Gas(BASE.0 * 2);
 
     /// The amount of Gas the contract will attach to the callback to itself.
     /// The base for the execution and the base for whitelist call or cash rollback.
-    pub const CALLBACK: Gas = BASE * 2;
+    pub const CALLBACK: Gas = Gas(BASE.0 * 2);
 
     /// The amount of Gas the contract will attach to the promise to the whitelist contract.
     /// The base for the execution.
@@ -31,9 +33,6 @@ pub mod gas {
 
 /// There is no deposit balance attached.
 const NO_DEPOSIT: Balance = 0;
-
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -75,7 +74,7 @@ pub struct StakingPoolArgs {
     /// Owner account ID of the staking pool.
     owner_id: AccountId,
     /// The initial staking key.
-    stake_public_key: Base58PublicKey,
+    stake_public_key: PublicKey,
     /// The initial reward fee fraction.
     reward_fee_fraction: RewardFeeFraction,
 }
@@ -138,7 +137,7 @@ impl StakingPoolFactory {
         &mut self,
         staking_pool_id: String,
         owner_id: AccountId,
-        stake_public_key: Base58PublicKey,
+        stake_public_key: PublicKey,
         reward_fee_fraction: RewardFeeFraction,
     ) -> Promise {
         assert!(
@@ -151,7 +150,10 @@ impl StakingPoolFactory {
             "The staking pool ID can't contain `.`"
         );
 
-        let staking_pool_account_id = format!("{}.{}", staking_pool_id, env::current_account_id());
+        let staking_pool_account_id: AccountId =
+            format!("{}.{}", staking_pool_id, env::current_account_id())
+                .parse()
+                .unwrap();
         assert!(
             env::is_valid_account_id(staking_pool_account_id.as_bytes()),
             "The staking pool account ID is invalid"
@@ -208,12 +210,9 @@ impl StakingPoolFactory {
         let staking_pool_created = is_promise_success();
 
         if staking_pool_created {
-            env::log(
-                format!(
-                    "The staking pool @{} was successfully created. Whitelisting...",
-                    staking_pool_account_id
-                )
-                .as_bytes(),
+            log!(
+                "The staking pool @{} was successfully created. Whitelisting...",
+                staking_pool_account_id
             );
             ext_whitelist::add_staking_pool(
                 staking_pool_account_id,
@@ -225,13 +224,11 @@ impl StakingPoolFactory {
         } else {
             self.staking_pool_account_ids
                 .remove(&staking_pool_account_id);
-            env::log(
-                format!(
-                    "The staking pool @{} creation has failed. Returning attached deposit of {} to @{}",
-                    staking_pool_account_id,
-                    attached_deposit.0,
-                    predecessor_account_id
-                ).as_bytes()
+            log!(
+                "The staking pool @{} creation has failed. Returning attached deposit of {} to @{}",
+                staking_pool_account_id,
+                attached_deposit.0,
+                predecessor_account_id
             );
             Promise::new(predecessor_account_id).transfer(attached_deposit.0);
             PromiseOrValue::Value(false)
@@ -242,10 +239,9 @@ impl StakingPoolFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::{testing_env, MockedBlockchain, PromiseResult};
-
+    use near_sdk::test_utils::{testing_env_with_promise_results, VMContextBuilder};
+    use near_sdk::{testing_env, PromiseResult};
     mod test_utils;
-    use std::convert::TryInto;
     use test_utils::*;
 
     #[test]
@@ -253,7 +249,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = StakingPoolFactory::new(account_whitelist());
@@ -264,14 +260,14 @@ mod tests {
         assert_eq!(contract.get_number_of_staking_pools_created(), 0);
 
         context.is_view = false;
-        context.predecessor_account_id = account_tokens_owner();
+        context.predecessor_account_id = account_tokens_owner().into();
         context.attached_deposit = ntoy(31);
         testing_env!(context.clone());
         contract.create_staking_pool(
             staking_pool_id(),
             account_pool_owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
-                .try_into()
+                .parse()
                 .unwrap(),
             RewardFeeFraction {
                 numerator: 10,
@@ -279,7 +275,7 @@ mod tests {
             },
         );
 
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         context.attached_deposit = ntoy(0);
         testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
         contract.on_staking_pool_create(account_pool(), ntoy(31).into(), account_tokens_owner());
@@ -295,7 +291,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = StakingPoolFactory::new(account_whitelist());
@@ -307,14 +303,14 @@ mod tests {
         assert_eq!(contract.get_number_of_staking_pools_created(), 0);
 
         context.is_view = false;
-        context.predecessor_account_id = account_tokens_owner();
+        context.predecessor_account_id = account_tokens_owner().into();
         context.attached_deposit = ntoy(20);
         testing_env!(context.clone());
         contract.create_staking_pool(
             staking_pool_id(),
             account_pool_owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
-                .try_into()
+                .parse()
                 .unwrap(),
             RewardFeeFraction {
                 numerator: 10,
@@ -328,7 +324,7 @@ mod tests {
         let mut context = VMContextBuilder::new()
             .current_account_id(account_factory())
             .predecessor_account_id(account_near())
-            .finish();
+            .build();
         testing_env!(context.clone());
 
         let mut contract = StakingPoolFactory::new(account_whitelist());
@@ -339,14 +335,14 @@ mod tests {
         assert_eq!(contract.get_number_of_staking_pools_created(), 0);
 
         context.is_view = false;
-        context.predecessor_account_id = account_tokens_owner();
+        context.predecessor_account_id = account_tokens_owner().into();
         context.attached_deposit = ntoy(31);
         testing_env!(context.clone());
         contract.create_staking_pool(
             staking_pool_id(),
             account_pool_owner(),
             "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
-                .try_into()
+                .parse()
                 .unwrap(),
             RewardFeeFraction {
                 numerator: 10,
@@ -354,7 +350,7 @@ mod tests {
             },
         );
 
-        context.predecessor_account_id = account_factory();
+        context.predecessor_account_id = account_factory().into();
         context.attached_deposit = ntoy(0);
         context.account_balance += ntoy(31);
         testing_env_with_promise_results(context.clone(), PromiseResult::Failed);
