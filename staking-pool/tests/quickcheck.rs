@@ -9,7 +9,7 @@ mod utils;
 
 use near_primitives::types::{AccountId, Balance};
 use near_sdk::json_types::U128;
-use near_sdk::serde_json::{self, json};
+use near_sdk::serde_json::json;
 use utils::{call_pool, init_pool, ntoy, wait_epoch};
 
 use near_runtime_standalone::RuntimeStandalone;

@@ -9,7 +9,7 @@ fn multi_accounts_max_roundtrip() {
     struct AccountStake {
         pub account: ExternalUser,
         pub staked: Balance,
-    };
+    }
     let initial_pool_balance = ntoy(100);
     let (ref mut runtime, ref root) = init_pool(initial_pool_balance);
     assert_eq!(

@@ -2,10 +2,10 @@ use std::convert::TryInto;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::json_types::{Base58PublicKey, U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
-    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Promise, PromiseResult,
+    env, ext_contract, near_bindgen, AccountId, Balance, EpochHeight, Gas, Promise, PromiseResult,
     PublicKey,
 };
 use uint::construct_uint;
@@ -13,10 +13,10 @@ use uint::construct_uint;
 mod internal;
 
 /// The amount of gas given to complete `vote` call.
-const VOTE_GAS: u64 = 100_000_000_000_000;
+const VOTE_GAS: Gas = Gas(100_000_000_000_000);
 
 /// The amount of gas given to complete internal `on_stake_action` call.
-const ON_STAKE_ACTION_GAS: u64 = 20_000_000_000_000;
+const ON_STAKE_ACTION_GAS: Gas = Gas(20_000_000_000_000);
 
 /// The amount of yocto NEAR the contract dedicates to guarantee that the "share" price never
 /// decreases. It's used during rounding errors for share -> amount conversions.
@@ -35,9 +35,6 @@ construct_uint! {
 
 #[cfg(test)]
 mod test_utils;
-
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc = near_sdk::wee_alloc::WeeAlloc::INIT;
 
 /// Inner account data of a delegate.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
@@ -173,7 +170,7 @@ impl StakingContract {
     #[init]
     pub fn new(
         owner_id: AccountId,
-        stake_public_key: Base58PublicKey,
+        stake_public_key: PublicKey,
         reward_fee_fraction: RewardFeeFraction,
     ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
@@ -356,7 +353,7 @@ impl StakingContract {
     }
 
     /// Returns the staking public key
-    pub fn get_staking_key(&self) -> Base58PublicKey {
+    pub fn get_staking_key(&self) -> PublicKey {
         self.stake_public_key.clone().try_into().unwrap()
     }
 
@@ -426,7 +423,7 @@ impl StakingContract {
 
     /// Owner's method.
     /// Updates current public key to the new given public key.
-    pub fn update_staking_key(&mut self, stake_public_key: Base58PublicKey) {
+    pub fn update_staking_key(&mut self, stake_public_key: PublicKey) {
         self.assert_owner();
         // When updating the staking key, the contract has to restake.
         let _need_to_restake = self.internal_ping();
@@ -484,13 +481,13 @@ impl StakingContract {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
-    use near_sdk::{serde_json, testing_env, MockedBlockchain, VMContext};
-
-    use crate::test_utils::*;
-
     use super::*;
+    use crate::test_utils::*;
+    use near_sdk::mock::VmAction;
+    use near_sdk::test_utils::{
+        get_created_receipts, testing_env_with_promise_results, VMContextBuilder,
+    };
+    use near_sdk::{serde_json, testing_env, VMContext};
 
     struct Emulator {
         pub contract: StakingContract,
@@ -511,20 +508,16 @@ mod tests {
 
     impl Emulator {
         pub fn new(
-            owner: String,
-            stake_public_key: String,
+            owner: AccountId,
+            stake_public_key: PublicKey,
             reward_fee_fraction: RewardFeeFraction,
         ) -> Self {
             let context = VMContextBuilder::new()
                 .current_account_id(owner.clone())
                 .account_balance(ntoy(30))
-                .finish();
+                .build();
             testing_env!(context.clone());
-            let contract = StakingContract::new(
-                owner,
-                Base58PublicKey::try_from(stake_public_key).unwrap(),
-                reward_fee_fraction,
-            );
+            let contract = StakingContract::new(owner, stake_public_key, reward_fee_fraction);
             let last_total_staked_balance = contract.total_staked_balance;
             let last_total_stake_shares = contract.total_stake_shares;
             Emulator {
@@ -550,7 +543,7 @@ mod tests {
             self.last_total_stake_shares = total_stake_shares;
         }
 
-        pub fn update_context(&mut self, predecessor_account_id: String, deposit: Balance) {
+        pub fn update_context(&mut self, predecessor_account_id: AccountId, deposit: Balance) {
             self.verify_stake_price_increase_guarantee();
             self.context = VMContextBuilder::new()
                 .current_account_id(staking())
@@ -560,7 +553,7 @@ mod tests {
                 .account_balance(self.amount)
                 .account_locked_balance(self.locked_amount)
                 .epoch_height(self.epoch_height)
-                .finish();
+                .build();
             testing_env!(self.context.clone());
             println!(
                 "Epoch: {}, Deposit: {}, amount: {}, locked_amount: {}",
@@ -585,39 +578,47 @@ mod tests {
 
     #[test]
     fn test_restake_fail() {
-        let mut emulator = Emulator::new(
-            owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
-            zero_fee(),
-        );
+        let pub_key = "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+            .parse()
+            .unwrap();
+        let mut emulator = Emulator::new(owner(), pub_key, zero_fee());
         emulator.update_context(bob(), 0);
         emulator.contract.internal_restake();
-        let receipts = env::created_receipts();
+        let receipts = get_created_receipts();
         assert_eq!(receipts.len(), 2);
         // Mocked Receipt fields are private, so can't check directly.
-        assert!(serde_json::to_string(&receipts[0])
-            .unwrap()
-            .contains("\"actions\":[{\"Stake\":{\"stake\":29999999999999000000000000,"));
-        assert!(serde_json::to_string(&receipts[1])
-            .unwrap()
-            .contains("\"method_name\":\"on_stake_action\""));
+        if let VmAction::Stake { stake, .. } = receipts[0].actions[0] {
+            assert_eq!(stake, 29999999999999000000000000);
+        } else {
+            panic!("unexpected action");
+        }
+        if let VmAction::FunctionCall { method_name, .. } = &receipts[1].actions[0] {
+            assert_eq!(&method_name, &b"on_stake_action")
+        } else {
+            panic!("unexpected action");
+        }
+
         emulator.simulate_stake_call();
 
         emulator.update_context(staking(), 0);
         testing_env_with_promise_results(emulator.context.clone(), PromiseResult::Failed);
         emulator.contract.on_stake_action();
-        let receipts = env::created_receipts();
+        let receipts = get_created_receipts();
         assert_eq!(receipts.len(), 1);
-        assert!(serde_json::to_string(&receipts[0])
-            .unwrap()
-            .contains("\"actions\":[{\"Stake\":{\"stake\":0,"));
+        if let VmAction::Stake { stake, .. } = receipts[0].actions[0] {
+            assert_eq!(stake, 0);
+        } else {
+            panic!("unexpected action");
+        }
     }
 
     #[test]
     fn test_deposit_withdraw() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         let deposit_amount = ntoy(1_000_000);
@@ -640,7 +641,9 @@ mod tests {
     fn test_stake_with_fee() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             RewardFeeFraction {
                 numerator: 10,
                 denominator: 100,
@@ -706,7 +709,9 @@ mod tests {
     fn test_stake_unstake() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         let deposit_amount = ntoy(1_000_000);
@@ -761,7 +766,9 @@ mod tests {
     fn test_stake_all_unstake_all() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         let deposit_amount = ntoy(1_000_000);
@@ -800,7 +807,9 @@ mod tests {
     fn test_two_delegates() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         emulator.update_context(alice(), ntoy(1_000_000));
@@ -857,7 +866,9 @@ mod tests {
     fn test_low_balances() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         let initial_balance = 100;
@@ -879,7 +890,9 @@ mod tests {
     fn test_rewards() {
         let mut emulator = Emulator::new(
             owner(),
-            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7".to_string(),
+            "KuTCtARNzxZQ3YvXDeLjx83FDqxv2SdQTSbiq876zR7"
+                .parse()
+                .unwrap(),
             zero_fee(),
         );
         let initial_balance = ntoy(100);
