@@ -487,7 +487,7 @@ mod tests {
     use near_sdk::test_utils::{
         get_created_receipts, testing_env_with_promise_results, VMContextBuilder,
     };
-    use near_sdk::{serde_json, testing_env, VMContext};
+    use near_sdk::{testing_env, VMContext};
 
     struct Emulator {
         pub contract: StakingContract,
