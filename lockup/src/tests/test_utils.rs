@@ -84,5 +84,5 @@ pub fn get_context(
 pub fn public_key(byte_val: u8) -> PublicKey {
     let mut pk = vec![byte_val; 33];
     pk[0] = 0;
-    PublicKey::try_from(pk.to_vec()).unwrap()
+    PublicKey::try_from(pk).unwrap()
 }
