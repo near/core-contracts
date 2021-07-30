@@ -177,6 +177,18 @@ Command
 near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "0", "lockup_timestamp": "1535760000000000000", "release_duration": "126230400000000000", "transfers_information": {"TransfersEnabled": {"transfers_timestamp": "1602614338293769340"}}, "vesting_schedule": {"VestingSchedule": {"start_timestamp": "1535760000000000000", "cliff_timestamp": "1567296000000000000", "end_timestamp": "1661990400000000000"}}, "staking_pool_whitelist_account_id": "staking-pool-whitelist", "foundation_account_id": "near"}' --accountId=near --gas=25000000000000
 ```
 
+If you need to use only lockup logic, change `vesting_schedule` parameter:
+```
+"vesting_schedule": None
+```
+
+If you need to use only vesting logic, change these parameters as follows:
+```
+"lockup_duration": 0,
+"lockup_timestamp": None,
+"release_duration": None
+```
+
 ### Staking flow
 
 #### Select staking pool
