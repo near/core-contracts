@@ -10,7 +10,7 @@ near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
 #[test]
 fn test_upload_create() {
     let root = init_simulator(None);
-    let factory = root.deploy(&WASM_BYTES, "xyz".to_string(), to_yocto("10"));
+    let factory = root.deploy(&WASM_BYTES, "xyz".parse().unwrap(), to_yocto("10"));
     let hash = root
         .call(
             factory.account_id.clone(),
