@@ -1,4 +1,4 @@
-# Basic Mutlisig contract
+# Basic Multisig contract
 
 *This is an experimental contract. Please use only on TestNet.*
 
