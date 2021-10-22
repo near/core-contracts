@@ -1,7 +1,5 @@
 # Basic Mutlisig contract
 
-*This is an experimental contract. Please use only on TestNet.*
-
 This contract provides:
  - Set K out of N multi sig scheme
  - Request to sign transfers, function calls, adding and removing keys.
