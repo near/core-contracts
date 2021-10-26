@@ -91,7 +91,7 @@ pub struct MultiSigContract {
 // If you haven't initialized the contract with new(num_confirmations: u32)
 impl Default for MultiSigContract {
     fn default() -> Self {
-        env::panic(b"Multisig contract should be initialized before usage")
+        env::panic_str("Multisig contract should be initialized before usage")
     }
 }
 
@@ -188,7 +188,7 @@ impl MultiSigContract {
                                 .map(|x| x.into())
                                 .unwrap_or(DEFAULT_ALLOWANCE),
                             permission.receiver_id,
-                            permission.method_names.join(",").into_bytes(),
+                            permission.method_names.join(","),
                         )
                     } else {
                         // wallet UI should warn user if receiver_id == env::current_account_id(), adding FAK will render multisig useless
@@ -220,7 +220,7 @@ impl MultiSigContract {
                     deposit,
                     gas,
                 } => promise.function_call(
-                    method_name.into_bytes(),
+                    method_name,
                     args.into(),
                     deposit.into(),
                     gas,
