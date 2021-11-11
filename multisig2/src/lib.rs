@@ -128,10 +128,10 @@ impl MultiSigContract {
     /// @params num_confirmations: k of n signatures required to perform operations.
     #[init]
     pub fn new(members: Vec<MultisigMember>, num_confirmations: u32) -> Self {
-        if !env::state_exists() {
+        if env::state_exists() {
             env::panic_str("Already initialized");
         }
-        if members.len() >= num_confirmations as usize {
+        if members.len() < num_confirmations as usize {
             env::panic_str("Members list must be equal or larger than number of confirmations")
         }
         let mut multisig = Self {
@@ -189,7 +189,7 @@ impl MultiSigContract {
     }
 
     fn delete_member(&mut self, promise: Promise, member: MultisigMember) -> Promise {
-        if self.members.len() - 1 >= self.num_confirmations as u64 {
+        if self.members.len() - 1 < self.num_confirmations as u64 {
             env::panic_str(
             "Removing given member will make total number of members below number of confirmations")
         }
@@ -226,7 +226,7 @@ impl MultiSigContract {
             .get(&current_member.to_string())
             .unwrap_or(0)
             + 1;
-        if num_requests <= self.active_requests_limit {
+        if num_requests > self.active_requests_limit {
             env::panic_str("Account has too many active requests. Confirm or delete some.")
         }
         self.num_requests_pk
@@ -260,7 +260,7 @@ impl MultiSigContract {
             .get(&request_id)
             .unwrap_or_else(|| env::panic_str("No such request"));
         // can't delete requests before 15min
-        if env::block_timestamp() > request_with_signer.added_timestamp + REQUEST_COOLDOWN {
+        if env::block_timestamp() <= request_with_signer.added_timestamp + REQUEST_COOLDOWN {
             env::panic_str("Request cannot be deleted immediately after creation.")
         }
         self.remove_request(request_id);
@@ -342,7 +342,7 @@ impl MultiSigContract {
             .current_member()
             .unwrap_or_else(|| env::panic_str("Must be validated above"));
         let mut confirmations = self.confirmations.get(&request_id).unwrap();
-        if !confirmations.contains(&member.to_string()) {
+        if confirmations.contains(&member.to_string()) {
             env::panic_str("Already confirmed this request with this key")
         }
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
@@ -393,12 +393,12 @@ impl MultiSigContract {
             env::panic_str("Caller (predecessor or signer) is not a member of this multisig");
         }
         // request must exist
-        if self.requests.get(&request_id).is_some() {
+        if self.requests.get(&request_id).is_none() {
             env::panic_str("No such request: either wrong number or already confirmed")
         }
 
         // request must have
-        if self.confirmations.get(&request_id).is_some() {
+        if self.confirmations.get(&request_id).is_none() {
             env::panic_str("Internal error: confirmations mismatch requests")
         }
     }
