@@ -1663,6 +1663,317 @@ mod tests {
     }
 
     #[test]
+    fn test_unlocking_schedule_with_termination() {
+        // https://wiki.near.org/getting-started/near-token/lockups#termination-of-vesting
+        // This test checks that termination of vesting
+        // fixes the amount of tokens that finally should become liquid (*),
+        // but does not change the schedule of unlocking the tokens.
+        // The contract should act as there was no termination at all,
+        // until we do not reach the amount (*).
+        // After we reach this amount, the unlocking process should stop.
+
+        // Taking bigger lockup amount because we compare the balances further
+        // and there is a comparison delta.
+        // We want to be sure that this delta does not grow on bigger numbers
+        let lockup_amount = to_yocto(LOCKUP_NEAR * 1000);
+        let mut context = basic_context();
+        context.account_balance = lockup_amount;
+        testing_env!(context.clone());
+
+        let vesting_cliff_offset = 100;
+        let vesting_schedule = new_vesting_schedule(vesting_cliff_offset);
+        let mut contract = new_contract(
+            true,
+            Some(vesting_schedule.clone()),
+            Some(to_nanos(YEAR * 4).into()),
+            true,
+        );
+
+        // Vesting starts at day 235
+        let ts_vesting_started = to_ts(GENESIS_TIME_IN_DAYS - YEAR + vesting_cliff_offset);
+        assert_eq!(vesting_schedule.start_timestamp.0, ts_vesting_started);
+
+        // We don't use lockup_timestamp,
+        // it means that lockup starts from the transfers enabled moment
+        assert_eq!(contract.lockup_information.lockup_timestamp, None);
+
+        // Transfers are enabled at day 500, lockup also starts here
+        if let TransfersInformation::TransfersEnabled {
+            transfers_timestamp,
+        } = &contract.lockup_information.transfers_information
+        {
+            assert_eq!(transfers_timestamp.0, to_ts(GENESIS_TIME_IN_DAYS));
+        } else {
+            assert!(false, "Transfers should be enabled");
+        }
+
+        // Vesting cliff ends at day 600
+        assert_eq!(
+            vesting_schedule.cliff_timestamp.0,
+            to_ts(GENESIS_TIME_IN_DAYS + vesting_cliff_offset)
+        );
+
+        // Lockup cliff ends at day 865
+        assert_eq!(contract.lockup_information.lockup_duration, to_nanos(YEAR));
+
+        // Everything is locked and unvested in the beginning
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: SALT.to_vec().into(),
+                }
+                .hash()
+                .into()
+            )
+        );
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(
+            contract.get_unvested_amount(vesting_schedule.clone()).0,
+            lockup_amount
+        );
+        assert_eq!(
+            contract
+                .get_locked_vested_amount(vesting_schedule.clone())
+                .0,
+            0
+        );
+
+        // *** day 599: day before vesting cliff is passed ***
+        let ts_1_day_before_vesting_cliff = to_ts(GENESIS_TIME_IN_DAYS + vesting_cliff_offset - 1);
+        assert_eq!(
+            ts_1_day_before_vesting_cliff,
+            vesting_schedule.cliff_timestamp.0 - to_nanos(1)
+        );
+        context.block_timestamp = ts_1_day_before_vesting_cliff;
+        testing_env!(context.clone());
+
+        // Everything is still locked and unvested
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(
+            contract.get_unvested_amount(vesting_schedule.clone()).0,
+            lockup_amount
+        );
+        assert_eq!(
+            contract
+                .get_locked_vested_amount(vesting_schedule.clone())
+                .0,
+            0
+        );
+
+        // *** day 600: day of vesting cliff ***
+        let ts_day_of_vesting_cliff = to_ts(GENESIS_TIME_IN_DAYS + vesting_cliff_offset);
+        assert_eq!(ts_day_of_vesting_cliff, vesting_schedule.cliff_timestamp.0);
+        context.block_timestamp = ts_day_of_vesting_cliff;
+        testing_env!(context.clone());
+
+        // 25% is vested
+        let vesting_nanos_passed = (ts_day_of_vesting_cliff - ts_vesting_started) as u128;
+        let vesting_nanos_total =
+            (vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0) as u128;
+
+        let expected_vested_amount_at_cliff_day =
+            lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let vested_amount_at_cliff_day = contract
+            .get_locked_vested_amount(vesting_schedule.clone())
+            .0;
+        assert_almost_eq_with_max_delta(
+            expected_vested_amount_at_cliff_day,
+            vested_amount_at_cliff_day,
+            to_yocto(1),
+        );
+        assert_eq!(to_yocto(250000), vested_amount_at_cliff_day);
+
+        let expected_unvested_amount_at_cliff_day =
+            lockup_amount - expected_vested_amount_at_cliff_day;
+        let unvested_amount_at_cliff_day = contract.get_unvested_amount(vesting_schedule.clone()).0;
+        assert_almost_eq_with_max_delta(
+            expected_unvested_amount_at_cliff_day,
+            unvested_amount_at_cliff_day,
+            to_yocto(1),
+        );
+        assert_eq!(to_yocto(750000), unvested_amount_at_cliff_day);
+
+        // But tokens are still locked due to lockup
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+
+        // *** day 800: day of termination ***
+        let ts_termination_day = to_ts(GENESIS_TIME_IN_DAYS + vesting_cliff_offset + 200);
+        context.block_timestamp = ts_termination_day;
+        testing_env!(context.clone());
+
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: SALT.to_vec().into(),
+                }
+                .hash()
+                .into()
+            )
+        );
+
+        // Some tokens are vested
+        let vesting_nanos_passed = (ts_termination_day - ts_vesting_started) as u128;
+        let expected_vested_amount_at_termination_day =
+            lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let locked_vested_amount_at_termination_day = contract
+            .get_locked_vested_amount(vesting_schedule.clone())
+            .0;
+
+        assert_almost_eq_with_max_delta(
+            expected_vested_amount_at_termination_day,
+            locked_vested_amount_at_termination_day,
+            to_yocto(1),
+        );
+        assert_almost_eq_with_max_delta(
+            to_yocto(386986),
+            locked_vested_amount_at_termination_day,
+            to_yocto(1),
+        );
+
+        let expected_unvested_amount_at_termination_day =
+            lockup_amount - expected_vested_amount_at_termination_day;
+        let unvested_amount_at_termination_day =
+            contract.get_unvested_amount(vesting_schedule.clone()).0;
+        assert_almost_eq_with_max_delta(
+            expected_unvested_amount_at_termination_day,
+            unvested_amount_at_termination_day,
+            to_yocto(1),
+        );
+        assert_almost_eq_with_max_delta(
+            to_yocto(613014),
+            unvested_amount_at_termination_day,
+            to_yocto(1),
+        );
+
+        // But tokens are still locked due to lockup
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+
+        // Terminate the vesting
+        context.predecessor_account_id = account_foundation();
+        context.signer_account_pk = public_key(3).into();
+        context.is_view = false;
+        testing_env!(context.clone());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: vesting_schedule.clone(),
+            salt: SALT.to_vec().into(),
+        }));
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::Terminating(TerminationInformation {
+                unvested_amount: unvested_amount_at_termination_day.into(),
+                status: TerminationStatus::ReadyToWithdraw,
+            })
+        );
+
+        // *** day 801: 1 day after termination ***
+        let ts_1_day_after_termination = to_ts(GENESIS_TIME_IN_DAYS + vesting_cliff_offset + 201);
+        context.block_timestamp = ts_1_day_after_termination;
+        testing_env!(context.clone());
+
+        // All the tokens are still locked
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+
+        // Nothing new is vested since termination
+        let unvested_amount_1_day_after_termination =
+            contract.get_unvested_amount(vesting_schedule.clone()).0;
+        assert_eq!(
+            unvested_amount_1_day_after_termination,
+            unvested_amount_at_termination_day
+        );
+
+        // *** day 864: 1 day before lockup cliff is passed ***
+        let ts_day_before_lockup_cliff = to_ts(GENESIS_TIME_IN_DAYS + YEAR - 1);
+        context.block_timestamp = ts_day_before_lockup_cliff;
+        testing_env!(context.clone());
+
+        // All the tokens are still locked
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+
+        // Nothing new is vested since termination
+        let unvested_amount_day_before_lockup_cliff =
+            contract.get_unvested_amount(vesting_schedule.clone()).0;
+        assert_eq!(
+            unvested_amount_day_before_lockup_cliff,
+            unvested_amount_at_termination_day
+        );
+
+        // *** day 865: day of lockup cliff ***
+        let ts_day_of_lockup_cliff = to_ts(GENESIS_TIME_IN_DAYS + YEAR);
+        context.block_timestamp = ts_day_of_lockup_cliff;
+        testing_env!(context.clone());
+
+        let unlocked_amount_day_of_lockup_cliff = contract.get_liquid_owners_balance().0;
+        let expected_unlocked_amount_day_of_lockup_cliff = lockup_amount
+            / (contract.lockup_information.release_duration.unwrap() as u128)
+            * (to_nanos(YEAR) as u128);
+        assert_almost_eq_with_max_delta(
+            expected_unlocked_amount_day_of_lockup_cliff,
+            unlocked_amount_day_of_lockup_cliff,
+            to_yocto(1),
+        );
+        assert_eq!(to_yocto(250000), unlocked_amount_day_of_lockup_cliff);
+
+        // *** day 1064: 1 day before unlock stopped ***
+        let ts_1_day_before_unlock_stop = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 199);
+        context.block_timestamp = ts_1_day_before_unlock_stop;
+        testing_env!(context.clone());
+
+        let locked_amount_1_day_before_unlock_stop = contract.get_locked_amount().0;
+
+        // *** day 1065, unlock stopped ***
+        let ts_day_unlock_stopped = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 200);
+        context.block_timestamp = ts_day_unlock_stopped;
+        testing_env!(context.clone());
+
+        let locked_amount_day_unlock_stopped = contract.get_locked_amount().0;
+        assert!(
+            locked_amount_day_unlock_stopped < locked_amount_1_day_before_unlock_stop,
+            "Locked amount should decrease"
+        );
+        assert_eq!(
+            locked_amount_day_unlock_stopped,
+            unvested_amount_at_termination_day
+        );
+
+        // We unlock 684 tokens in one day,
+        // it means that our delta (1 token) is small enough to detect any issue
+        assert_almost_eq_with_max_delta(
+            to_yocto(684),
+            locked_amount_1_day_before_unlock_stop - locked_amount_day_unlock_stopped,
+            to_yocto(1),
+        );
+
+        // *** day 1066, 1 day after unlock stopped ***
+        let ts_1_day_after_unlock_stopped = to_ts(GENESIS_TIME_IN_DAYS + YEAR + 201);
+        context.block_timestamp = ts_1_day_after_unlock_stopped;
+        testing_env!(context.clone());
+
+        assert_eq!(
+            contract.get_locked_amount().0,
+            unvested_amount_at_termination_day
+        );
+    }
+
+    #[test]
     fn test_termination_with_staking() {
         let lockup_amount = to_yocto(1000);
         let mut context = basic_context();
