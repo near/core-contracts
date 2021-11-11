@@ -1726,6 +1726,163 @@ mod tests {
     }
 
     #[test]
+    fn test_unlocking_schedule_with_termination() {
+        // This test checks that termination of vesting
+        // fixes the amount of tokens that finally should become liquid (*),
+        // but does not change the schedule of unlocking the tokens.
+        // The contract should act as there was no termination at all,
+        // until we do not reach the amount (*).
+        // After we reach this amount, the unlocking process should stop.
+
+        let mut context = basic_context();
+        testing_env!(context.clone());
+
+        let lockup_amount = to_yocto(1000);
+        let vesting_schedule = new_vesting_schedule(100);
+        let mut contract = new_contract(
+            true,
+            Some(vesting_schedule.clone()),
+            Some(to_nanos(YEAR * 3).into()),
+            true,
+        );
+
+        // Everything is locked & unvested in the beginning
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: SALT.to_vec().into(),
+                }
+                    .hash()
+                    .into()
+            )
+        );
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+        assert_eq!(
+            contract.get_unvested_amount(vesting_schedule.clone()).0,
+            lockup_amount
+        );
+        assert_eq!(
+            contract
+                .get_locked_vested_amount(vesting_schedule.clone())
+                .0,
+            0
+        );
+
+        // Moving 100 days after the vesting cliff
+        context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS + 200),
+            true,
+        );
+        testing_env!(context.clone());
+
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::VestingHash(
+                VestingScheduleWithSalt {
+                    vesting_schedule: vesting_schedule.clone(),
+                    salt: SALT.to_vec().into(),
+                }
+                    .hash()
+                    .into()
+            )
+        );
+
+        // All the tokens are still locked
+        assert_eq!(contract.get_owners_balance().0, 0);
+        assert_eq!(contract.get_liquid_owners_balance().0, 0);
+        assert_eq!(contract.get_locked_amount().0, lockup_amount);
+
+        // Some tokens are vested, but they are still locked due to lockup
+        let locked_vested_amount_at_termination_day = contract
+            .get_locked_vested_amount(vesting_schedule.clone())
+            .0;
+        assert!(locked_vested_amount_at_termination_day > 0);
+
+        let unvested_amount_at_termination_day =
+            contract.get_unvested_amount(vesting_schedule.clone()).0;
+        assert!(unvested_amount_at_termination_day > 0);
+
+        // Terminate the vesting
+        context.predecessor_account_id = account_foundation();
+        context.signer_account_pk = public_key(3).into();
+        context.is_view = false;
+        testing_env!(context.clone());
+        contract.terminate_vesting(Some(VestingScheduleWithSalt {
+            vesting_schedule: vesting_schedule.clone(),
+            salt: SALT.to_vec().into(),
+        }));
+
+        context.is_view = true;
+        testing_env!(context.clone());
+        assert_eq!(
+            contract.get_vesting_information(),
+            VestingInformation::Terminating(TerminationInformation {
+                unvested_amount: unvested_amount_at_termination_day.into(),
+                status: TerminationStatus::ReadyToWithdraw,
+            })
+        );
+
+        // Moving further, to the moment when unlocking has already started
+        context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS + 400),
+            true,
+        );
+        testing_env!(context.clone());
+
+        let locked_today = contract.get_locked_amount().0;
+
+        // Moving next day
+        context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS + 401),
+            true,
+        );
+        testing_env!(context.clone());
+
+        let locked_tomorrow = contract.get_locked_amount().0;
+        assert!(
+            locked_tomorrow < locked_today,
+            "Locked amount should decrease"
+        );
+
+        // Moving further, to the moment when unlocking should stop
+        context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS + 720),
+            true,
+        );
+        testing_env!(context.clone());
+
+        assert_eq!(contract.get_locked_amount().0, unvested_amount_at_termination_day);
+
+        // Moving next day, just to be sure that the unlocking process stopped
+        context = get_context(
+            system_account(),
+            to_yocto(LOCKUP_NEAR),
+            0,
+            to_ts(GENESIS_TIME_IN_DAYS + 721),
+            true,
+        );
+        testing_env!(context.clone());
+
+        assert_eq!(contract.get_locked_amount().0, unvested_amount_at_termination_day);
+    }
+
+    #[test]
     fn test_termination_with_staking() {
         let lockup_amount = to_yocto(1000);
         let mut context = basic_context();
