@@ -1,5 +1,5 @@
 use crate::*;
-use near_sdk::{near_bindgen, PromiseOrValue};
+use near_sdk::{near_bindgen, PromiseOrValue, assert_self, is_promise_success};
 use std::convert::Into;
 
 #[near_bindgen]
@@ -219,6 +219,9 @@ impl LockupContract {
                     )
                         .as_bytes(),
                 );
+                if self.get_account_balance().0 == 0 {
+                    env::log(b"The withdrawal is completed: no more balance can be withdrawn in a future call");
+                }
             } else {
                 self.foundation_account_id = None;
                 self.vesting_information = VestingInformation::None;

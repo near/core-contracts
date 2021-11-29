@@ -383,7 +383,7 @@ impl LockupContract {
     ///
     /// Requires 125 TGas (5 * BASE_GAS)
     ///
-    /// Unstakes all tokens at the staking pool
+    /// Unstakes all tokens from the staking pool
     pub fn unstake_all(&mut self) -> Promise {
         self.assert_owner();
         self.assert_staking_pool_is_idle();
@@ -421,6 +421,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 75 TGas (3 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
     /// Calls voting contract to validate if the transfers were enabled by voting. Once transfers
     /// are enabled, they can't be disabled anymore.
@@ -459,6 +460,7 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
     /// Transfers the given amount to the given receiver account ID.
     /// This requires transfers to be enabled within the voting contract.
@@ -487,16 +489,22 @@ impl LockupContract {
     /// OWNER'S METHOD
     ///
     /// Requires 50 TGas (2 * BASE_GAS)
+    /// Not intended to hand over the access to someone else except the owner
     ///
-    /// Adds full access key with the given public key to the account once the contract is fully
-    /// vested, lockup duration has expired and transfers are enabled.
-    /// This will allow owner to use this account as a regular account and remove the contract.
+    /// Adds full access key with the given public key to the account.
+    /// The following requirements should be met:
+    /// - The contract is fully vested;
+    /// - Lockup duration has expired;
+    /// - Transfers are enabled;
+    /// - If there’s a termination made by foundation, it has to be finished.
+    /// Full access key will allow owner to use this account as a regular account and remove
+    /// the contract.
     pub fn add_full_access_key(&mut self, new_public_key: Base58PublicKey) -> Promise {
         self.assert_owner();
         self.assert_transfers_enabled();
         self.assert_no_staking_or_idle();
         self.assert_no_termination();
-        assert_eq!(self.get_locked_amount().0, 0);
+        assert_eq!(self.get_locked_amount().0, 0, "Tokens are still locked/unvested");
 
         env::log(b"Adding a full access key");
 

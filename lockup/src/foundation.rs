@@ -52,6 +52,9 @@ impl LockupContract {
     ///
     /// When the vesting is terminated and there are deficit of the tokens on the account, the
     /// deficit amount of tokens has to be unstaked and withdrawn from the staking pool.
+    /// Should be invoked twice:
+    /// 1. First, to unstake everything from the staking pool;
+    /// 2. Second, after 4 epochs (48 hours) to prepare to withdraw.
     pub fn termination_prepare_to_withdraw(&mut self) -> Promise {
         self.assert_called_by_foundation();
         self.assert_staking_pool_is_idle();
