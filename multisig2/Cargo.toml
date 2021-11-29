@@ -1,11 +1,14 @@
 [package]
-name = "multisig"
-version = "0.3.0"
+name = "multisig2"
+version = "0.4.0"
 authors = ["Near Inc <hello@near.org>"]
 edition = "2018"
 publish = false
 
 [lib]
+# Below is used for production
+# crate-type = ["cdylib"]
+# Below used when running simulation tests
 crate-type = ["cdylib", "rlib"]
 
 [profile.release]
@@ -18,10 +21,8 @@ panic = "abort"
 overflow-checks = true
 
 [dependencies]
-near-sdk = "2.0.0"
+near-sdk = "4.0.0-pre.4"
 
 [dev-dependencies]
-lazy_static = "1.4.0"
-near-test = { git = "https://github.com/ilblackdragon/balancer-near" }
-near-crypto = { git = "https://github.com/nearprotocol/nearcore.git" }
-near-primitives = { git = "https://github.com/nearprotocol/nearcore.git" }
+near-sdk-sim = "3.2.0"
+near-primitives-core = "0.4.0"

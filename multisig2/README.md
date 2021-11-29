@@ -1,4 +1,4 @@
-# Mutlisig contract
+# Multisig contract
 
 *Please do your own due diligence before using this contract. There is no guarantee that this contract doesn't have issues.*
 
@@ -9,7 +9,7 @@ This contract provides:
 
 ## Multisig implementation details
 
-Mutlisig uses set of `FunctionCall` `AccessKey`s and account ids as a set of allowed N members. 
+Multisig uses set of `FunctionCall` `AccessKey`s and account ids as a set of allowed N members. 
 When contract is being setup, it should be initialized with set of members that will be initially managing this account.
 All operations going forward will require `K` members to call `confirm` to be executed.
 
@@ -254,4 +254,18 @@ __Create an account__
 ```
 near call illia.near add_request '{"request": {"receiver_id": "new_account.near", "actions": [{"type", "CreateAccount"}, {"type": "Transfer", "amount": "1000000000000000000000"}, {"type": "AddKey", "public_key": "<public key for the new account>"}]}}' --accountId illia.near
 near call illia.near confirm '{"request_id": <request number from previous line>}'
+```
+
+## Deploying and building
+
+This repository has simulation tests, which can offer more advanced testing functionality than unit tests. However, this means the manifest (`Cargo.toml`) should be modified to reduce the contract size when building for production.
+
+Remove the `rlib` like shown here:
+
+```diff
+[lib]
+# Below is used for production
++crate-type = ["cdylib"]
+# Below used when running simulation tests
++# crate-type = ["cdylib", "rlib"]
 ```
