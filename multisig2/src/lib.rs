@@ -25,7 +25,8 @@ const MULTISIG_METHOD_NAMES: &str = "add_request,delete_request,confirm,add_and_
 pub type RequestId = u32;
 
 /// Permissions for function call access key.
-#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Clone))]
 #[serde(crate = "near_sdk::serde")]
 pub struct FunctionCallPermission {
     allowance: Option<U128>,
@@ -34,7 +35,8 @@ pub struct FunctionCallPermission {
 }
 
 /// Lowest level action that can be performed by the multisig contract.
-#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Clone))]
 #[serde(tag = "type", crate = "near_sdk::serde")]
 pub enum MultiSigRequestAction {
     /// Transfers given amount to receiver.
@@ -71,7 +73,8 @@ pub enum MultiSigRequestAction {
 }
 
 /// The request the user makes specifying the receiving account and actions they want to execute (1 tx)
-#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Clone))]
 #[serde(crate = "near_sdk::serde")]
 pub struct MultiSigRequest {
     receiver_id: AccountId,
@@ -79,7 +82,8 @@ pub struct MultiSigRequest {
 }
 
 /// An internal request wrapped with the signer_pk and added timestamp to determine num_requests_pk and prevent against malicious key holder gas attacks
-#[derive(Clone, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Clone))]
 #[serde(crate = "near_sdk::serde")]
 pub struct MultiSigRequestWithSigner {
     request: MultiSigRequest,
@@ -97,8 +101,7 @@ pub enum MultisigMember {
 
 impl ToString for MultisigMember {
     fn to_string(&self) -> String {
-        serde_json::to_string(&self)
-            .unwrap_or_else(|err| env::panic_str(&format!("Failed to serialize: {:?}", err)))
+        serde_json::to_string(&self).unwrap_or_else(|_| env::panic_str("Failed to serialize"))
     }
 }
 
@@ -321,7 +324,7 @@ impl MultiSigContract {
             MultisigMember::AccessKey {
                 public_key: env::signer_account_pk()
                     .try_into()
-                    .expect("Failed to deserialize public key"),
+                    .unwrap_or_else(|_| env::panic_str("Failed to deserialize public key")),
             }
         } else {
             MultisigMember::Account {
