@@ -1,4 +1,4 @@
-# Basic Mutlisig contract
+# Basic Multisig contract
 
 This contract provides:
  - Set K out of N multi sig scheme
