@@ -96,7 +96,8 @@ pub enum MultisigMember {
 
 impl ToString for MultisigMember {
     fn to_string(&self) -> String {
-        serde_json::to_string(&self).expect("Failed to serialize")
+        serde_json::to_string(&self)
+            .unwrap_or_else(|err| env::panic_str(&format!("Failed to serialize: {:?}", err)))
     }
 }
 
@@ -127,6 +128,13 @@ pub struct MultiSigContract {
     active_requests_limit: u32,
 }
 
+#[inline]
+fn assert(condition: bool, error: &str) {
+    if condition {
+        env::panic_str(error);
+    }
+}
+
 #[near_bindgen]
 impl MultiSigContract {
     /// Initialize multisig contract.
@@ -134,7 +142,7 @@ impl MultiSigContract {
     /// @params num_confirmations: k of n signatures required to perform operations.
     #[init]
     pub fn new(members: Vec<MultisigMember>, num_confirmations: u32) -> Self {
-        assert!(
+        assert(
             members.len() >= num_confirmations as usize,
             "Members list must be equal or larger than number of confirmations"
         );
@@ -156,19 +164,20 @@ impl MultiSigContract {
 
     /// Add request for multisig.
     pub fn add_request(&mut self, request: MultiSigRequest) -> RequestId {
-        let current_member = self
-            .current_member()
-            .expect("Predecessor must be a member or transaction signed with key of given account");
+        let current_member = self.current_member().unwrap_or_else(|| {
+            env::panic_str(
+                "Predecessor must be a member or transaction signed with key of given account",
+            )
+        });
         // track how many requests this key has made
         let num_requests = self
             .num_requests_pk
             .get(&current_member.to_string())
             .unwrap_or(0)
             + 1;
-        assert!(
-            num_requests <= self.active_requests_limit,
-            "Account has too many active requests. Confirm or delete some."
-        );
+        if num_requests > self.active_requests_limit {
+            env::panic_str("Account has too many active requests. Confirm or delete some.")
+        }
         self.num_requests_pk
             .insert(&current_member.to_string(), &num_requests);
         // add the request
@@ -195,12 +204,14 @@ impl MultiSigContract {
     /// Remove given request and associated confirmations.
     pub fn delete_request(&mut self, request_id: RequestId) {
         self.assert_valid_request(request_id);
-        let request_with_signer = self.requests.get(&request_id).expect("No such request");
+        let request_with_signer = self
+            .requests
+            .get(&request_id)
+            .unwrap_or_else(|| env::panic_str("No such request"));
         // can't delete requests before 15min
-        assert!(
-            env::block_timestamp() > request_with_signer.added_timestamp + REQUEST_COOLDOWN,
-            "Request cannot be deleted immediately after creation."
-        );
+        if env::block_timestamp() <= request_with_signer.added_timestamp + REQUEST_COOLDOWN {
+            env::panic_str("Request cannot be deleted immediately after creation.")
+        }
         self.remove_request(request_id);
     }
 
@@ -276,12 +287,13 @@ impl MultiSigContract {
     /// If with this, there has been enough confirmation, a promise with request will be scheduled.
     pub fn confirm(&mut self, request_id: RequestId) -> PromiseOrValue<bool> {
         self.assert_valid_request(request_id);
-        let member = self.current_member().expect("Must be validated above");
+        let member = self
+            .current_member()
+            .unwrap_or_else(|| env::panic_str("Must be validated above"));
         let mut confirmations = self.confirmations.get(&request_id).unwrap();
-        assert!(
-            !confirmations.contains(&member.to_string()),
-            "Already confirmed this request with this key"
-        );
+        if confirmations.contains(&member.to_string()) {
+            env::panic_str("Already confirmed this request with this key")
+        }
         if confirmations.len() as u32 + 1 >= self.num_confirmations {
             let request = self.remove_request(request_id);
             /********************************
@@ -335,7 +347,7 @@ impl MultiSigContract {
 
     /// Delete member from the list. Removes access key if the member is key based.
     fn delete_member(&mut self, promise: Promise, member: MultisigMember) -> Promise {
-        assert!(
+        assert(
             self.members.len() - 1 >= self.num_confirmations as u64,
             "Removing given member will make total number of members below number of confirmations"
         );
@@ -367,7 +379,7 @@ impl MultiSigContract {
         let request_with_signer = self
             .requests
             .remove(&request_id)
-            .expect("Failed to remove existing element");
+            .unwrap_or_else(|| env::panic_str("Failed to remove existing element"));
         // decrement num_requests for original request signer
         let original_member = request_with_signer.member;
         let mut num_requests = self
@@ -387,32 +399,25 @@ impl MultiSigContract {
     /// Prevents access to calling requests and make sure request_id is valid - used in delete and confirm
     fn assert_valid_request(&mut self, request_id: RequestId) {
         // request must come from key added to contract account
-        if self.current_member().is_none() {
-            env::panic_str("Caller (predecessor or signer) is not a member of this multisig");
-        }
+        assert(self.current_member().is_none(),
+            "Caller (predecessor or signer) is not a member of this multisig"
+        );
         // request must exist
-        assert!(
-            self.requests.get(&request_id).is_some(),
-            "No such request: either wrong number or already confirmed"
-        );
+        assert(self.requests.get(&request_id).is_none(),
+            "No such request: either wrong number or already confirmed");
         // request must have
-        assert!(
-            self.confirmations.get(&request_id).is_some(),
-            "Internal error: confirmations mismatch requests"
-        );
+        assert(self.confirmations.get(&request_id).is_none(),
+            "Internal error: confirmations mismatch requests");
     }
     // Prevents request from approving tx on another account
     fn assert_self_request(&mut self, receiver_id: AccountId) {
-        assert_eq!(
-            receiver_id,
-            env::current_account_id(),
-            "This method only works when receiver_id is equal to current_account_id"
-        );
+        assert(receiver_id != env::current_account_id(),
+            "This method only works when receiver_id is equal to current_account_id");
     }
     // Prevents a request from being bundled with other actions
     fn assert_one_action_only(&mut self, receiver_id: AccountId, num_actions: usize) {
         self.assert_self_request(receiver_id);
-        assert_eq!(num_actions, 1, "This method should be a separate request");
+        assert(num_actions != 1, "This method should be a separate request");
     }
 
     /********************************
@@ -425,7 +430,11 @@ impl MultiSigContract {
     }
 
     pub fn get_request(&self, request_id: RequestId) -> MultiSigRequest {
-        (self.requests.get(&request_id).expect("No such request")).request
+        (self
+            .requests
+            .get(&request_id)
+            .unwrap_or_else(|| env::panic_str("No such request")))
+        .request
     }
 
     pub fn get_num_requests_per_member(&self, member: MultisigMember) -> u32 {
@@ -439,7 +448,7 @@ impl MultiSigContract {
     pub fn get_confirmations(&self, request_id: RequestId) -> Vec<String> {
         self.confirmations
             .get(&request_id)
-            .expect("No such request")
+            .unwrap_or_else(|| env::panic_str("No such request"))
             .into_iter()
             .collect()
     }
@@ -564,11 +573,19 @@ mod tests {
             }],
         };
         let request_id = c.add_request(request.clone());
-        assert_eq!(c.get_request(request_id), request);
-        assert_eq!(c.list_request_ids(), vec![request_id]);
+        if c.get_request(request_id) != request {
+            env::panic_str("");
+        }
+        if c.list_request_ids() != vec![request_id] {
+            env::panic_str("")
+        }
         c.confirm(request_id);
-        assert_eq!(c.requests.len(), 1);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
+        if c.requests.len() != 1 {
+            env::panic_str("")
+        }
+        if c.confirmations.get(&request_id).unwrap().len() != 1 {
+            env::panic_str("")
+        }
         testing_env!(context_with_key(
             PublicKey::from(
                 "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
@@ -578,12 +595,18 @@ mod tests {
             amount
         ));
         c.confirm(request_id);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 2);
-        assert_eq!(c.get_confirmations(request_id).len(), 2);
+        if c.confirmations.get(&request_id).unwrap().len() != 2 {
+            env::panic_str("")
+        }
+        if c.get_confirmations(request_id).len() != 2 {
+            env::panic_str("")
+        }
         testing_env!(context_with_account(bob(), amount));
         c.confirm(request_id);
         // TODO: confirm that funds were transferred out via promise.
-        assert_eq!(c.requests.len(), 0);
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
     }
 
     #[test]
@@ -605,11 +628,19 @@ mod tests {
             }],
         };
         let request_id = c.add_request_and_confirm(request.clone());
-        assert_eq!(c.get_request(request_id), request);
-        assert_eq!(c.list_request_ids(), vec![request_id]);
+        if c.get_request(request_id) != request {
+            env::panic_str("")
+        }
+        if c.list_request_ids() != vec![request_id] {
+            env::panic_str("")
+        }
         // c.confirm(request_id);
-        assert_eq!(c.requests.len(), 1);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
+        if c.requests.len() != 1 {
+            env::panic_str("")
+        }
+        if c.confirmations.get(&request_id).unwrap().len() != 1 {
+            env::panic_str("")
+        }
         testing_env!(context_with_key(
             PublicKey::from(
                 "HghiythFFPjVXwc9BLNi8uqFmfQc1DWFrJQ4nE6ANo7R"
@@ -619,12 +650,18 @@ mod tests {
             amount
         ));
         c.confirm(request_id);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 2);
-        assert_eq!(c.get_confirmations(request_id).len(), 2);
+        if c.confirmations.get(&request_id).unwrap().len() != 2 {
+            env::panic_str("")
+        }
+        if c.get_confirmations(request_id).len() != 2 {
+            env::panic_str("")
+        }
         testing_env!(context_with_account(bob(), amount));
         c.confirm(request_id);
         // TODO: confirm that funds were transferred out via promise.
-        assert_eq!(c.requests.len(), 0);
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
     }
 
     #[test]
@@ -655,7 +692,9 @@ mod tests {
         // make request
         c.add_request_and_confirm(request.clone());
         // should be empty now
-        assert_eq!(c.requests.len(), 0);
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
         // switch accounts
         testing_env!(context_with_key(
             PublicKey::from(
@@ -677,8 +716,12 @@ mod tests {
         let new_member = MultisigMember::AccessKey {
             public_key: new_key.clone(),
         };
-        assert_eq!(c.requests.len(), 1);
-        assert_eq!(c.get_num_requests_per_member(new_member.clone()), 1);
+        if c.requests.len() != 1 {
+            env::panic_str("")
+        }
+        if c.get_num_requests_per_member(new_member.clone()) != 1 {
+            env::panic_str("")
+        }
         // self delete key
         let request3 = MultiSigRequest {
             receiver_id: alice(),
@@ -689,8 +732,12 @@ mod tests {
         // make request and confirm
         c.add_request_and_confirm(request3.clone());
         // should be empty now
-        assert_eq!(c.requests.len(), 0);
-        assert_eq!(c.get_num_requests_per_member(new_member), 0);
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
+        if c.get_num_requests_per_member(new_member) != 0 {
+            env::panic_str("")
+        }
     }
 
     #[test]
@@ -733,7 +780,9 @@ mod tests {
             }],
         });
         c.confirm(request_id);
-        assert_eq!(c.num_confirmations, 2);
+        if c.num_confirmations != 2 {
+            env::panic_str("")
+        }
     }
 
     #[test]
@@ -751,10 +800,16 @@ mod tests {
                 amount: amount.into(),
             }],
         });
-        assert_eq!(c.requests.len(), 1);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 0);
+        if c.requests.len() != 1 {
+            env::panic_str("")
+        }
+        if c.confirmations.get(&request_id).unwrap().len() != 0 {
+            env::panic_str("")
+        }
         c.confirm(request_id);
-        assert_eq!(c.confirmations.get(&request_id).unwrap().len(), 1);
+        if c.confirmations.get(&request_id).unwrap().len() != 1 {
+            env::panic_str("")
+        }
         c.confirm(request_id);
     }
 
@@ -774,6 +829,15 @@ mod tests {
             }],
         });
         c.delete_request(request_id);
+<<<<<<< HEAD
+=======
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
+        if c.confirmations.len() != 0 {
+            env::panic_str("")
+        }
+>>>>>>> 7817f10ce96d5a5784b9eaaa9160e8a0cb23e234
     }
 
     #[test]
@@ -790,14 +854,26 @@ mod tests {
                 amount: amount.into(),
             }],
         });
+<<<<<<< HEAD
         c.confirm(request_id);
+=======
+>>>>>>> 7817f10ce96d5a5784b9eaaa9160e8a0cb23e234
         testing_env!(context_with_key_future(
             PublicKey::try_from(TEST_KEY.to_vec()).unwrap(),
             amount
         ));
         c.delete_request(request_id);
+<<<<<<< HEAD
         assert_eq!(c.requests.len(), 0);
         assert!(c.confirmations.get(&request_id).is_none());
+=======
+        if c.requests.len() != 0 {
+            env::panic_str("")
+        }
+        if c.confirmations.len() != 0 {
+            env::panic_str("")
+        }
+>>>>>>> 7817f10ce96d5a5784b9eaaa9160e8a0cb23e234
     }
 
     #[test]
