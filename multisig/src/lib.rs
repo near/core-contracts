@@ -4,8 +4,8 @@ use std::convert::TryFrom;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::{Base58PublicKey, Base64VecU8, U128, U64};
-use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
 use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
 
 /// Unlimited allowance for multisig keys.
 const DEFAULT_ALLOWANCE: u128 = 0;
@@ -153,7 +153,7 @@ impl MultiSigContract {
     }
 
     /// Remove given request and associated confirmations.
-    pub fn delete_request(&mut self, request_id: RequestId) {
+    pub fn delete_request(&mut self, request_id: RequestId) -> MultiSigRequest {
         self.assert_valid_request(request_id);
         let request_with_signer = self.requests.get(&request_id).expect("No such request");
         // can't delete requests before 15min
@@ -161,7 +161,7 @@ impl MultiSigContract {
             env::block_timestamp() > request_with_signer.added_timestamp + REQUEST_COOLDOWN,
             "Request cannot be deleted immediately after creation."
         );
-        self.remove_request(request_id);
+        self.remove_request(request_id)
     }
 
     fn execute_request(&mut self, request: MultiSigRequest) -> PromiseOrValue<bool> {
