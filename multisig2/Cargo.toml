@@ -1,0 +1,28 @@
+[package]
+name = "multisig2"
+version = "0.4.0"
+authors = ["Near Inc <hello@near.org>"]
+edition = "2018"
+publish = false
+
+[lib]
+# Below is used for production
+# crate-type = ["cdylib"]
+# Below used when running simulation tests
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+codegen-units = 1
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[dependencies]
+near-sdk = "4.0.0-pre.4"
+
+[dev-dependencies]
+near-sdk-sim = "3.2.0"
+near-primitives-core = "0.4.0"

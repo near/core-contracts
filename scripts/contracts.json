@@ -17,5 +17,13 @@
     {
         "contract_dir": "w-near",
         "contract_name": "w_near"
+    },
+    {
+        "contract_dir": "multisig2",
+        "contract_name": "multisig2"
+    },
+    {
+        "contract_dir": "multisig-factory",
+        "contract_name": "multisig_factory"
     }
 ]
