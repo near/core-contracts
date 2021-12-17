@@ -1778,25 +1778,25 @@ mod tests {
         let vesting_nanos_total =
             (vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0) as u128;
 
-        let expected_vested_amount_at_cliff_day =
-            lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let expected_vested_amount_at_cliff_day = (U256::from(lockup_amount)
+            * U256::from(vesting_nanos_passed)
+            / U256::from(vesting_nanos_total))
+        .as_u128();
         let vested_amount_at_cliff_day = contract
             .get_locked_vested_amount(vesting_schedule.clone())
             .0;
-        assert_almost_eq_with_max_delta(
+        assert_eq!(
             expected_vested_amount_at_cliff_day,
-            vested_amount_at_cliff_day,
-            to_yocto(1),
+            vested_amount_at_cliff_day
         );
         assert_eq!(to_yocto(250000), vested_amount_at_cliff_day);
 
         let expected_unvested_amount_at_cliff_day =
             lockup_amount - expected_vested_amount_at_cliff_day;
         let unvested_amount_at_cliff_day = contract.get_unvested_amount(vesting_schedule.clone()).0;
-        assert_almost_eq_with_max_delta(
+        assert_eq!(
             expected_unvested_amount_at_cliff_day,
-            unvested_amount_at_cliff_day,
-            to_yocto(1),
+            unvested_amount_at_cliff_day
         );
         assert_eq!(to_yocto(750000), unvested_amount_at_cliff_day);
 
@@ -1824,16 +1824,17 @@ mod tests {
 
         // Some tokens are vested
         let vesting_nanos_passed = (ts_termination_day - ts_vesting_started) as u128;
-        let expected_vested_amount_at_termination_day =
-            lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let expected_vested_amount_at_termination_day = (U256::from(lockup_amount)
+            * U256::from(vesting_nanos_passed)
+            / U256::from(vesting_nanos_total))
+        .as_u128();
         let locked_vested_amount_at_termination_day = contract
             .get_locked_vested_amount(vesting_schedule.clone())
             .0;
 
-        assert_almost_eq_with_max_delta(
-            expected_vested_amount_at_termination_day,
-            locked_vested_amount_at_termination_day,
-            to_yocto(1),
+        assert_eq!(
+            expected_vested_amount_at_termination_day + 1,
+            locked_vested_amount_at_termination_day
         );
         assert_almost_eq_with_max_delta(
             to_yocto(386986),
@@ -1845,10 +1846,9 @@ mod tests {
             lockup_amount - expected_vested_amount_at_termination_day;
         let unvested_amount_at_termination_day =
             contract.get_unvested_amount(vesting_schedule.clone()).0;
-        assert_almost_eq_with_max_delta(
+        assert_eq!(
             expected_unvested_amount_at_termination_day,
-            unvested_amount_at_termination_day,
-            to_yocto(1),
+            unvested_amount_at_termination_day + 1
         );
         assert_almost_eq_with_max_delta(
             to_yocto(613014),
@@ -1923,13 +1923,13 @@ mod tests {
         testing_env!(context.clone());
 
         let unlocked_amount_day_of_lockup_cliff = contract.get_liquid_owners_balance().0;
-        let expected_unlocked_amount_day_of_lockup_cliff = lockup_amount
-            / (contract.lockup_information.release_duration.unwrap() as u128)
-            * (to_nanos(YEAR) as u128);
-        assert_almost_eq_with_max_delta(
+        let expected_unlocked_amount_day_of_lockup_cliff = (U256::from(lockup_amount)
+            * U256::from(to_nanos(YEAR))
+            / U256::from(contract.lockup_information.release_duration.unwrap()))
+        .as_u128();
+        assert_eq!(
             expected_unlocked_amount_day_of_lockup_cliff,
-            unlocked_amount_day_of_lockup_cliff,
-            to_yocto(1),
+            unlocked_amount_day_of_lockup_cliff
         );
         assert_eq!(to_yocto(250000), unlocked_amount_day_of_lockup_cliff);
 
@@ -2082,13 +2082,14 @@ mod tests {
         let vesting_nanos_total =
             (vesting_schedule.end_timestamp.0 - vesting_schedule.start_timestamp.0) as u128;
 
-        let expected_unvested_amount_at_cliff_day =
-            lockup_amount - lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let expected_unvested_amount_at_cliff_day = lockup_amount
+            - (U256::from(lockup_amount) * U256::from(vesting_nanos_passed)
+                / U256::from(vesting_nanos_total))
+            .as_u128();
         let unvested_amount_at_cliff_day = contract.get_unvested_amount(vesting_schedule.clone()).0;
-        assert_almost_eq_with_max_delta(
+        assert_eq!(
             expected_unvested_amount_at_cliff_day,
-            unvested_amount_at_cliff_day,
-            to_yocto(1),
+            unvested_amount_at_cliff_day
         );
         assert_eq!(to_yocto(750000), unvested_amount_at_cliff_day);
 
@@ -2111,14 +2112,15 @@ mod tests {
 
         // Some tokens are vested
         let vesting_nanos_passed = (ts_termination_day - ts_vesting_started) as u128;
-        let expected_unvested_amount_at_termination_day =
-            lockup_amount - lockup_amount / vesting_nanos_total * vesting_nanos_passed;
+        let expected_unvested_amount_at_termination_day = lockup_amount
+            - (U256::from(lockup_amount) * U256::from(vesting_nanos_passed)
+                / U256::from(vesting_nanos_total))
+            .as_u128();
         let unvested_amount_at_termination_day =
             contract.get_unvested_amount(vesting_schedule.clone()).0;
-        assert_almost_eq_with_max_delta(
+        assert_eq!(
             expected_unvested_amount_at_termination_day,
-            unvested_amount_at_termination_day,
-            to_yocto(1),
+            unvested_amount_at_termination_day + 1
         );
         assert_almost_eq_with_max_delta(
             to_yocto(705479),
