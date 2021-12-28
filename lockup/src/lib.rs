@@ -1972,6 +1972,11 @@ mod tests {
             contract.get_locked_amount().0,
             unvested_amount_at_termination_day
         );
+
+        assert_eq!(
+            contract.get_liquid_owners_balance().0,
+            lockup_amount - unvested_amount_at_termination_day
+        );
     }
 
     #[test]
@@ -2159,6 +2164,11 @@ mod tests {
         assert_eq!(
             unvested_amount_1_day_after_termination,
             unvested_amount_at_termination_day
+        );
+
+        assert_eq!(
+            contract.get_liquid_owners_balance().0,
+            lockup_amount - unvested_amount_at_termination_day
         );
     }
 
