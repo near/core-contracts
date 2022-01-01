@@ -40,7 +40,7 @@ impl Contract {
         let account_id = env::predecessor_account_id();
         let amount = amount.into();
         self.ft.internal_withdraw(&account_id, amount);
-        log!("Withdraw {} NEAR from {}", amount, account_id);
+        log!("Withdraw {} yoctoNEAR from {}", amount, account_id);
         // Transferring NEAR and refunding 1 yoctoNEAR.
         Promise::new(account_id).transfer(amount + 1)
     }
