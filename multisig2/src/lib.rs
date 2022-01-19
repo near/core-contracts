@@ -144,8 +144,13 @@ impl MultiSigContract {
     /// Initialize multisig contract.
     /// @params members: list of {"account_id": "name"} or {"public_key": "key"} members.
     /// @params num_confirmations: k of n signatures required to perform operations.
-    #[init]
+    #[init(ignore_state)]
     pub fn new(members: Vec<MultisigMember>, num_confirmations: u32) -> Self {
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Predecessor account must match current account"
+        );
         assert(
             members.len() >= num_confirmations as usize,
             "Members list must be equal or larger than number of confirmations",
