@@ -1,194 +1,341 @@
+use near_primitives::views::FinalExecutionStatus;
 use near_sdk::json_types::U128;
-use near_sdk::serde_json::json;
-use near_sdk::Balance;
-use near_sdk_sim::{
-    call, deploy, init_simulator, to_yocto, view, ContractAccount, ExecutionResult, UserAccount,
-    DEFAULT_GAS,
-};
-use w_near::ContractContract as Contract;
+use near_sdk::{Balance, ONE_YOCTO};
+use near_units::parse_near;
+use workspaces::prelude::DevAccountDeployer;
+use workspaces::{Account, Contract, DevNetwork, Worker};
 
-near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
-    W_NEAR_WASM_BYTES => "res/w_near.wasm",
-    LEGACY_W_NEAR_WASM_BYTES => "res/legacy_w_near.wasm",
-}
-
-const CONTRACT_ID: &str = "wrapnear";
 const LEGACY_BYTE_COST: Balance = 10_000_000_000_000_000_000;
 
 const STORAGE_BALANCE: Balance = 125 * LEGACY_BYTE_COST;
 
-// Register the given `user` with Legacy wNEAR contract
-fn legacy_register_user(user: &UserAccount) {
-    user.call(
-        CONTRACT_ID.to_string(),
-        "storage_deposit",
-        &json!({
-            "account_id": user.valid_account_id()
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS / 2,
-        125 * LEGACY_BYTE_COST, // attached deposit
-    )
-    .assert_success();
+pub async fn init_legacy(worker: &Worker<impl DevNetwork>) -> anyhow::Result<Contract> {
+    let contract = worker
+        .dev_deploy(include_bytes!("../res/legacy_w_near.wasm").to_vec())
+        .await?;
+    let res = contract
+        .call(&worker, "new")
+        .args_json((contract.id(),))?
+        .gas(300_000_000_000_000)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
+
+    Ok(contract)
 }
 
-fn wrap_near(user: &UserAccount, amount: Balance) -> ExecutionResult {
-    user.call(
-        CONTRACT_ID.to_string(),
-        "near_deposit",
-        &json!({
-            "account_id": user.valid_account_id()
-        })
-        .to_string()
-        .into_bytes(),
-        DEFAULT_GAS / 2,
-        amount, // attached deposit
-    )
+pub async fn init_w_near(worker: &Worker<impl DevNetwork>) -> anyhow::Result<Contract> {
+    let contract = worker
+        .dev_deploy(include_bytes!("../res/w_near.wasm").to_vec())
+        .await?;
+    let res = contract
+        .call(&worker, "new")
+        .args_json((contract.id(),))?
+        .gas(300_000_000_000_000)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
+
+    Ok(contract)
 }
 
-fn deploy_legacy() -> (UserAccount, ContractAccount<Contract>) {
-    let root = init_simulator(None);
-    let w_near = deploy!(
-        contract: Contract,
-        contract_id: CONTRACT_ID.to_string(),
-        bytes: &LEGACY_W_NEAR_WASM_BYTES,
-        signer_account: root,
-        init_method: new()
-    );
-    (root, w_near)
+async fn legacy_register_user(
+    name: &str,
+    contract: &Contract,
+    worker: &Worker<impl DevNetwork>,
+) -> anyhow::Result<Account> {
+    let res = contract
+        .as_account()
+        .create_subaccount(&worker, name)
+        .initial_balance(parse_near!("10 N"))
+        .transact()
+        .await?;
+    assert!(matches!(
+        res.details.status,
+        FinalExecutionStatus::SuccessValue(_)
+    ));
+    let account = res.result;
+
+    let res = contract
+        .call(&worker, "storage_deposit")
+        .args_json((account.id(),))?
+        .gas(300_000_000_000_000)
+        .deposit(125 * LEGACY_BYTE_COST)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
+
+    Ok(account)
 }
 
-fn deploy_w_near() -> (UserAccount, ContractAccount<Contract>) {
-    let root = init_simulator(None);
-    let w_near = deploy!(
-        contract: Contract,
-        contract_id: CONTRACT_ID.to_string(),
-        bytes: &W_NEAR_WASM_BYTES,
-        signer_account: root,
-        init_method: new()
-    );
-    (root, w_near)
+async fn register_user(
+    name: &str,
+    contract: &Contract,
+    worker: &Worker<impl DevNetwork>,
+) -> anyhow::Result<Account> {
+    let res = contract
+        .as_account()
+        .create_subaccount(&worker, name)
+        .initial_balance(parse_near!("10 N"))
+        .transact()
+        .await?;
+    assert!(matches!(
+        res.details.status,
+        FinalExecutionStatus::SuccessValue(_)
+    ));
+    let account = res.result;
+
+    let res = contract
+        .call(&worker, "storage_deposit")
+        .args_json((account.id(), Option::<bool>::None))?
+        .gas(300_000_000_000_000)
+        .deposit(125 * LEGACY_BYTE_COST)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
+
+    Ok(account)
 }
 
-#[test]
-pub fn test_upgrade() {
-    let (root, w_near) = deploy_legacy();
+async fn wrap_near(
+    account: &Account,
+    contract: &Contract,
+    worker: &Worker<impl DevNetwork>,
+    amount: Balance,
+) -> anyhow::Result<FinalExecutionStatus> {
+    Ok(account
+        .call(&worker, contract.id().clone(), "near_deposit")
+        .args_json((account.id(),))?
+        .gas(300_000_000_000_000)
+        .deposit(amount)
+        .transact()
+        .await?
+        .status)
+}
 
-    let legacy_storage_minimum_balance: U128 =
-        view!(w_near.storage_minimum_balance()).unwrap_json();
+#[tokio::test]
+async fn test_upgrade() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_legacy(&worker).await?;
+
+    let alice = legacy_register_user("alice", &contract, &worker).await?;
+
+    let legacy_storage_minimum_balance: U128 = contract
+        .call(&worker, "storage_minimum_balance")
+        .view()
+        .await?
+        .json()?;
     assert_eq!(legacy_storage_minimum_balance.0, STORAGE_BALANCE);
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
-    legacy_register_user(&alice);
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
 
-    wrap_near(&alice, to_yocto("10")).assert_success();
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("1 N"));
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
-    assert_eq!(alice_balance.0, to_yocto("10"));
+    let contract = contract
+        .as_account()
+        .deploy(&worker, include_bytes!("../res/w_near.wasm").to_vec())
+        .await?
+        .result;
 
-    w_near
-        .user_account
-        .create_transaction(CONTRACT_ID.to_string())
-        .deploy_contract(W_NEAR_WASM_BYTES.to_vec())
-        .submit()
-        .assert_success();
-
-    let storage_minimum_balance: U128 = view!(w_near.storage_minimum_balance()).unwrap_json();
+    let storage_minimum_balance: U128 = contract
+        .call(&worker, "storage_minimum_balance")
+        .view()
+        .await?
+        .json()?;
     assert_eq!(storage_minimum_balance.0, STORAGE_BALANCE);
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
-    assert_eq!(alice_balance.0, to_yocto("10"));
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("1 N"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
-    legacy_register_user(&bob);
+    let bob = register_user("bob", &contract, &worker).await?;
 
-    wrap_near(&bob, to_yocto("15")).assert_success();
+    let res = wrap_near(&bob, &contract, &worker, parse_near!("1.5 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
-    assert_eq!(bob_balance.0, to_yocto("15"));
+    let bob_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((bob.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(bob_balance.0, parse_near!("1.5 N"));
 
-    call!(
-        alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
-        deposit = 1
-    )
-    .assert_success();
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer")
+        .args_json((
+            bob.id(),
+            U128::from(parse_near!("0.5 N")),
+            Option::<bool>::None,
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
-    assert_eq!(bob_balance.0, to_yocto("20"));
+    let bob_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((bob.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(bob_balance.0, parse_near!("2 N"));
+
+    Ok(())
 }
 
-#[test]
-pub fn test_legacy_ft_transfer() {
-    let (root, w_near) = deploy_legacy();
+#[tokio::test]
+async fn test_legacy_ft_transfer() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_legacy(&worker).await?;
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
-    legacy_register_user(&alice);
+    let alice = legacy_register_user("alice", &contract, &worker).await?;
 
-    wrap_near(&alice, to_yocto("10")).assert_success();
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
-    assert_eq!(alice_balance.0, to_yocto("10"));
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("1 N"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
-    legacy_register_user(&bob);
+    let bob = legacy_register_user("bob", &contract, &worker).await?;
 
-    call!(
-        alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
-        deposit = 1
-    )
-    .assert_success();
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer")
+        .args_json((
+            bob.id(),
+            U128::from(parse_near!("0.5 N")),
+            Option::<bool>::None,
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
-    assert_eq!(bob_balance.0, to_yocto("5"));
+    let bob_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((bob.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(bob_balance.0, parse_near!("0.5 N"));
+
+    Ok(())
 }
 
-#[test]
-pub fn test_ft_transfer() {
-    let (root, w_near) = deploy_w_near();
+#[tokio::test]
+async fn test_ft_transfer() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
-    legacy_register_user(&alice);
+    let alice = register_user("alice", &contract, &worker).await?;
 
-    wrap_near(&alice, to_yocto("10")).assert_success();
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
-    assert_eq!(alice_balance.0, to_yocto("10"));
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("1 N"));
 
-    let bob = root.create_user("bob".to_string(), to_yocto("100"));
-    legacy_register_user(&bob);
+    let bob = register_user("bob", &contract, &worker).await?;
 
-    call!(
-        alice,
-        w_near.ft_transfer(bob.valid_account_id(), to_yocto("5").into(), None),
-        deposit = 1
-    )
-    .assert_success();
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer")
+        .args_json((
+            bob.id(),
+            U128::from(parse_near!("0.5 N")),
+            Option::<bool>::None,
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
 
-    let bob_balance: U128 = view!(w_near.ft_balance_of(bob.valid_account_id())).unwrap_json();
-    assert_eq!(bob_balance.0, to_yocto("5"));
+    let bob_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((bob.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(bob_balance.0, parse_near!("0.5 N"));
+
+    Ok(())
 }
 
-#[test]
-pub fn test_legacy_wrap_fail() {
-    let (root, _w_near) = deploy_legacy();
+#[tokio::test]
+async fn test_legacy_wrap_fail() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_legacy(&worker).await?;
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    // Create a user, but do not register them
+    let res = contract
+        .as_account()
+        .create_subaccount(&worker, "alice")
+        .initial_balance(parse_near!("10 N"))
+        .transact()
+        .await?;
+    assert!(matches!(
+        res.details.status,
+        FinalExecutionStatus::SuccessValue(_)
+    ));
+    let alice = res.result;
 
-    let status = wrap_near(&alice, to_yocto("10"));
-    assert!(!status.is_ok())
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::Failure(_)));
+
+    Ok(())
 }
 
-#[test]
-pub fn test_wrap_without_storage_deposit() {
-    let (root, w_near) = deploy_w_near();
+#[tokio::test]
+async fn test_wrap_without_storage_deposit() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
 
-    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+    // Create a user, but do not register them
+    let res = contract
+        .as_account()
+        .create_subaccount(&worker, "alice")
+        .initial_balance(parse_near!("10 N"))
+        .transact()
+        .await?;
+    assert!(matches!(
+        res.details.status,
+        FinalExecutionStatus::SuccessValue(_)
+    ));
+    let alice = res.result;
 
-    wrap_near(&alice, to_yocto("10")).assert_success();
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
 
-    let alice_balance: U128 = view!(w_near.ft_balance_of(alice.valid_account_id())).unwrap_json();
-    assert_eq!(alice_balance.0, to_yocto("10") - STORAGE_BALANCE);
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("1 N") - STORAGE_BALANCE);
+
+    Ok(())
 }
