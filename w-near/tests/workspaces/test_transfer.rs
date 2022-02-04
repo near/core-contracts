@@ -10,19 +10,10 @@ async fn test_ft_transfer() -> anyhow::Result<()> {
     let contract = init_w_near(&worker).await?;
 
     let alice = create_user("alice", &contract, &worker).await?;
+    let bob = create_user("bob", &contract, &worker).await?;
 
     let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
     assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
-
-    let alice_balance: U128 = contract
-        .call(&worker, "ft_balance_of")
-        .args_json((alice.id(),))?
-        .view()
-        .await?
-        .json()?;
-    assert_eq!(alice_balance.0, parse_near!("1 N"));
-
-    let bob = create_user("bob", &contract, &worker).await?;
 
     let res = alice
         .call(&worker, contract.id().clone(), "ft_transfer")
@@ -37,6 +28,14 @@ async fn test_ft_transfer() -> anyhow::Result<()> {
         .await?;
     assert!(matches!(res.status, FinalExecutionStatus::SuccessValue(_)));
 
+    let alice_balance: U128 = contract
+        .call(&worker, "ft_balance_of")
+        .args_json((alice.id(),))?
+        .view()
+        .await?
+        .json()?;
+    assert_eq!(alice_balance.0, parse_near!("0.5 N"));
+
     let bob_balance: U128 = contract
         .call(&worker, "ft_balance_of")
         .args_json((bob.id(),))?
@@ -44,6 +43,58 @@ async fn test_ft_transfer() -> anyhow::Result<()> {
         .await?
         .json()?;
     assert_eq!(bob_balance.0, parse_near!("0.5 N"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ft_transfer_themselves() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
+
+    let alice = create_user("alice", &contract, &worker).await?;
+
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
+
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer")
+        .args_json((
+            alice.id(),
+            U128::from(parse_near!("0.5 N")),
+            Option::<bool>::None,
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(format!("{:?}", res.status.as_failure())
+        .contains("Sender and receiver should be different"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ft_transfer_zero() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
+
+    let alice = create_user("alice", &contract, &worker).await?;
+    let bob = create_user("bob", &contract, &worker).await?;
+
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
+
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer")
+        .args_json((bob.id(), U128::from(0), Option::<bool>::None))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(
+        format!("{:?}", res.status.as_failure()).contains("The amount should be a positive number")
+    );
 
     Ok(())
 }
@@ -248,6 +299,67 @@ async fn test_transfer_call_promise_panics_for_a_full_refund() -> anyhow::Result
         .json::<U128>()?;
     assert_eq!(root_balance.0, parse_near!("3 N"));
     assert_eq!(defi_balance.0, 0);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ft_transfer_call_themselves() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
+
+    let alice = create_user("alice", &contract, &worker).await?;
+
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
+
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer_call")
+        .args_json((
+            alice.id(),
+            U128::from(parse_near!("1 N")),
+            Option::<String>::None,
+            "invest",
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(format!("{:?}", res.status.as_failure())
+        .contains("Sender and receiver should be different"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ft_transfer_call_zero() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox();
+    let contract = init_w_near(&worker).await?;
+    let defi_contract = init_defi(&worker, &contract).await?;
+
+    register_user(&contract.as_account(), &contract, &worker).await?;
+    register_user(&defi_contract.as_account(), &contract, &worker).await?;
+
+    let alice = create_user("alice", &contract, &worker).await?;
+
+    let res = wrap_near(&alice, &contract, &worker, parse_near!("1 N")).await?;
+    assert!(matches!(res, FinalExecutionStatus::SuccessValue(_)));
+
+    let res = alice
+        .call(&worker, contract.id().clone(), "ft_transfer_call")
+        .args_json((
+            defi_contract.id(),
+            U128::from(0),
+            Option::<String>::None,
+            "invest",
+        ))?
+        .gas(300_000_000_000_000)
+        .deposit(ONE_YOCTO)
+        .transact()
+        .await?;
+    assert!(
+        format!("{:?}", res.status.as_failure()).contains("The amount should be a positive number")
+    );
 
     Ok(())
 }
