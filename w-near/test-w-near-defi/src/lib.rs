@@ -38,7 +38,7 @@ impl DeFi {
     pub fn new(fungible_token_account_id: AccountId) -> Self {
         require!(!env::state_exists(), "Already initialized");
         Self {
-            fungible_token_account_id: fungible_token_account_id.into(),
+            fungible_token_account_id,
         }
     }
 }
