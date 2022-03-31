@@ -22,3 +22,8 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 near-sys = "0.1"
 wee_alloc = "0.4"
+
+[features]
+default = ["cleanup", "replace"]
+cleanup = []
+replace = []

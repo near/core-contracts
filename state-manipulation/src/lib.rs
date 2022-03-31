@@ -9,6 +9,9 @@ use alloc::vec::Vec;
 const ATOMIC_OP_REGISTER: u64 = 0;
 const EVICTED_REGISTER: u64 = 8;
 
+#[cfg(all(not(feature = "cleanup"), not(feature = "replace")))]
+core::compile_error!("one of the `cleanup` or `replace` features must be set");
+
 // Set up global allocator by default if in wasm32 architecture.
 #[cfg(target_arch = "wasm32")]
 #[global_allocator]
@@ -37,6 +40,7 @@ fn register_len(register_id: u64) -> Option<u64> {
     }
 }
 
+#[cfg(feature = "replace")]
 /// Writes key-value into storage.
 fn storage_write(key: &[u8], value: &[u8]) {
     unsafe {
@@ -50,6 +54,7 @@ fn storage_write(key: &[u8], value: &[u8]) {
     };
 }
 
+#[cfg(feature = "cleanup")]
 /// Removes storage at given key.
 fn storage_remove(key: &[u8]) {
     unsafe { near_sys::storage_remove(key.len() as _, key.as_ptr() as _, EVICTED_REGISTER) };
@@ -67,6 +72,7 @@ fn input() -> Option<Vec<u8>> {
     Some(buffer)
 }
 
+#[cfg(feature = "replace")]
 #[no_mangle]
 pub extern "C" fn replace() {
     let input = input().unwrap();
@@ -80,6 +86,7 @@ pub extern "C" fn replace() {
     }
 }
 
+#[cfg(feature = "cleanup")]
 #[no_mangle]
 pub extern "C" fn clean() {
     let input = input().unwrap();
