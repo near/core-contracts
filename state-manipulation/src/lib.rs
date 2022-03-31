@@ -74,7 +74,7 @@ fn input() -> Option<Vec<u8>> {
 
 #[cfg(feature = "replace")]
 #[no_mangle]
-pub extern "C" fn replace() {
+pub fn replace() {
     let input = input().unwrap();
     let stream = serde_json::Deserializer::from_slice(&input);
     for item in stream.into_iter() {
@@ -88,11 +88,97 @@ pub extern "C" fn replace() {
 
 #[cfg(feature = "cleanup")]
 #[no_mangle]
-pub extern "C" fn clean() {
+pub fn clean() {
     let input = input().unwrap();
     let stream = serde_json::Deserializer::from_slice(&input);
     for item in stream.into_iter() {
         let key: &str = item.unwrap();
         storage_remove(&base64::decode(key).unwrap());
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use arbitrary::{Arbitrary, Unstructured};
+    use rand::{Rng, RngCore, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+    use tokio::fs;
+    use workspaces::{prelude::*, Contract, DevNetwork, Worker};
+
+    const BUFFER_SIZE: usize = 4096;
+
+    // Prop test that values can be replaced and cleaned
+    async fn prop(
+        worker: &Worker<impl DevNetwork>,
+        contract: &Contract,
+        bytes: &[(Vec<u8>, Vec<u8>)],
+    ) -> anyhow::Result<()> {
+        let b64_bytes: Vec<_> = bytes
+            .iter()
+            .map(|(a, b)| (base64::encode(a), base64::encode(b)))
+            .collect();
+
+        // Replace generated keys and values
+        contract
+            .call(&worker, "replace")
+            .args_json(&b64_bytes)?
+            .transact()
+            .await?;
+
+        // TODO workspaces hasn't released functional state viewing yet -- verify state is
+        // TODO     equivalent to the bytes above with 0.2 released
+        // let mut state_items = worker
+        //     .view_state(contract.as_account().id().clone(), None)
+        //     .await?;
+
+        let keys: Vec<_> = b64_bytes.iter().map(|(k, _)| k.as_str()).collect();
+
+        contract
+            .call(&worker, "clean")
+            .args_json(keys)?
+            .transact()
+            .await?;
+
+        let state_items = worker
+            .view_state(contract.id().clone(), None)
+            .await?;
+
+        assert!(state_items.is_empty());
+
+        Ok(())
+    }
+
+    fn generate_n_elements(
+        n: usize,
+        rng: &mut XorShiftRng,
+        mut buf: &mut Vec<u8>,
+    ) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut result = Vec::new();
+        while result.len() < n {
+            rng.fill_bytes(&mut buf);
+            let mut u = Unstructured::new(&buf[0..(rng.gen::<usize>() % BUFFER_SIZE)]);
+            result.append(&mut Vec::<(Vec<u8>, Vec<u8>)>::arbitrary(&mut u).unwrap());
+        }
+        result.truncate(n);
+        result
+    }
+
+    #[tokio::test]
+    async fn workspaces_test() -> anyhow::Result<()> {
+        let wasm = fs::read("res/state_manipulation.wasm").await?;
+
+        let worker = workspaces::sandbox();
+
+        let contract = worker.dev_deploy(wasm).await?;
+
+        // TODO add more when workspaces more efficient (slow test)
+        for i in [8, 16] {
+            let mut rng = XorShiftRng::seed_from_u64(8);
+            let mut buf = vec![0; BUFFER_SIZE];
+            let key_values = generate_n_elements(i, &mut rng, &mut buf);
+            prop(&worker, &contract, &key_values).await?;
+        }
+
+        Ok(())
     }
 }
