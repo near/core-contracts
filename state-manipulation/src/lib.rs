@@ -38,7 +38,7 @@ fn register_len(register_id: u64) -> Option<u64> {
 }
 
 /// Writes key-value into storage.
-pub fn storage_write(key: &[u8], value: &[u8]) {
+fn storage_write(key: &[u8], value: &[u8]) {
     unsafe {
         near_sys::storage_write(
             key.len() as _,
@@ -48,6 +48,11 @@ pub fn storage_write(key: &[u8], value: &[u8]) {
             EVICTED_REGISTER,
         )
     };
+}
+
+/// Removes storage at given key.
+fn storage_remove(key: &[u8]) {
+    unsafe { near_sys::storage_remove(key.len() as _, key.as_ptr() as _, EVICTED_REGISTER) };
 }
 
 fn input() -> Option<Vec<u8>> {
@@ -65,11 +70,22 @@ fn input() -> Option<Vec<u8>> {
 #[no_mangle]
 pub extern "C" fn replace() {
     let input = input().unwrap();
-    let args: Vec<(&str, &str)> = serde_json::from_slice(&input).unwrap();
-    for (key, value) in args {
+    let stream = serde_json::Deserializer::from_slice(&input);
+    for item in stream.into_iter() {
+        let (key, value): (&str, &str) = item.unwrap();
         storage_write(
             &base64::decode(key).unwrap(),
             &base64::decode(value).unwrap(),
         );
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn clean() {
+    let input = input().unwrap();
+    let stream = serde_json::Deserializer::from_slice(&input);
+    for item in stream.into_iter() {
+        let key: &str = item.unwrap();
+        storage_remove(&base64::decode(key).unwrap());
     }
 }
