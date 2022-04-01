@@ -1,20 +1,46 @@
-# State Replacement contract
+# State Manipulation contract
 
-# TODO -- ignore below
-
-This contract has been designed to clear account without deleting it.
+This contract has been designed to put key value pairs into storage with `replace` and clear key/value pairs with `clean` from an account's storage.
 
 Deploy this contract into the account that already has another contract deployed to it.
-This contract on call `clean` will remove any items of the state specified (keys should be specified in base64).
+This contract on call `clean` will remove any items of the state specified (keys should be specified in base64). When compiled with `replace` feature, `replace` method can be called with an array of key/value tuple pairs to insert into state.
 
-Usage example to remove "STATE" item:
+## Parameters
+
+JSON format for `clean`:
+
+```json
+["<base64 encoded key byte string>", "...", "..."]
+```
+
+JSON format for `replace`:
+```json
+[["<base64 key byte string>", "<base64 value byte string>"], ["...", "..."]]
+```
+## With CLI
+
+Usage example to put and remove only the "STATE" item using [near-cli](https://github.com/near/near-cli-rs):
 
 ```bash
-near deploy l.testmewell.testnet --wasmFile=res/state_replace.wasm
-near call l.testmewell.testnet clean '{"keys": ["U1RBVEU="]}' --accountId testmewell.testnet
+# Build the contracts will all feature combinations
+./build.sh
+
+# Deploy built code on chain
+near-cli add contract-code network testnet account nesdie.testnet contract-file ./res/state_manipulation.wasm no-initialize sign-with-keychain
+
+# Add state item for "STATE" key
+near-cli execute change-method network testnet contract nesdie.testnet call replace '[["U1RBVEU=", "dGVzdA=="]]' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
+
+# View Added state item
+near-cli view contract-state network testnet account nesdie.testnet at-final-block
+
+# Clear added state item
+near-cli execute change-method network testnet contract nesdie.testnet call clean '["U1RBVEU="]' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
+
+# View that item was removed
+near-cli view contract-state network testnet account nesdie.testnet at-final-block
 ```
 
-To check which keys to remove and later check that everything has been removed use this command:
-```
-near view-state l.testmewell.testnet --finality final
-```
+## Features
+`clean`: Enables `clean` method to remove keys
+`replace`: Enables `replace` method to add key/value pairs to storage

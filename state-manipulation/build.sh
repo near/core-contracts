@@ -5,8 +5,8 @@ set -e
 cargo build --target wasm32-unknown-unknown --release --all-features
 cp target/wasm32-unknown-unknown/release/state_manipulation.wasm ./res/state_manipulation.wasm
 
-# Build with just cleanup
-cargo build --target wasm32-unknown-unknown --release --no-default-features --features cleanup
+# Build with just clean
+cargo build --target wasm32-unknown-unknown --release --no-default-features --features clean
 cp target/wasm32-unknown-unknown/release/state_manipulation.wasm ./res/state_cleanup.wasm
 
 # Build with just state replace
