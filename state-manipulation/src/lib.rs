@@ -88,10 +88,10 @@ pub fn replace() {
 #[cfg(feature = "cleanup")]
 #[no_mangle]
 pub fn clean() {
-    let input = input().expect("INPUT");
+    let input = input().unwrap();
     let args: Vec<&str> = serde_json::from_slice(&input).unwrap();
     for key in args {
-        storage_remove(&base64::decode(key).expect("B64"));
+        storage_remove(&base64::decode(key).unwrap());
     }
 }
 
