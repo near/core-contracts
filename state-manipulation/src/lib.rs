@@ -76,9 +76,8 @@ fn input() -> Option<Vec<u8>> {
 #[no_mangle]
 pub fn replace() {
     let input = input().unwrap();
-    let stream = serde_json::Deserializer::from_slice(&input);
-    for item in stream.into_iter() {
-        let (key, value): (&str, &str) = item.unwrap();
+    let args: Vec<(&str, &str)> = serde_json::from_slice(&input).unwrap();
+    for (key, value) in args {
         storage_write(
             &base64::decode(key).unwrap(),
             &base64::decode(value).unwrap(),
@@ -89,11 +88,10 @@ pub fn replace() {
 #[cfg(feature = "cleanup")]
 #[no_mangle]
 pub fn clean() {
-    let input = input().unwrap();
-    let stream = serde_json::Deserializer::from_slice(&input);
-    for item in stream.into_iter() {
-        let key: &str = item.unwrap();
-        storage_remove(&base64::decode(key).unwrap());
+    let input = input().expect("INPUT");
+    let args: Vec<&str> = serde_json::from_slice(&input).unwrap();
+    for key in args {
+        storage_remove(&base64::decode(key).expect("B64"));
     }
 }
 
@@ -139,9 +137,7 @@ mod tests {
             .transact()
             .await?;
 
-        let state_items = worker
-            .view_state(contract.id().clone(), None)
-            .await?;
+        let state_items = worker.view_state(contract.id().clone(), None).await?;
 
         assert!(state_items.is_empty());
 
