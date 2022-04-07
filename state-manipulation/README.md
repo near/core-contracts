@@ -10,12 +10,12 @@ This contract on call `clean` will remove any items of the state specified (keys
 JSON format for `clean`:
 
 ```json
-["<base64 encoded key byte string>", "...", "..."]
+{"keys":["<base64 encoded key byte string>", "...", "..."]}
 ```
 
 JSON format for `replace`:
 ```json
-[["<base64 key byte string>", "<base64 value byte string>"], ["...", "..."]]
+{"entries":[["<base64 key byte string>", "<base64 value byte string>"], ["...", "..."]]}
 ```
 ## With CLI
 
@@ -29,13 +29,13 @@ Usage example to put and remove only the "STATE" item using [near-cli](https://g
 near-cli add contract-code network testnet account nesdie.testnet contract-file ./res/state_manipulation.wasm no-initialize sign-with-keychain
 
 # Add state item for "STATE" key
-near-cli execute change-method network testnet contract nesdie.testnet call replace '[["U1RBVEU=", "dGVzdA=="]]' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
+near-cli execute change-method network testnet contract nesdie.testnet call replace '{"entries":[["U1RBVEU=", "dGVzdA=="]]}' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
 
 # View Added state item
 near-cli view contract-state network testnet account nesdie.testnet at-final-block
 
 # Clear added state item
-near-cli execute change-method network testnet contract nesdie.testnet call clean '["U1RBVEU="]' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
+near-cli execute change-method network testnet contract nesdie.testnet call clean '{"keys":["U1RBVEU="]}' --prepaid-gas '100.000 TeraGas' --attached-deposit '0 NEAR' signer nesdie.testnet sign-with-keychain
 
 # View that item was removed
 near-cli view contract-state network testnet account nesdie.testnet at-final-block

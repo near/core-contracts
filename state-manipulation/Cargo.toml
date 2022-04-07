@@ -17,7 +17,7 @@ debug = false
 panic = "abort"
 
 [dependencies]
-serde = { version = "1.0", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 near-sys = "0.1"

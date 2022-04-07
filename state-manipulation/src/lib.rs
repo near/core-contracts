@@ -75,9 +75,15 @@ fn input() -> Option<Vec<u8>> {
 #[cfg(feature = "replace")]
 #[no_mangle]
 pub fn replace() {
+    #[derive(serde::Deserialize)]
+    struct ReplaceInput<'a> {
+        #[serde(borrow)]
+        entries: Vec<(&'a str, &'a str)>,
+    }
+
     let input = input().unwrap();
-    let args: Vec<(&str, &str)> = serde_json::from_slice(&input).unwrap();
-    for (key, value) in args {
+    let args: ReplaceInput = serde_json::from_slice(&input).unwrap();
+    for (key, value) in args.entries {
         storage_write(
             &base64::decode(key).unwrap(),
             &base64::decode(value).unwrap(),
@@ -88,9 +94,15 @@ pub fn replace() {
 #[cfg(feature = "clean")]
 #[no_mangle]
 pub fn clean() {
+    #[derive(serde::Deserialize)]
+    struct CleanInput<'a> {
+        #[serde(borrow)]
+        keys: Vec<&'a str>,
+    }
+
     let input = input().unwrap();
-    let args: Vec<&str> = serde_json::from_slice(&input).unwrap();
-    for key in args {
+    let args: CleanInput = serde_json::from_slice(&input).unwrap();
+    for key in args.keys {
         storage_remove(&base64::decode(key).unwrap());
     }
 }
@@ -111,7 +123,7 @@ mod tests {
         contract: &Contract,
         bytes: &[(Vec<u8>, Vec<u8>)],
     ) -> anyhow::Result<()> {
-        let b64_bytes: Vec<_> = bytes
+        let b64_bytes: Vec<(_, _)> = bytes
             .iter()
             .map(|(a, b)| (base64::encode(a), base64::encode(b)))
             .collect();
@@ -119,7 +131,7 @@ mod tests {
         // Replace generated keys and values
         contract
             .call(&worker, "replace")
-            .args_json(&b64_bytes)?
+            .args_json(&serde_json::json!({ "entries": &b64_bytes }))?
             .transact()
             .await?;
 
@@ -133,7 +145,7 @@ mod tests {
 
         contract
             .call(&worker, "clean")
-            .args_json(keys)?
+            .args_json(&serde_json::json!({ "keys": &keys }))?
             .transact()
             .await?;
 
