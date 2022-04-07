@@ -110,18 +110,20 @@ pub fn clean() {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use arbitrary::{Arbitrary, Unstructured};
+    use core::iter::Iterator;
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use std::collections::BTreeMap;
     use tokio::fs;
     use workspaces::{prelude::*, Contract, DevNetwork, Worker};
 
-    const BUFFER_SIZE: usize = 4096;
+    const BUFFER_SIZE: usize = 8192;
 
     // Prop test that values can be replaced and cleaned
     async fn prop(
         worker: &Worker<impl DevNetwork>,
         contract: &Contract,
-        bytes: &[(Vec<u8>, Vec<u8>)],
+        bytes: &BTreeMap<Vec<u8>, Vec<u8>>,
     ) -> anyhow::Result<()> {
         let b64_bytes: Vec<(_, _)> = bytes
             .iter()
@@ -132,24 +134,26 @@ mod tests {
         contract
             .call(&worker, "replace")
             .args_json(&serde_json::json!({ "entries": &b64_bytes }))?
+            .max_gas()
             .transact()
             .await?;
 
-        // TODO workspaces hasn't released functional state viewing yet -- verify state is
-        // TODO     equivalent to the bytes above with 0.2 released
-        // let mut state_items = worker
-        //     .view_state(contract.as_account().id().clone(), None)
-        //     .await?;
+        // Check that state items passed in are in state
+        let state_items = contract.view_state(worker, None).await?;
+        for (k, v) in bytes {
+            assert_eq!(state_items.get(k).unwrap(), v);
+        }
 
         let keys: Vec<_> = b64_bytes.iter().map(|(k, _)| k.as_str()).collect();
 
         contract
             .call(&worker, "clean")
             .args_json(&serde_json::json!({ "keys": &keys }))?
+            .max_gas()
             .transact()
             .await?;
 
-        let state_items = worker.view_state(contract.id().clone(), None).await?;
+        let state_items = contract.view_state(worker, None).await?;
 
         assert!(state_items.is_empty());
 
@@ -160,14 +164,13 @@ mod tests {
         n: usize,
         rng: &mut XorShiftRng,
         mut buf: &mut Vec<u8>,
-    ) -> Vec<(Vec<u8>, Vec<u8>)> {
-        let mut result = Vec::new();
+    ) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        let mut result = BTreeMap::default();
         while result.len() < n {
             rng.fill_bytes(&mut buf);
             let mut u = Unstructured::new(&buf[0..(rng.gen::<usize>() % BUFFER_SIZE)]);
-            result.append(&mut Vec::<(Vec<u8>, Vec<u8>)>::arbitrary(&mut u).unwrap());
+            result.extend(BTreeMap::<Vec<u8>, Vec<u8>>::arbitrary(&mut u).unwrap());
         }
-        result.truncate(n);
         result
     }
 
@@ -175,12 +178,11 @@ mod tests {
     async fn workspaces_test() -> anyhow::Result<()> {
         let wasm = fs::read("res/state_manipulation.wasm").await?;
 
-        let worker = workspaces::sandbox();
+        let worker = workspaces::sandbox().await?;
 
-        let contract = worker.dev_deploy(wasm).await?;
+        let contract = worker.dev_deploy(&wasm).await?;
 
-        // TODO add more when workspaces more efficient (slow test)
-        for i in [8, 16] {
+        for i in [8, 64, 256, 1024] {
             let mut rng = XorShiftRng::seed_from_u64(8);
             let mut buf = vec![0; BUFFER_SIZE];
             let key_values = generate_n_elements(i, &mut rng, &mut buf);
