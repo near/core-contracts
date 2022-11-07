@@ -4,16 +4,18 @@
 
 This contract acts as an escrow that locks and holds an owner's tokens for a lockup period.
 The contract consists of lockup and vesting processes that go simultaneously.
-A high-level overview could be found [in NEAR documentation](https://docs.near.org/docs/tokens/lockup).
+A high-level overview could be found [in NEAR documentation](https://wiki.near.org/ecosystem/near-token/lockups).
 
 A lockup period starts from the specified timestamp and lasts for the specified duration.
 Tokens will be unlocked linearly.
 
 Vesting is an additional mechanism. It also locks the tokens, and it allows to configure 2 more options:
+
 1. Ability to terminate tokens vesting and refund non-vested tokens back.
 2. Cliff vesting period.
 
 The owner can add a full access key to the account if all conditions are met:
+
 - No transaction is in progress;
 - Vesting and lockup processes finished;
 - The termination process is ended (if applicable). If there’s a termination process started, it has to finish;
@@ -25,6 +27,7 @@ This will allow the owner to turn this contract account into a regular account, 
 
 Lockup is a mechanism of linear unlocking of tokens that could not be terminated.
 It is described by the following fields:
+
 - `lockup_timestamp` - The moment when tokens start linearly unlocking;
 - `lockup_duration` - [deprecated] Alternative way to set the moment when the tokens become unlock.
   The duration from [the moment transfers were enabled](https://near.org/blog/near-mainnet-phase-2-unrestricted-decentralized/) to the moment when linear unlocking begins;
@@ -41,6 +44,7 @@ The contract can contain a vesting schedule and serve as a vesting agreement bet
 The foundation is set at the moment of initializing the contract by the `foundation_account_id` field.
 
 A vesting schedule is described by three timestamps in nanoseconds:
+
 - `start_timestamp` - When the vesting starts. E.g. the start date of employment;
 - `cliff_timestamp` - When the first part of lockup tokens becomes vested.
   The remaining tokens will vest continuously until they are fully vested.
@@ -50,7 +54,7 @@ A vesting schedule is described by three timestamps in nanoseconds:
   ```
   cliff_tokens_percentage = (cliff_timestamp - start_timestamp) / (end_timestamp - start_timestamp)
   ```
-- `end_timestamp` -  When the vesting ends.
+- `end_timestamp` - When the vesting ends.
 
 Once the `cliff_timestamp` passed, the tokens are vested on a pro-rata basis from the `start_timestamp` to the `end_timestamp`.
 
@@ -59,6 +63,7 @@ Once the `cliff_timestamp` passed, the tokens are vested on a pro-rata basis fro
 The contract could have both lockup and vesting schedules.
 
 The tokens start to become liquid at the timestamp:
+
 ```
 liquidity_timestamp = max(max(transfers_enabled_timestamp + lockup_duration, lockup_timestamp), cliff_timestamp)
 ```
@@ -100,6 +105,7 @@ It's because the contract has to maintain the minimum required balance to cover 
 ### Guarantees
 
 With the guarantees from the staking pool contracts, whitelist, and voting contract, the lockup contract provides the following guarantees:
+
 - The owner can not lose tokens or block contract operations by using methods under the staking section.
 - The owner can not prevent the foundation from withdrawing the unvested balance in case of termination.
 - The owner can not withdraw tokens locked due to lockup period, disabled transfers, or vesting schedule.
@@ -126,6 +132,7 @@ Once the lockup schedule starts before the vesting schedule (e.g. employment sta
 ## Interface
 
 Here are some useful links to the documented codebase:
+
 - [The initialization method](https://github.com/near/core-contracts/blob/master/lockup/src/lib.rs#L151-L190);
 - [Basic types](https://github.com/near/core-contracts/blob/master/lockup/src/types.rs#L12);
 - [Owner's methods](https://github.com/near/core-contracts/blob/master/lockup/src/owner.rs);
@@ -150,24 +157,24 @@ Arguments in JSON format
 
 ```json
 {
-    "owner_account_id": "owner1",
-    "lockup_duration": "0",
-    "lockup_timestamp": "1535760000000000000",
-    "release_duration": "126230400000000000",
-    "transfers_information": {
-        "TransfersEnabled": {
-            "transfers_timestamp": "1602614338293769340"
-        }
-    },
-    "vesting_schedule": {
-        "VestingSchedule": {
-            "start_timestamp": "1535760000000000000",
-            "cliff_timestamp": "1567296000000000000",
-            "end_timestamp": "1661990400000000000"
-        }
-    },
-    "staking_pool_whitelist_account_id": "staking-pool-whitelist",
-    "foundation_account_id": "near"
+  "owner_account_id": "owner1",
+  "lockup_duration": "0",
+  "lockup_timestamp": "1535760000000000000",
+  "release_duration": "126230400000000000",
+  "transfers_information": {
+    "TransfersEnabled": {
+      "transfers_timestamp": "1602614338293769340"
+    }
+  },
+  "vesting_schedule": {
+    "VestingSchedule": {
+      "start_timestamp": "1535760000000000000",
+      "cliff_timestamp": "1567296000000000000",
+      "end_timestamp": "1661990400000000000"
+    }
+  },
+  "staking_pool_whitelist_account_id": "staking-pool-whitelist",
+  "foundation_account_id": "near"
 }
 ```
 
@@ -178,11 +185,13 @@ near call lockup1 new '{"owner_account_id": "owner1", "lockup_duration": "0", "l
 ```
 
 If you need to use only lockup logic, change `vesting_schedule` parameter:
+
 ```
 "vesting_schedule": None
 ```
 
 If you need to use only vesting logic, change these parameters as follows:
+
 ```
 "lockup_duration": 0,
 "lockup_timestamp": None,
@@ -247,7 +256,6 @@ near call lockup1 check_transfers_vote '{}' --accountId=owner1 --gas=75000000000
 ```
 
 Let's assume transfers are enabled now.
-
 
 #### Check liquid balance and transfer 10 NEAR
 
