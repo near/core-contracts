@@ -4,7 +4,7 @@
 
 This contract acts as an escrow that locks and holds an owner's tokens for a lockup period.
 The contract consists of lockup and vesting processes that go simultaneously.
-A high-level overview could be found [in NEAR documentation](https://docs.near.org/docs/tokens/lockup).
+A high-level overview could be found [in NEAR wiki](https://wiki.near.org/getting-started/near-token/lockups).
 
 A lockup period starts from the specified timestamp and lasts for the specified duration.
 Tokens will be unlocked linearly.
