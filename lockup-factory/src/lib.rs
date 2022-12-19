@@ -126,10 +126,11 @@ impl LockupFactory {
         };
 
         // Defaults to the whitelist account ID given on init call.
-        let mut staking_pool_whitelist_account_id: AccountId = self.whitelist_account_id.clone();
-        if let Some(account_id) = whitelist_account_id {
-            staking_pool_whitelist_account_id = account_id.into();
-        }
+        let staking_pool_whitelist_account_id = if let Some(account_id) = whitelist_account_id {
+            account_id.into()
+        } else {
+            self.whitelist_account_id.clone()
+        };
 
         let transfers_enabled: WrappedTimestamp = TRANSFERS_STARTED.into();
         Promise::new(lockup_account_id.clone())
