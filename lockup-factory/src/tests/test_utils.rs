@@ -32,6 +32,10 @@ pub fn whitelist_account_id() -> ValidAccountId {
     "whitelist.nearnet".try_into().unwrap()
 }
 
+pub fn custom_whitelist_account_id() -> ValidAccountId {
+    "custom.whitelist.nearnet".try_into().unwrap()
+}
+
 pub fn foundation_account_id() -> ValidAccountId {
     "nearnet".try_into().unwrap()
 }
