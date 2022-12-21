@@ -112,6 +112,7 @@ impl LockupFactory {
         lockup_timestamp: Option<WrappedTimestamp>,
         vesting_schedule: Option<VestingScheduleOrHash>,
         release_duration: Option<WrappedDuration>,
+        whitelist_account_id: Option<ValidAccountId>,
     ) -> Promise {
         assert!(env::attached_deposit() >= MIN_ATTACHED_BALANCE, "Not enough attached deposit");
 
@@ -122,6 +123,13 @@ impl LockupFactory {
         let mut foundation_account: Option<AccountId> = None;
         if vesting_schedule.is_some() {
             foundation_account = Some(self.foundation_account_id.clone());
+        };
+
+        // Defaults to the whitelist account ID given on init call.
+        let staking_pool_whitelist_account_id = if let Some(account_id) = whitelist_account_id {
+            account_id.into()
+        } else {
+            self.whitelist_account_id.clone()
         };
 
         let transfers_enabled: WrappedTimestamp = TRANSFERS_STARTED.into();
@@ -140,7 +148,7 @@ impl LockupFactory {
                     },
                     vesting_schedule,
                     release_duration,
-                    staking_pool_whitelist_account_id: self.whitelist_account_id.clone(),
+                    staking_pool_whitelist_account_id,
                     foundation_account_id: foundation_account,
                 })
                     .unwrap(),
@@ -253,7 +261,7 @@ mod tests {
         context.predecessor_account_id = String::from(account_tokens_owner());
         context.attached_deposit = ntoy(35);
         testing_env!(context.clone());
-        contract.create(account_tokens_owner(), lockup_duration, None, None, None);
+        contract.create(account_tokens_owner(), lockup_duration, None, None, None, None);
 
         context.predecessor_account_id = account_factory();
         context.attached_deposit = ntoy(0);
@@ -304,6 +312,7 @@ mod tests {
             Some(lockup_timestamp),
             vesting_schedule,
             None,
+            None,
         );
 
         context.predecessor_account_id = account_factory();
@@ -337,7 +346,7 @@ mod tests {
         context.predecessor_account_id = String::from(account_tokens_owner());
         context.attached_deposit = ntoy(1); /* Storage reduced to 3.5 NEAR */
         testing_env!(context.clone());
-        contract.create(account_tokens_owner(), lockup_duration, None, None, None);
+        contract.create(account_tokens_owner(), lockup_duration, None, None, None, None);
     }
 
     #[test]
@@ -360,7 +369,7 @@ mod tests {
         context.predecessor_account_id = String::from(account_tokens_owner());
         context.attached_deposit = ntoy(35);
         testing_env!(context.clone());
-        contract.create(account_tokens_owner(), lockup_duration, None, None, None);
+        contract.create(account_tokens_owner(), lockup_duration, None, None, None, None);
 
         context.predecessor_account_id = account_factory();
         context.attached_deposit = ntoy(0);
@@ -376,5 +385,42 @@ mod tests {
             true => panic!("Unexpected result, should return false"),
             false => assert!(true),
         };
+    }
+
+    #[test]
+    fn test_create_lockup_with_custom_whitelist_success() {
+        let mut context = VMContextBuilder::new()
+            .current_account_id(account_factory())
+            .predecessor_account_id(account_near())
+            .finish();
+        testing_env!(context.clone());
+
+        let mut contract = LockupFactory::new(whitelist_account_id(), foundation_account_id());
+
+        const LOCKUP_DURATION: u64 = 63036000000000000; /* 24 months */
+        let lockup_duration: WrappedTimestamp = LOCKUP_DURATION.into();
+
+        context.is_view = false;
+        context.predecessor_account_id = String::from(account_tokens_owner());
+        context.attached_deposit = ntoy(35);
+        testing_env!(context.clone());
+        contract.create(
+            account_tokens_owner(),
+            lockup_duration,
+            None,
+            None,
+            None,
+            Some(custom_whitelist_account_id()),
+        );
+
+        context.predecessor_account_id = account_factory();
+        context.attached_deposit = ntoy(0);
+        testing_env_with_promise_results(context.clone(), PromiseResult::Successful(vec![]));
+        println!("{}", lockup_account());
+        contract.on_lockup_create(
+            lockup_account(),
+            ntoy(30).into(),
+            String::from(account_tokens_owner()),
+        );
     }
 }
