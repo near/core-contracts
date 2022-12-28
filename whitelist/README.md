@@ -8,7 +8,7 @@ The staking pool should guarantee that the delegated tokens can not be lost or l
 able to recover delegated tokens back to the lockup from a staking pool. In order to enforce this, only approved (whitelisted)
 accounts of staking pool contracts can receive delegated tokens from lockup contracts.
 
-If NEAR Foundation has to approve every single staking pool account it might lead to a bottleneck and centralization
+If NEAR Foundation has to approve every single staking pool account it might lead to a bottleneck and centralization.
 To address this NEAR Foundation can whitelist the account IDs of staking pool factory contracts.
 
 The whitelisted staking pool factory contract will be able to whitelist accounts of staking pool contracts.
@@ -34,7 +34,7 @@ and methods that can only be called by the foundation.
 
 ### `0.2.0`
 
-- Internally updated to use `LockupSet` instead of `UnorderedSet`.
+- Internally updated to use `LookupSet` instead of `UnorderedSet`.
 
 ```rust
 /// Initializes the contract with the given NEAR foundation account ID.
