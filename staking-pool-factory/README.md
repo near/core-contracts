@@ -61,3 +61,18 @@ pub fn on_staking_pool_create(
     predecessor_account_id: AccountId,
 ) -> PromiseOrValue<bool>;
 ```
+
+### Usage
+
+Contract initialization:
+```bash
+near call <staking_pool_factory> new '{"staking_pool_whitelist_account_id": <whitelist_contract>}'
+```
+where `<whitelist_contract>` it the account id of the whitelist contract that this factory
+is associated with.
+
+Staking pool creation:
+```bash
+near call <staking_pool_factory> create_staking_pool '{"staking_pool_id": <staking_pool_id>, "owner_id": <owner_id>, "stake_public_key": <stake_public_key>, "reward_fee_fraction": <reward_fraction>}' 
+```
+Here `reward_fee_fraction` is an object like `{"numerator": 10, "denominator": 100}`.
