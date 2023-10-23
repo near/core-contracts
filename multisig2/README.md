@@ -169,7 +169,7 @@ const result = account.signAndSendTransaction(
     [
         nearAPI.transactions.createAccount(),
         nearAPI.transactions.transfer("100000000000000000000000000"),
-        nearAPI.transactions.deployContract(fs.readFileSync("res/multisig.wasm")),
+        nearAPI.transactions.deployContract(fs.readFileSync("res/multisig2.wasm")),
         nearAPI.transactions.functionCall("new", Buffer.from(JSON.stringify(newArgs)), 10000000000000, "0"),
     ]);
 ```
@@ -236,7 +236,7 @@ const fs = require('fs');
 const account = await near.account("multisig.illia");
 const contractName = "multisig.illia";
 const requestArgs = {"request": [
-    {"receiver_id": "multisig.illia", "actions": [{"type": "DeployContract", "code": fs.readFileSync("res/multisig.wasm")}]}
+    {"receiver_id": "multisig.illia", "actions": [{"type": "DeployContract", "code": fs.readFileSync("res/multisig2.wasm")}]}
 ]};
 const result = account.signAndSendTransaction(
     contractName,
