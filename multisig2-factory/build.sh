@@ -2,4 +2,4 @@
 set -e
 
 RUSTFLAGS='-C link-arg=-s' cargo +stable build --target wasm32-unknown-unknown --release
-cp target/wasm32-unknown-unknown/release/multisig_factory.wasm ./res/
+cp target/wasm32-unknown-unknown/release/multisig2_factory.wasm ./res/

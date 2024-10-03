@@ -10,7 +10,7 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 const CODE: &[u8] = include_bytes!("../../multisig2/res/multisig2.wasm");
 
 /// This gas spent on the call & account creation, the rest goes to the `new` call.
-const CREATE_CALL_GAS: u64 = 50_000_000_000_000;
+const CREATE_CALL_GAS: u64 = 75_000_000_000_000;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde", untagged)]

@@ -1,6 +1,6 @@
-# Multisig Factory
+# Multisig 2 Factory
 
-Allows to create new [Multisig contracts](../multisig) just by sending a transactions with the required configuration and funds.
+Allows to create new [Multisig 2 contracts](../multisig2) just by sending a transactions with the required configuration and funds.
 E.g. Removes need for using `near repl` and having wasm file available.
 
 # Deployment & Usage
@@ -10,7 +10,7 @@ E.g. Removes need for using `near repl` and having wasm file available.
 Deploy to new developer account on TestNet:
 
 ```
-near dev-deploy --wasmFile=res/multisig_factory.wasm
+near dev-deploy --wasmFile=res/multisig2_factory.wasm
 ```
 
 Setup variable for the contract to use commands below easier:

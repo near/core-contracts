@@ -1,4 +1,5 @@
-[{
+[
+    {
         "contract_dir": "lockup",
         "contract_name": "lockup_contract"
     },
@@ -23,7 +24,7 @@
         "contract_name": "multisig2"
     },
     {
-        "contract_dir": "multisig-factory",
-        "contract_name": "multisig_factory"
+        "contract_dir": "multisig2-factory",
+        "contract_name": "multisig2_factory"
     }
 ]
