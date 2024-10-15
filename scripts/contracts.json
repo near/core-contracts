@@ -26,5 +26,13 @@
     {
         "contract_dir": "multisig2-factory",
         "contract_name": "multisig2_factory"
+    },
+    {
+        "contract_dir": "multisig",
+        "contract_name": "multisig"
+    },
+    {
+        "contract_dir": "multisig-factory",
+        "contract_name": "multisig_factory"
     }
 ]
