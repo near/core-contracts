@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use near_sdk::json_types::Base58PublicKey;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, AccountId, Gas, NearToken, Promise};
+use near_sdk::{env, near, AccountId, Gas, GasWeight, NearToken, Promise};
 
 const CODE: &[u8] = include_bytes!("../../multisig2/res/multisig2.wasm");
 
@@ -33,7 +33,7 @@ impl MultisigFactory {
             .create_account()
             .deploy_contract(CODE.to_vec())
             .transfer(env::attached_deposit())
-            .function_call(
+            .function_call_weight(
                 "new".to_string(),
                 json!({ "members": members, "num_confirmations": num_confirmations })
                     .to_string()
@@ -41,6 +41,7 @@ impl MultisigFactory {
                     .to_vec(),
                 NearToken::from_yoctonear(0),
                 Gas::from_tgas(15),
+                GasWeight(1),
             )
     }
 }
