@@ -1,16 +1,11 @@
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use std::convert::TryFrom;
+
 use near_sdk::json_types::Base58PublicKey;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near_bindgen, AccountId, Promise};
-
-#[global_allocator]
-static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
+use near_sdk::{env, near, AccountId, Gas, NearToken, Promise};
 
 const CODE: &[u8] = include_bytes!("../../multisig2/res/multisig2.wasm");
-
-/// This gas spent on the call & account creation, the rest goes to the `new` call.
-const CREATE_CALL_GAS: u64 = 50_000_000_000_000;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde", untagged)]
@@ -19,11 +14,11 @@ pub enum MultisigMember {
     Account { account_id: AccountId },
 }
 
-#[near_bindgen]
-#[derive(BorshSerialize, BorshDeserialize, Default)]
+#[derive(Default)]
+#[near(contract_state)]
 pub struct MultisigFactory {}
 
-#[near_bindgen]
+#[near]
 impl MultisigFactory {
     #[payable]
     pub fn create(
@@ -32,19 +27,20 @@ impl MultisigFactory {
         members: Vec<MultisigMember>,
         num_confirmations: u64,
     ) -> Promise {
-        let account_id = format!("{}.{}", name, env::current_account_id());
+        let account_id =
+            AccountId::try_from(format!("{}.{}", name, env::current_account_id())).unwrap();
         Promise::new(account_id)
             .create_account()
             .deploy_contract(CODE.to_vec())
             .transfer(env::attached_deposit())
             .function_call(
-                b"new".to_vec(),
+                "new".to_string(),
                 json!({ "members": members, "num_confirmations": num_confirmations })
                     .to_string()
                     .as_bytes()
                     .to_vec(),
-                0,
-                env::prepaid_gas() - CREATE_CALL_GAS,
+                NearToken::from_yoctonear(0),
+                Gas::from_tgas(15),
             )
     }
 }
