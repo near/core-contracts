@@ -99,9 +99,13 @@ impl Default for MultiSigContract {
 impl MultiSigContract {
     /// Initialize multisig contract.
     /// @params num_confirmations: k of n signatures required to perform operations.
-    #[init]
+    #[init(ignore_state)]
     pub fn new(num_confirmations: u32) -> Self {
-        assert!(!env::state_exists(), "Already initialized");
+        assert_eq!(
+            env::current_account_id(),
+            env::predecessor_account_id(),
+            "Predecessor account must match current account"
+        );
         Self {
             num_confirmations,
             request_nonce: 0,
