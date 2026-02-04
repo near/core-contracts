@@ -33,7 +33,7 @@ The contract maintains a ledger of wNEAR balances. Native NEAR only moves during
 
 ## Usage Examples
 
-Examples using [NEAR CLI](https://github.com/near/near-cli-rs):
+Examples using [NEAR CLI](https://near.cli.rs):
 
 **Wrap NEAR to get wNEAR:**
 
@@ -73,7 +73,7 @@ near call wrap.near near_withdraw \
 near call wrap.near storage_deposit \
   '{"account_id": "receiver.near"}' \
   --accountId your-account.near \
-  --deposit 0.00125 \ 
+  --deposit 0.00125 \
   --networkId mainnet
 ```
 
