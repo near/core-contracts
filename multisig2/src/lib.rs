@@ -20,7 +20,7 @@ const REQUEST_COOLDOWN: u64 = 900_000_000_000;
 const ACTIVE_REQUESTS_LIMIT: u32 = 12;
 
 /// Default set of methods that access key should have.
-const MULTISIG_METHOD_NAMES: &str = "add_request,delete_request,confirm,add_and_confirm_request";
+const MULTISIG_METHOD_NAMES: &str = "add_request,delete_request,confirm,add_request_and_confirm";
 
 pub type RequestId = u32;
 
