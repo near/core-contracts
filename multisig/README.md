@@ -58,7 +58,7 @@ pub enum MultiSigRequestAction {
     },
 }
 
-/// Permission for an access key, scoped to receiving account and method names with allowance to add when key is added to accoount
+/// Permission for an access key, scoped to receiving account and method names with allowance to add when key is added to account
 pub struct FunctionCallPermission {
     allowance: Option<U128>,
     receiver_id: AccountId,
