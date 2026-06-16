@@ -11,7 +11,7 @@ if [ -z "${MASTER_ACCOUNT_ID}" ]; then
   exit 1
 fi
 
-if [ -z "${FOUNDATION_ACCOUNT_ID}"]; then
+if [[ -z "${FOUNDATION_ACCOUNT_ID}" ]]; then
   echo "FOUNDATION_ACCOUNT_ID is required, e.g. \`export FOUNDATION_ACCOUNT_ID=foundation.near\`"
 fi
 
