@@ -19,4 +19,4 @@ panic = "abort"
 overflow-checks = true
 
 [dependencies]
-near-sdk = "2.0.0"
+near-sdk = "5.3.0"
